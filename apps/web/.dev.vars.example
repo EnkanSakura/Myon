@@ -2,14 +2,17 @@
 ENVIRONMENT=development
 
 # 后台写接口的临时令牌：后台设置页里填同一个值即可保存。
-# 生产环境用 `wrangler secret put ADMIN_TOKEN` 配置；不配置则后台接口返回 503。
+# 生产环境把同名值配到仓库 Repository Secrets，Deploy workflow 会自动同步到 Worker
+# （见 docs/DEPLOY.md 3.3）；不配置则后台接口返回 503。
 ADMIN_TOKEN=dev-admin-token
 
 # 可选：接入 Cloudflare Access 后，配置下面两项即可改用 Access JWT 鉴权，
 # ADMIN_TOKEN 不再需要。ACCESS_AUD 是 Access 应用里看到的 Audience Tag。
+# 生产环境同样配到仓库 Repository Secrets，由 Deploy workflow 同步到 Worker。
 # ACCESS_TEAM_DOMAIN=myon.cloudflareaccess.com
 # ACCESS_AUD=
 
 # 可选：Bangumi 同步（Cron 每 6 小时跑一次，也可用后台按钮手动触发）。
+# 生产环境同样配到仓库 Repository Secrets。
 # BANGUMI_ACCESS_TOKEN=
 # BANGUMI_USERNAME=

@@ -50,9 +50,47 @@ jobs:
       - name: Apply D1 migrations
         working-directory: apps/web
         run: pnpm exec wrangler d1 migrations apply myon-blog --remote
+      - name: Prepare Worker secrets file
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          ACCESS_TEAM_DOMAIN: ${{ secrets.ACCESS_TEAM_DOMAIN }}
+          ACCESS_AUD: ${{ secrets.ACCESS_AUD }}
+          BANGUMI_ACCESS_TOKEN: ${{ secrets.BANGUMI_ACCESS_TOKEN }}
+          BANGUMI_USERNAME: ${{ secrets.BANGUMI_USERNAME }}
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const names = [
+            'ADMIN_TOKEN',
+            'ACCESS_TEAM_DOMAIN',
+            'ACCESS_AUD',
+            'BANGUMI_ACCESS_TOKEN',
+            'BANGUMI_USERNAME',
+          ];
+
+          const secrets = {};
+          for (const name of names) {
+            const value = process.env[name] ?? '';
+            if (value === '') {
+              console.log(`· 跳过 ${name}（Repository Secret 未配置）`);
+              continue;
+            }
+            secrets[name] = value;
+          }
+
+          const file = path.join(process.env.RUNNER_TEMP, 'worker-secrets.json');
+          fs.writeFileSync(file, JSON.stringify(secrets), { mode: 0o600 });
+          console.log(`✓ 已准备 ${Object.keys(secrets).length} 个 Worker secret（值不会打印）`);
+          JS
       - name: Deploy
         working-directory: apps/web
-        run: pnpm exec wrangler deploy
+        run: pnpm exec wrangler deploy --secrets-file "$RUNNER_TEMP/worker-secrets.json"
+      - name: Remove Worker secrets file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/worker-secrets.json"
       - name: Smoke test
         if: ${{ vars.PRODUCTION_URL != '' }}
         run: curl --fail --silent --show-error --max-time 15 "${{ vars.PRODUCTION_URL }}/api/health"

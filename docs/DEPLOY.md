@@ -81,20 +81,20 @@ pnpm exec wrangler r2 bucket create myon-media
 
 ### 3.1 Secrets
 
-前 3 个是 GitHub Actions 读取的 Secret，配在仓库 `Settings → Secrets and variables → Actions`；
-`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，用 `wrangler secret put` 配到 Worker
-（见 3.3），填在 GitHub 里不会生效。
+前 3 个是部署流程自己使用的 Secret；`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，
+同样配在仓库 `Settings → Secrets and variables → Actions`。Deploy workflow 会在部署时用
+`wrangler deploy --secrets-file` 把它们一并同步到 Worker（见 3.3）；未配置的项自动跳过。
 
 | 名称 | 必填 | 配置位置 | 用途 |
 | --- | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 是 | GitHub Secret | Actions 调 Cloudflare API：部署 Worker、跑 D1 迁移 |
 | `CLOUDFLARE_ACCOUNT_ID` | 是 | GitHub Secret | Cloudflare 账号 ID（Dashboard 右下角 / Workers 概览可见） |
 | `CLOUDFLARE_D1_DATABASE_ID` | 是 | GitHub Secret | 第 2.1 节拿到的 D1 database_id；Deploy 用它生成 wrangler 配置 |
-| `ADMIN_TOKEN` | 否 | Worker secret | 后台写接口的临时门禁；**当前 Deploy workflow 不会自动上传**，见 3.3 |
-| `ACCESS_TEAM_DOMAIN` | 否 | Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
-| `ACCESS_AUD` | 否 | Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
-| `BANGUMI_ACCESS_TOKEN` | 否 | Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
-| `BANGUMI_USERNAME` | 否 | Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
+| `ADMIN_TOKEN` | 否 | GitHub Secret → Worker secret | 后台写接口的临时门禁；Deploy 时自动同步到 Worker，见 3.3 |
+| `ACCESS_TEAM_DOMAIN` | 否 | GitHub Secret → Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
+| `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
+| `BANGUMI_ACCESS_TOKEN` | 否 | GitHub Secret → Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
+| `BANGUMI_USERNAME` | 否 | GitHub Secret → Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
 
 `CLOUDFLARE_API_TOKEN` 建议权限：
 
@@ -112,11 +112,21 @@ pnpm exec wrangler r2 bucket create myon-media
 | `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.studio`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
 | `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
 
-### 3.3 Worker 的运行时密钥（可选，用 wrangler 配一次）
+### 3.3 Worker 的运行时密钥（Deploy workflow 自动同步）
 
-`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 属于 Worker 运行时环境变量/密钥，不在 wrangler 配置模板里，
-所以**当前 Deploy workflow 不会自动写入**。在本地配置一次即可（Cloudflare 会保留到被覆盖/删除）。
-先用第 4 节的 `pnpm wrangler:config` 生成 `wrangler.jsonc`，`wrangler secret put` 需要它来识别 Worker 名称：
+`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 属于 Worker 运行时密钥，不在 wrangler 配置模板里。
+把值配到仓库 `Settings → Secrets and variables → Actions`（Repository secrets）即可：
+Deploy workflow 会读取这些 Secret，生成一份临时 JSON 并随 `pnpm exec wrangler deploy --secrets-file`
+一起上传到 Worker；未配置的项自动跳过，密钥值不会打印到日志，部署结束后临时文件立即删除。
+
+注意：
+
+- `--secrets-file` 是**增量**上传：文件里没有的旧密钥不会被删除；
+- 首次部署时 Worker 还不存在也能用，密钥随这次部署一起创建，不需要先手动 `wrangler secret put`；
+- 之后以 Repository Secret 的值为准：每次 Deploy 都会覆盖 Worker 上的同名密钥。
+
+只想手动改某个密钥（例如本地直连生产 Worker 调试）时，仍可用下面的命令。先按第 4 节执行
+`pnpm wrangler:config` 生成 `wrangler.jsonc`，`wrangler secret put` 需要它来识别 Worker 名称：
 
 ```bash
 cd apps/web
@@ -133,9 +143,8 @@ pnpm exec wrangler secret put BANGUMI_ACCESS_TOKEN
 pnpm exec wrangler secret put BANGUMI_USERNAME
 ```
 
-也可以在 Cloudflare Dashboard 的 Worker → Settings → Variables and Secrets 里配置。
-若希望在 CI 里自动上传，可以在 `.github/workflows/deploy.yml` 的 Deploy 前加
-`wrangler secret put`（注意不要把密钥写进日志）。
+也可以在 Cloudflare Dashboard 的 Worker → Settings → Variables and Secrets 里查看或临时修改；
+下一次 Deploy 会用 Repository Secret 里配置的值覆盖同名密钥。
 
 ---
 
@@ -193,8 +202,11 @@ Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `wo
    `D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables（可选），`ENVIRONMENT=production`；
 4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
 5. `wrangler d1 migrations apply myon-blog --remote`（按键顺序应用 `packages/back/migrations/`）；
-6. `wrangler deploy`（单 Worker，含 Cron triggers）；
-7. smoke：若配置了 `PRODUCTION_URL`，curl `$PRODUCTION_URL/api/health`。
+6. 准备 Worker 运行时密钥：把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`
+   写成一份临时 JSON（未配置的项跳过，值不会打印）；
+7. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
+8. 删除临时密钥文件；
+9. smoke：若配置了 `PRODUCTION_URL`，curl `$PRODUCTION_URL/api/health`。
 
 **操作**：把改动 push 到 `main`（或手动 Run workflow）→ 打开仓库 Actions → 选 `Deploy` →
 点开这次 run 看每个 step 日志。失败时先看红叉 step，常见原因见第 9 节。
@@ -221,7 +233,7 @@ Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `wo
 2. 应用 B：域名 = 站点域名，路径 = `/api/v1/admin/*`，策略与应用 A 一致；
 3. 记下应用 B 的 **Audience Tag**（`ACCESS_AUD`）和团队域名（`ACCESS_TEAM_DOMAIN`，形如
    `<team>.cloudflareaccess.com`）；
-4. 把两者用 `wrangler secret put` 配到 Worker（见 3.3），重新部署或等待生效；
+4. 把两者配到仓库 Repository Secrets（`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD`）后重新跑 Deploy（见 3.3）；
 5. 此时 Worker 的 `requireAdmin` 优先校验 Access JWT，`ADMIN_TOKEN` 不再参与；两个变量必须成对配置，
    只配一个会回退到 `ADMIN_TOKEN` 模式。
 
@@ -303,8 +315,8 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 | D1 迁移报找不到数据库 | `database_name` 应为 `myon-blog`；确认 Secret 里的 database_id 与账号一致；本地可 `cd apps/web && pnpm exec wrangler d1 migrations list myon-blog --remote`（要在 `apps/web` 下执行，根目录会回退到全局 wrangler） |
 | 部署成功但 Cron 不触发 | 确认生成配置里有 `triggers.crons`（模板固定配置，别手改生成文件）；重新 deploy；Dashboard → Triggers 是否有记录；Cron 只在生产 Worker 上跑 |
 | 后台接口 401 | Access 模式：`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` 必须成对且 AUD 来自 API 应用；令牌模式：`x-admin-token` 与 Worker 的 `ADMIN_TOKEN` 一致 |
-| 后台接口 503 | Worker 既没配 Access 也没配 `ADMIN_TOKEN`，按 3.3 配置其一后重新部署 |
-| Bangumi 同步提示 `not_configured` | Worker secrets 缺 `BANGUMI_ACCESS_TOKEN`/`BANGUMI_USERNAME`，按 3.3 配置 |
+| 后台接口 503 | Worker 既没配 Access 也没配 `ADMIN_TOKEN`：把 `ADMIN_TOKEN` 配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
+| Bangumi 同步提示 `not_configured` | Worker secrets 缺 `BANGUMI_ACCESS_TOKEN`/`BANGUMI_USERNAME`：配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
 | 图片 404 / 上传后看不到 | 检查 `R2_BUCKET` 变量与真实 bucket 名一致；`GET /media/<key>` 会先查 R2、再回退 `public/assets` |
 | RSS/绝对链接域名不对 | 改 `apps/web/astro.config.mjs` 的 `site` 后重新构建部署；Worker 变量 `SITE_URL` 目前代码里没有读取 |
 | 本地 `wrangler` 命令报配置缺失 | 先 `pnpm wrangler:config`；`wrangler.jsonc` 是生成文件，不入库 |
