@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": [
+      "apps/web/src/**",
+      "apps/web/tests/**",
+      "apps/web/*.ts",
+      "apps/web/*.mjs",
+      "packages/back/src/**",
+      "packages/back/tests/**",
+      "packages/back/*.ts",
+      "packages/back/scripts/**",
+      "packages/shared/src/**",
+      "packages/shared/tests/**",
+      "packages/shared/*.ts",
+      "!apps/web/worker-configuration.d.ts"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    }
+  ]
+}

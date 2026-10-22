@@ -1,0 +1,288 @@
+---
+// 迁移自 design 分支 design/site/tools.html
+// 样式：public/css/pages/tools.css；脚本：public/js/pages/tools.js
+import SiteLayout from '../layouts/SiteLayout.astro';
+---
+
+<SiteLayout
+  title="工具 · Myon 同人志"
+  description="Myon 的站内工具：八个在浏览器里跑完的小工具，时间戳转换、JSON 格式化、短链接等。"
+  active="tools"
+  sticker="PAGE 06 / 07 · 工具"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/tools.css" />
+  </Fragment>
+
+<main class="room">
+  <div class="wrap">
+
+    <header class="room-head">
+      <div>
+        <div class="room-kicker">
+          <span class="sticker">CH.06 部室</span>
+          <span class="sticker sticker--paper sticker--rot">08 件工具</span>
+        </div>
+        <h1>工具<span class="hl">。</span></h1>
+        <p class="sub">8 个站内工具 · 页面由 Workers 送达，<br class="mbr">换算在浏览器完成，不写入 D1</p>
+      </div>
+      <div class="room-stats">
+        <div class="stat-box"><span class="k">本月调用 / CALLS</span><span class="v">8,367</span></div>
+        <div class="stat-box is-pink"><span class="k">平均 / AVG</span><span class="v">40<small>ms</small></span></div>
+        <div class="stat-box"><span class="k">访问 / ACCESS</span><span class="v v--word">无需登录</span></div>
+      </div>
+      <span class="chapter" aria-hidden="true">06</span>
+    </header>
+
+    <div class="tools-layout">
+
+      <!-- 左：工具索引 -->
+      <aside class="panel-box index" aria-labelledby="indexTitle">
+        <span class="panel-tab" id="indexTitle">INDEX</span>
+        <div class="index-in">
+          <div class="index-head">
+            <span class="idx-title">工具索引 · 8 件</span>
+            <span class="mono"><b id="indexCount">08</b> / 08</span>
+          </div>
+          <div class="search">
+            <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.1"/><path d="M15.2 15.2 20 20"/></svg>
+            <input type="search" id="toolSearch" placeholder="搜索工具" aria-label="搜索工具" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="tool-list" id="toolList">
+            <button class="tool" type="button" aria-current="true" data-tool="ts" data-no="01" data-kind="UNIX TIME · 浏览器内换算"
+              data-name="时间戳转换" data-desc="把 Unix 时间戳换成可读的日期时间，按所选时区算。输入即换算，结果点一下就能复制。"
+              data-kw="时间戳 unix timestamp 秒 毫秒 时区 日期">
+              <span class="tno">01</span>
+              <span class="tbody"><span class="tname">时间戳转换</span><span class="tdesc">秒与日期互转，带时区</span></span>
+              <span class="tcount">2,884</span>
+            </button>
+            <button class="tool" type="button" data-tool="img" data-no="02" data-kind="IMAGE · 浏览器内压缩"
+              data-name="图片压缩" data-desc="选一张图，在浏览器里压成 WebP 或 AVIF；压缩结果直接写进 R2，原图不经过别人的服务器。"
+              data-kw="图片 压缩 webp avif r2 图片压缩">
+              <span class="tno">02</span>
+              <span class="tbody"><span class="tname">图片压缩</span><span class="tdesc">输出 WebP / AVIF，直接存 R2</span></span>
+              <span class="tcount">986</span>
+            </button>
+            <button class="tool" type="button" data-tool="md" data-no="03" data-kind="MARKDOWN · 即时预览"
+              data-name="Markdown 预览" data-desc="左边写 Markdown，右边即时出预览。写动态和长文之前，先在这里过一眼。"
+              data-kw="markdown md 预览 写作 文章">
+              <span class="tno">03</span>
+              <span class="tbody"><span class="tname">Markdown 预览</span><span class="tdesc">写动态和文章时用</span></span>
+              <span class="tcount">1,302</span>
+            </button>
+            <button class="tool" type="button" data-tool="color" data-no="04" data-kind="COLOR · 五格色板"
+              data-name="配色生成" data-desc="从一个源色里取五色，深浅按固定比例递进。做封面、调 CSS 时用。"
+              data-kw="配色 颜色 color 调色 色板">
+              <span class="tno">04</span>
+              <span class="tbody"><span class="tname">配色生成</span><span class="tdesc">从一张图取五色</span></span>
+              <span class="tcount">418</span>
+            </button>
+            <button class="tool" type="button" data-tool="bgm" data-no="05" data-kind="SCHEDULE · 本周放送"
+              data-name="追番时刻表" data-desc="本季每周的放送时间，按天排好。和 05 追番页共用同一份 Bangumi 缓存。"
+              data-kw="追番 时刻表 新番 日历 bangumi">
+              <span class="tno">05</span>
+              <span class="tbody"><span class="tname">追番时刻表</span><span class="tdesc">本周更新日历</span></span>
+              <span class="tcount">764</span>
+            </button>
+            <button class="tool" type="button" data-tool="json" data-no="06" data-kind="JSON · 格式化"
+              data-name="JSON 格式化" data-desc="粘贴一段 JSON，立刻拿到缩进后的版本。解析失败会把出错的行写出来。"
+              data-kw="json 格式化 美化 校验 开发">
+              <span class="tno">06</span>
+              <span class="tbody"><span class="tname">JSON 格式化</span><span class="tdesc">粘贴一段，理清缩进</span></span>
+              <span class="tcount">1,688</span>
+            </button>
+            <button class="tool" type="button" data-tool="redirect" data-no="07" data-kind="REDIRECT · 301"
+              data-name="旧域名跳转" data-desc="旧域名的链接 301 到新域名，路径和查询参数原样保留。"
+              data-kw="域名 跳转 301 重定向 旧链接">
+              <span class="tno">07</span>
+              <span class="tbody"><span class="tname">旧域名跳转</span><span class="tdesc">旧链接 301 到新域名</span></span>
+              <span class="tcount">92</span>
+            </button>
+            <button class="tool" type="button" data-tool="short" data-no="08" data-kind="SHORT URL · 短码"
+              data-name="短链接" data-desc="把长链接压成一段短码，跳转记录存在 D1，同一条链接复用一个码。"
+              data-kw="短链接 短网址 short url 分享">
+              <span class="tno">08</span>
+              <span class="tbody"><span class="tname">短链接</span><span class="tdesc">给自己的链接起个短名</span></span>
+              <span class="tcount">233</span>
+            </button>
+          </div>
+
+          <div class="search-empty" id="searchEmpty" hidden>
+            <p>没有找到「<span class="q" id="emptyQ"></span>」。</p>
+            <button class="clear-btn" type="button" id="clearSearch">清除搜索 <span aria-hidden="true">×</span></button>
+          </div>
+
+          <p class="index-foot"><span>08 件 · 合计 8,367 次</span><span>06 / 07</span></p>
+        </div>
+      </aside>
+
+      <!-- 右：工作台 -->
+      <section class="panel-box bench" aria-labelledby="benchTitle">
+        <span class="panel-tab" id="benchTab">TOOL 01</span>
+        <div class="bench-in">
+          <div class="bench-head">
+            <div>
+              <span class="bk" id="benchKind">UNIX TIME · 浏览器内换算</span>
+              <h2 id="benchTitle">时间戳转换</h2>
+            </div>
+            <div class="bench-stamp"><span class="sticker sticker--rot">RUNS IN BROWSER</span></div>
+          </div>
+          <p class="bench-desc" id="benchDesc">把 Unix 时间戳换成可读的日期时间，按所选时区算。输入即换算，结果点一下就能复制。</p>
+
+          <div class="bench-body" id="benchBody">
+
+            <!-- 01 时间戳转换 -->
+            <div class="panel-ts" id="panel-ts">
+              <div class="form-row">
+                <label class="field">
+                  <span class="flabel">时间戳 / TIMESTAMP</span>
+                  <input class="input" id="tsInput" type="text" inputmode="numeric" value="1790856000" autocomplete="off" spellcheck="false" aria-label="Unix 时间戳">
+                </label>
+                <div class="field">
+                  <span class="flabel" id="unitLabel">单位 / UNIT</span>
+                  <div class="seg" role="group" aria-labelledby="unitLabel">
+                    <button class="seg-btn is-on" type="button" data-unit="s" aria-pressed="true">秒</button>
+                    <button class="seg-btn" type="button" data-unit="ms" aria-pressed="false">毫秒</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="flabel" for="tzSel">时区 / ZONE</label>
+                  <div class="selwrap">
+                    <select id="tzSel">
+                      <option value="8" selected>UTC+8</option>
+                      <option value="0">UTC+0</option>
+                      <option value="9">UTC+9</option>
+                      <option value="-5">UTC−5</option>
+                    </select>
+                    <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="result">
+                <div class="res-cap"><span class="sticker">RESULT</span><span class="mono" id="resZone">本地时间 UTC+8</span></div>
+                <div class="res-time" id="resTime">2026-10-01 20:00:00</div>
+                <div class="res-foot"><span id="resWeek">星期四</span><span class="sep" aria-hidden="true">/</span><span id="resEpoch">Unix 1790856000</span></div>
+              </div>
+
+              <div class="bench-actions">
+                <button class="btn btn--pink" type="button" id="copyBtn">复制结果 <span class="ar" aria-hidden="true">↗</span></button>
+                <button class="btn" type="button" id="shuffleBtn">换一个 <span class="ar" aria-hidden="true">↻</span></button>
+              </div>
+              <div class="copy-note" id="copyNote" role="status" aria-live="polite"></div>
+            </div>
+
+            <!-- 02 图片压缩 -->
+            <div class="altpanel" data-panel="img" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">一张图片（本机文件）</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">WebP 或 AVIF · 尺寸按原图压</span></div>
+                <div class="sr"><span class="sk">去向 / PLACE</span><span class="sv">直接写进 R2 · 原图不上传</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">986 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「压完直接进 R2，中间不经过别人的服务器。」</p>
+                <span class="sticker sticker--paper">DRAWER 02</span>
+              </div>
+            </div>
+
+            <!-- 03 Markdown 预览 -->
+            <div class="altpanel" data-panel="md" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">一段 Markdown 文本</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">即时预览 · 标题 / 列表 / 引用 / 代码</span></div>
+                <div class="sr"><span class="sk">运行 / RUN</span><span class="sv">浏览器内 · 不联网</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">1,302 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「写动态之前，先在这里过一眼错字。」</p>
+                <span class="sticker sticker--paper">DRAWER 03</span>
+              </div>
+            </div>
+
+            <!-- 04 配色生成 -->
+            <div class="altpanel" data-panel="color" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">一个源色 · HEX 六位</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">五格色板 · 深浅按比例递进</span></div>
+                <div class="sr"><span class="sk">运行 / RUN</span><span class="sv">浏览器内 · 不联网</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">418 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「从一张图里取五色，是它最初的用法。」</p>
+                <span class="sticker sticker--paper">DRAWER 04</span>
+              </div>
+            </div>
+
+            <!-- 05 追番时刻表 -->
+            <div class="altpanel" data-panel="bgm" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">本季放送表 · 来自 Bangumi</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">七天时刻表 · 今天粉色</span></div>
+                <div class="sr"><span class="sk">缓存 / CACHE</span><span class="sv">D1 里一份 · 每 6 小时同步</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">764 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <a class="arrow-link" href="/bangumi">去 05 追番看完整时刻表 <span class="ar">→</span></a>
+                <span class="sticker sticker--paper">DRAWER 05</span>
+              </div>
+            </div>
+
+            <!-- 06 JSON 格式化 -->
+            <div class="altpanel" data-panel="json" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">一段 JSON 文本</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">两格缩进 · 键序不变</span></div>
+                <div class="sr"><span class="sk">运行 / RUN</span><span class="sv">浏览器内 · 不上传</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">1,688 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「先备份，再按格式化。」</p>
+                <span class="sticker sticker--paper">DRAWER 06</span>
+              </div>
+            </div>
+
+            <!-- 07 旧域名跳转 -->
+            <div class="altpanel" data-panel="redirect" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">旧域名地址 · 任意深链</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">301 到 myon.studio 的对应路径</span></div>
+                <div class="sr"><span class="sk">规则 / RULE</span><span class="sv">保留路径与查询参数</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">92 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「旧链接别断，访客会记得。」</p>
+                <span class="sticker sticker--paper">DRAWER 07</span>
+              </div>
+            </div>
+
+            <!-- 08 短链接 -->
+            <div class="altpanel" data-panel="short" hidden>
+              <div class="spec">
+                <div class="sr"><span class="sk">输入 / IN</span><span class="sv">一条长链接</span></div>
+                <div class="sr"><span class="sk">输出 / OUT</span><span class="sv">四字短码 · myon.studio/s/····</span></div>
+                <div class="sr"><span class="sk">记录 / LOG</span><span class="sv">跳转存在 D1 · 同链复用一码</span></div>
+                <div class="sr"><span class="sk">调用 / USED</span><span class="sv">233 次</span></div>
+              </div>
+              <div class="alt-foot">
+                <p class="kai-note">「分享之前先缩一下，看着清爽。」</p>
+                <span class="sticker sticker--paper">DRAWER 08</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <p class="tools-note"><i aria-hidden="true"></i>页面由 Workers 送达 · 换算在浏览器完成 · 图片压缩直接存 R2</p>
+
+  </div>
+
+  
+</main>
+
+  <script is:inline src="/js/pages/tools.js"></script>
+</SiteLayout>

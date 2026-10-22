@@ -1,0 +1,198 @@
+---
+/**
+ * 后台壳：左侧固定栏 + 右侧主区。设计稿里每个后台页都重复了一遍侧栏，
+ * 这里收成一份，用 `active` 控制高亮，用 `crumb` 控制面包屑末级。
+ * 后台是暗色制作台，不带前台的深浅色切换，也不加载 site.js。
+ */
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { SiteStats } from '@myon/shared';
+import { defaultThemeColor } from '@myon/shared';
+import ThemeTokens from '../components/ThemeTokens.astro';
+
+interface Props {
+  title: string;
+  crumb: string;
+  active:
+    | 'overview'
+    | 'articles'
+    | 'moments'
+    | 'gallery'
+    | 'bangumi'
+    | 'tools'
+    | 'media'
+    | 'settings'
+    | 'about';
+}
+
+const { title, crumb, active } = Astro.props;
+
+// 主题色由后台配置；后台本身固定深墨底，只吃强调色。
+const themeColor = Astro.locals.site?.themeColor ?? defaultThemeColor;
+
+// 侧栏计数用真实数据；取不到就退回设计稿数字，避免出现 0 的误导。
+const statsRes = await app.request(
+  '/api/v1/stats',
+  {},
+  env as unknown as AppBindings,
+);
+const stats: SiteStats | null = statsRes.ok
+  ? ((await statsRes.json()) as SiteStats)
+  : null;
+const counts = {
+  articles: stats?.posts.published ?? 42,
+  moments: stats?.moments.total ?? 186,
+  gallery: stats?.gallery.total ?? 57,
+  bangumi: stats?.bangumi.total ?? 312,
+  media: stats?.media.total ?? 638,
+};
+
+const groups = [
+  {
+    label: '',
+    items: [{ id: 'overview', href: '/admin', label: '总览', count: '08' }],
+  },
+  {
+    label: '内容',
+    items: [
+      {
+        id: 'articles',
+        href: '/admin/articles',
+        label: '文章',
+        count: String(counts.articles),
+      },
+      {
+        id: 'moments',
+        href: '/admin/moments',
+        label: '动态',
+        count: String(counts.moments),
+        countId: 'railNotes',
+      },
+      {
+        id: 'gallery',
+        href: '/admin/gallery',
+        label: '展柜',
+        count: String(counts.gallery),
+        countId: 'railGallery',
+      },
+      {
+        id: 'bangumi',
+        href: '/admin/bangumi',
+        label: '追番',
+        count: String(counts.bangumi),
+        countId: 'railBangumi',
+      },
+      { id: 'tools', href: '/admin/tools', label: '工具', count: '8' },
+    ],
+  },
+  {
+    label: '资源',
+    items: [
+      // 媒体库计数被不同脚本用两种 id 引用（mediaCount / railMedia），
+      // 这里把数字包一层内层节点，两个 id 都能取到。
+      {
+        id: 'media',
+        href: '/admin/media',
+        label: '媒体库',
+        count: String(counts.media),
+        countId: 'mediaCount',
+        innerId: 'railMedia',
+      },
+      { id: 'd1', href: '/admin#resources', label: 'D1', count: '38M' },
+      { id: 'r2', href: '/admin#resources', label: 'R2', count: '3.2G' },
+    ],
+  },
+] as const;
+
+const tail = [
+  { id: 'settings', href: '/admin/settings', label: '设置' },
+  { id: 'about', href: '/admin/about', label: '关于 / README' },
+] as const;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/v2.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+    <ThemeTokens themeColor={themeColor} metaColor="#17131A" />
+    <slot name="head" />
+  </head>
+  <body class="admin">
+    <aside class="side" aria-label="制作进行侧栏">
+      <div class="side-head">
+        <div class="s-brand"><b>MYON</b><span>制作进行</span></div>
+        <div class="s-kick">PRODUCTION CONSOLE · 08</div>
+      </div>
+
+      <nav class="side-nav" aria-label="控制台导航">
+        {
+          groups.map((group) => (
+            <>
+              {group.label ? <div class="grp">{group.label}</div> : null}
+              {group.items.map((item) => (
+                <a
+                  class:list={['s-item', { 'is-here': item.id === active }]}
+                  href={item.href}
+                  aria-current={item.id === active ? 'page' : undefined}
+                >
+                  <span>{item.label}</span>
+                  <span class="c" id={'countId' in item ? item.countId : undefined}>
+                    {'innerId' in item ? <span id={item.innerId}>{item.count}</span> : item.count}
+                  </span>
+                </a>
+              ))}
+            </>
+          ))
+        }
+
+        <div class="nav-tail">
+          {
+            tail.map((item) => (
+              <a
+                class:list={['s-item', { 'is-here': item.id === active }]}
+                href={item.href}
+                aria-current={item.id === active ? 'page' : undefined}
+              >
+                <span>{item.label}</span>
+              </a>
+            ))
+          }
+        </div>
+      </nav>
+
+      <div class="side-foot">
+        <div class="s-state" id="sideLamp" data-on="true">
+          <i class="s-lamp" aria-hidden="true"></i>
+          <span id="sideLampText">营业中</span>
+        </div>
+        <a class="s-out" href="/">退出</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="top">
+        <div class="crumb">
+          <i class="c-sq" aria-hidden="true"></i>
+          <span>制作进行</span>
+          <span aria-hidden="true">/</span>
+          <span class="cur">{crumb}</span>
+        </div>
+        <div class="top-r">
+          <a class="t-preview" href="/">预览前台 <span class="ar" aria-hidden="true">↗</span></a>
+          <span class="t-div" aria-hidden="true"></span>
+          <span class="deploy">最近部署 <b>2a1f3c9</b> · 3 小时前</span>
+          <span class="avatar" role="img" aria-label="登录账号 MY">MY</span>
+        </div>
+      </header>
+
+      <slot />
+    </main>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.dev.vars
+.env
+test-results/
+playwright-report/
+blob-report/
+*.log
+.DS_Store
+# 本地 Bangumi 同步脚本的临时 SQL
+.bangumi-sync.tmp.sql
+
+# 本地 seed 脚本的临时 SQL
+packages/back/scripts/.seed-local.tmp.sql
+
+# 示例图片：由 packages/back/scripts/seed-local.mjs 在本地生成（随机占位图），不入库
+apps/web/public/assets/gallery/
+apps/web/public/assets/moments/
+apps/web/public/assets/cabinet.jpg
+
+# 生成的部署配置（由 wrangler.template.jsonc + 环境变量生成，不入库）
+apps/web/wrangler.jsonc
+
+# 设计审计截图（before/after、对比图），只作本地证据
+audit/

@@ -1,0 +1,497 @@
+---
+// 迁移自 design 分支 design/site/admin-settings.html
+// 样式：public/css/pages/admin-settings.css；脚本：public/js/pages/admin-settings.js
+import {
+  apiBasePath,
+  defaultHomePageLabels,
+  defaultThemeColor,
+  homeStatPresets,
+} from '@myon/shared';
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+// 接口地址、默认主题色与首页预设由服务端注入，public/js 里不硬编码。
+const settingsApi = `${apiBasePath}/admin/settings`;
+const homeConfig = JSON.stringify({
+  presets: homeStatPresets,
+  pageLabels: defaultHomePageLabels,
+});
+---
+
+<AdminLayout
+  title="设置 · Myon 制作进行"
+  crumb="设置"
+  active="settings"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-settings.css" />
+  </Fragment>
+
+<div class="page" data-api={settingsApi} data-theme-color={defaultThemeColor} data-home-config={homeConfig}>
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">CONSOLE · SETTINGS</span>
+          <span class="sticker sticker--paper">站点配置</span>
+        </div>
+        <h1>设置<span class="dot">。</span></h1>
+        <p class="pdate">站点 <span class="sep">·</span> 首页 <span class="sep">·</span> 外观 <span class="sep">·</span> 页脚 <span class="sep">·</span> 系统</p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn btn--pink" id="saveBtn" type="button" disabled>保存设置</button>
+        </div>
+        <p class="ph-note" id="saveState">读取中…</p>
+      </div>
+    </header>
+
+    <!-- ---------- 连接状态 / 授权提示 ---------- -->
+    <div class="notice notice--info" id="setBanner" role="status" hidden>
+      <span class="notice-k" id="setBannerK">INFO</span>
+      <div class="notice-c">
+        <b id="setBannerTitle"></b>
+        <p id="setBannerText"></p>
+        <ul class="notice-issues" id="setIssues" hidden></ul>
+      </div>
+    </div>
+
+    <!-- ==================== 分类：站点 ==================== -->
+    <section class="set-cat" aria-labelledby="cat-site">
+      <div class="set-cat-h">
+        <span class="set-cat-mark" aria-hidden="true"></span>
+        <h2 id="cat-site">站点</h2>
+        <span class="set-cat-en">SITE</span>
+        <span class="set-cat-note">名称、作者、描述与邮箱</span>
+      </div>
+
+      <div class="set-grid">
+        <!-- 基本信息 -->
+        <section class="sp sp--wide" aria-labelledby="sp-basic">
+          <div class="sp-head">
+            <span class="sec-num">01</span>
+            <h2 id="sp-basic">基本信息</h2>
+            <span class="sp-en">BASIC</span>
+            <span class="sp-state" id="basicState">未连接</span>
+          </div>
+          <div class="sp-body">
+            <div class="fields">
+              <div class="fld">
+                <label for="siteName">站点名 / NAME</label>
+                <input id="siteName" name="site_name" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+              <div class="fld">
+                <label for="siteAuthor">作者 / AUTHOR</label>
+                <input id="siteAuthor" name="site_author" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+              <div class="fld fld--wide">
+                <label for="siteDescription">描述 / DESCRIPTION</label>
+                <input id="siteDescription" name="site_description" type="text" maxlength="200" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+              <div class="fld">
+                <label for="siteEmail">邮箱 / EMAIL</label>
+                <input id="siteEmail" name="site_email" type="email" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+            </div>
+            <p class="hint">站点名与作者会出现在页脚、RSS 与分享卡片上；描述用于 SEO 与分享摘要。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ==================== 分类：首页 ==================== -->
+    <section class="set-cat" aria-labelledby="cat-home">
+      <div class="set-cat-h">
+        <span class="set-cat-mark" aria-hidden="true"></span>
+        <h2 id="cat-home">首页</h2>
+        <span class="set-cat-en">HOME / COVER</span>
+        <span class="set-cat-note">七页主标签、数据块与联系方式</span>
+      </div>
+
+      <div class="set-grid">
+        <!-- 首页封面 -->
+        <section class="sp sp--wide" aria-labelledby="sp-home">
+          <div class="sp-head">
+            <span class="sec-num">02</span>
+            <h2 id="sp-home">首页封面</h2>
+            <span class="sp-en">HOME / COVER</span>
+            <span class="sp-state" id="homeState">未连接</span>
+          </div>
+          <div class="sp-body">
+            <div class="hf">
+              <div class="hf-head">
+                <b>封面文案</b>
+                <span>PAGE LABELS / TITLE / LEAD</span>
+                <span class="hf-note">七页主标签与第一页文案</span>
+              </div>
+              <div class="page-labels" id="homePageLabels">
+                <div class="fld">
+                  <label for="homePageLabel1">第 1 页 / PAGE 01</label>
+                  <input id="homePageLabel1" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel2">第 2 页 / PAGE 02</label>
+                  <input id="homePageLabel2" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel3">第 3 页 / PAGE 03</label>
+                  <input id="homePageLabel3" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel4">第 4 页 / PAGE 04</label>
+                  <input id="homePageLabel4" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel5">第 5 页 / PAGE 05</label>
+                  <input id="homePageLabel5" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel6">第 6 页 / PAGE 06</label>
+                  <input id="homePageLabel6" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homePageLabel7">第 7 页 / PAGE 07</label>
+                  <input id="homePageLabel7" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+              </div>
+              <p class="hint">第 1–7 页的主标签会显示在前台翻页器与页眉；副层标（VOL. + 当前年份）自动生成，不需要配置。</p>
+              <p class="fld-err" id="homePageLabelsErr" hidden></p>
+              <div class="fields">
+                <div class="fld fld--wide">
+                  <label for="homeTitle">标题 / TITLE</label>
+                  <input id="homeTitle" name="home_title" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld fld--wide">
+                  <label for="homeLead">导语 / LEAD</label>
+                  <textarea id="homeLead" name="home_lead" rows="3" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="hf">
+              <div class="hf-head">
+                <b>数据块</b>
+                <span>STATS</span>
+                <span class="hf-count" id="homeStatsCount">0 / 4</span>
+                <span class="hf-note">预设式 · 最多 4 项 · 数值实时计算 · 拖拽 / ↑ ↓ 排序</span>
+              </div>
+              <div class="row-head row-head--stat" aria-hidden="true">
+                <span></span><span>预设</span><span>标签覆盖（可选）</span><span>强调</span><span>操作</span>
+              </div>
+              <div class="row-list" id="homeStatsRows"></div>
+              <p class="empty empty--inline" id="homeStatsEmpty" hidden>还没有数据块，点下面「添加数据块」新增。</p>
+              <div class="row-foot">
+                <button class="row-add" id="homeStatsAdd" type="button" data-setting>＋ 添加数据块</button>
+                <p class="fld-err" id="homeStatsErr" hidden></p>
+              </div>
+            </div>
+
+            <div class="hf">
+              <div class="hf-head">
+                <b>联系方式</b>
+                <span>LINKS</span>
+                <span class="hf-count" id="homeLinksCount">0 / 6</span>
+                <span class="hf-note">最多 6 条 · 拖拽 / ↑ ↓ 排序 · 图标留空自动识别</span>
+              </div>
+              <div class="row-head row-head--link" aria-hidden="true">
+                <span></span><span>标签</span><span>图标（Iconify）</span><span>链接</span><span>操作</span>
+              </div>
+              <div class="row-list" id="homeLinksRows"></div>
+              <p class="empty empty--inline" id="homeLinksEmpty" hidden>还没有联系方式，点下面「添加联系方式」新增。</p>
+              <div class="row-foot">
+                <button class="row-add" id="homeLinksAdd" type="button" data-setting>＋ 添加联系方式</button>
+                <p class="fld-err" id="homeLinksErr" hidden></p>
+              </div>
+              <p class="hint">图标填 Iconify 名称，在 <a href="https://icones.js.org/" target="_blank" rel="noopener noreferrer">icones.js.org</a> 搜索后复制，例如 <code>ri:rss-fill</code>、<code>mdi:television-classic</code>、<code>fa7-brands:github</code>；留空则按链接自动识别。</p>
+            </div>
+
+            <div class="hf">
+              <div class="hf-head">
+                <b>封面图</b>
+                <span>COVER IMAGE</span>
+                <span class="hf-note">路径、贴纸与便签</span>
+              </div>
+              <div class="fields">
+                <div class="fld fld--wide">
+                  <label for="homeCoverImage">图片路径 / PATH</label>
+                  <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" placeholder="/assets/cabinet.jpg" spellcheck="false" autocomplete="off" data-setting>
+                  <p class="fld-err" id="homeCoverImageErr" hidden></p>
+                </div>
+                <div class="fld">
+                  <label for="homeCoverBadge">贴纸 / BADGE</label>
+                  <input id="homeCoverBadge" name="home_cover_badge" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+                <div class="fld">
+                  <label for="homeCoverNote">便签 / NOTE</label>
+                  <input id="homeCoverNote" name="home_cover_note" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
+                </div>
+              </div>
+            </div>
+
+            <p class="hint">这些内容会渲染在前台首页第一页；数据块的数值由站点统计接口实时计算，只需要选预设。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ==================== 分类：外观 ==================== -->
+    <section class="set-cat" aria-labelledby="cat-theme">
+      <div class="set-cat-h">
+        <span class="set-cat-mark" aria-hidden="true"></span>
+        <h2 id="cat-theme">外观</h2>
+        <span class="set-cat-en">APPEARANCE</span>
+        <span class="set-cat-note">默认主题、强调色与评论开关</span>
+      </div>
+
+      <div class="set-grid">
+        <!-- 主题 -->
+        <section class="sp" aria-labelledby="sp-theme">
+          <div class="sp-head">
+            <span class="sec-num">03</span>
+            <h2 id="sp-theme">主题</h2>
+            <span class="sp-en">THEME</span>
+            <span class="sp-state" id="themeState">未连接</span>
+          </div>
+          <div class="sp-body">
+            <div class="fld">
+              <span class="fld-k" id="themeLabel">默认主题 / 前台</span>
+              <div class="seg" id="themeSeg" role="group" aria-labelledby="themeLabel">
+                <button type="button" data-theme="light" aria-pressed="false" data-setting>浅色</button>
+                <button type="button" data-theme="dark" aria-pressed="false" data-setting>深色</button>
+                <button type="button" data-theme="system" aria-pressed="true" data-setting>跟随系统</button>
+              </div>
+            </div>
+            <div class="fld fld--color">
+              <label for="themeColorText">主题色 / ACCENT</label>
+              <div class="color-row">
+                <input class="color-pick" id="themeColorPick" type="color" aria-label="选择主题色" data-setting>
+                <input class="color-text" id="themeColorText" type="text" maxlength="7" spellcheck="false" autocomplete="off" data-setting>
+                <span class="color-preview" id="themeColorPreview" aria-hidden="true"></span>
+              </div>
+              <p class="fld-err" id="themeColorErr" hidden></p>
+            </div>
+            <p class="hint">默认主题决定访客首次打开的明暗；主题色会推导前台按钮与强调色，默认 <b>{defaultThemeColor}</b>。</p>
+          </div>
+        </section>
+
+        <!-- 评论 -->
+        <section class="sp" aria-labelledby="sp-comments">
+          <div class="sp-head">
+            <span class="sec-num">04</span>
+            <h2 id="sp-comments">评论</h2>
+            <span class="sp-en">COMMENTS</span>
+            <span class="sp-state" id="commentsState">未连接</span>
+          </div>
+          <div class="sp-body">
+            <div class="switch-row">
+              <div class="switch-label">
+                <b>允许评论</b>
+                <span>关闭后全站文章与动态都不能再回复。</span>
+              </div>
+              <button class="switch" id="swComments" type="button" role="switch" aria-checked="true" aria-label="允许评论" data-on="true" data-setting>
+                <span class="track"><span class="knob"></span></span>
+              </button>
+            </div>
+            <p class="hint">开关写入 D1 的 settings 表，字段名 <b>comments_enabled</b>。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ==================== 分类：页脚 ==================== -->
+    <section class="set-cat" aria-labelledby="cat-footer">
+      <div class="set-cat-h">
+        <span class="set-cat-mark" aria-hidden="true"></span>
+        <h2 id="cat-footer">页脚</h2>
+        <span class="set-cat-en">FOOTER</span>
+        <span class="set-cat-note">浮动底栏的版权、备案与订阅入口</span>
+      </div>
+
+      <div class="set-grid">
+        <!-- 页脚 -->
+        <section class="sp" aria-labelledby="sp-footer">
+          <div class="sp-head">
+            <span class="sec-num">05</span>
+            <h2 id="sp-footer">页脚</h2>
+            <span class="sp-en">FOOTER</span>
+            <span class="sp-state" id="footerState">未连接</span>
+          </div>
+          <div class="sp-body">
+            <div class="fields">
+              <div class="fld">
+                <label for="footerCopyright">版权 / COPYRIGHT</label>
+                <input id="footerCopyright" name="footer_copyright" type="text" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+              <div class="fld">
+                <label for="footerRss">RSS 地址 / FEED</label>
+                <input id="footerRss" name="footer_rss" type="text" maxlength="300" placeholder="/rss.xml" spellcheck="false" autocomplete="off" data-setting>
+                <p class="fld-err" id="footerRssErr" hidden></p>
+              </div>
+              <div class="fld fld--wide">
+                <label for="footerTech">技术支持 / TECH</label>
+                <textarea id="footerTech" name="footer_tech" rows="2" maxlength="500" spellcheck="false" data-setting></textarea>
+              </div>
+              <div class="fld fld--wide">
+                <label for="footerIcp">备案号 / ICP</label>
+                <textarea id="footerIcp" name="footer_icp" rows="2" maxlength="300" spellcheck="false" data-setting></textarea>
+              </div>
+              <div class="fld fld--wide">
+                <label for="footerEmail">邮箱 / EMAIL</label>
+                <input id="footerEmail" name="footer_email" type="email" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+            </div>
+            <p class="hint">技术支持与备案号支持多个 <b>&lt;a&gt;</b> 标签，输出时会做白名单过滤（只保留 a/br/span/strong/em）。</p>
+            <p class="hint hint--example">示例：<code>&lt;a href="https://astro.build"&gt;Astro&lt;/a&gt; · Cloudflare Workers</code></p>
+            <p class="hint">这些内容会显示在前台浮动底栏；RSS 地址需以 <b>/</b> 开头的站内路径或 <b>http(s)://</b> 完整链接。</p>
+          </div>
+        </section>
+
+        <!-- 订阅 -->
+        <section class="sp" aria-labelledby="sp-feed">
+          <div class="sp-head">
+            <span class="sec-num">06</span>
+            <h2 id="sp-feed">订阅</h2>
+            <span class="sp-en">FEED</span>
+            <span class="sp-state">来自页脚</span>
+          </div>
+          <div class="sp-body">
+            <div class="ro">
+              <span class="ro-k">FEED 地址</span>
+              <span class="ro-v ro-v--wrap" id="feedPreview">—</span>
+            </div>
+            <div class="ro">
+              <span class="ro-k">联系邮箱</span>
+              <span class="ro-v ro-v--wrap" id="feedEmailPreview">—</span>
+            </div>
+            <p class="hint">RSS 地址与联系邮箱在「页脚」区编辑；保存后前台底栏与订阅入口同步。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ==================== 分类：系统 ==================== -->
+    <section class="set-cat" aria-labelledby="cat-system">
+      <div class="set-cat-h">
+        <span class="set-cat-mark" aria-hidden="true"></span>
+        <h2 id="cat-system">系统</h2>
+        <span class="set-cat-en">SYSTEM</span>
+        <span class="set-cat-note">管理令牌、部署信息与危险操作</span>
+      </div>
+
+      <div class="set-grid">
+        <!-- 管理令牌 -->
+        <section class="sp sp--wide sp--token" aria-labelledby="sp-token">
+          <div class="sp-head">
+            <span class="sec-num">07</span>
+            <h2 id="sp-token">管理令牌</h2>
+            <span class="sp-en">ADMIN TOKEN</span>
+            <span class="sp-state" id="tokenState">未填写</span>
+          </div>
+          <div class="sp-body">
+            <div class="token-row">
+              <div class="fld">
+                <label for="adminToken">令牌 / TOKEN</label>
+                <input id="adminToken" name="adminToken" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" spellcheck="false">
+              </div>
+              <button class="btn btn--pink" id="tokenSave" type="button">保存并重新拉取</button>
+              <button class="btn" id="tokenClear" type="button">清除</button>
+            </div>
+            <p class="hint">令牌只存在本机浏览器 localStorage <b>myon-admin-token</b>，请求时放在 <b>x-admin-token</b> 头里；不会写进仓库或页面源码。</p>
+          </div>
+        </section>
+
+        <!-- 部署 -->
+        <section class="sp sp--wide" aria-labelledby="sp-deploy">
+          <div class="sp-head">
+            <span class="sec-num">08</span>
+            <h2 id="sp-deploy">部署</h2>
+            <span class="sp-en">DEPLOY</span>
+            <span class="sp-state" id="deployState">已上线</span>
+          </div>
+          <div class="sp-body">
+            <div class="ro">
+              <span class="ro-k">部署单元</span>
+              <span class="ro-v">myon-blog · Worker</span>
+            </div>
+            <div class="ro">
+              <span class="ro-k">生产分支</span>
+              <span class="ro-v">main</span>
+            </div>
+            <div class="ro">
+              <span class="ro-k">最新部署</span>
+              <span class="ro-v"><i class="sq" aria-hidden="true"></i><span id="latestDeploy">2a1f3c9</span><em id="latestDeployAgo">· 3 小时前</em></span>
+            </div>
+            <div class="ro">
+              <span class="ro-k">构建耗时</span>
+              <span class="ro-v">42s</span>
+            </div>
+            <div class="ro-env">
+              <div class="ro-env-k">环境变量 / READONLY</div>
+              <div class="env-row"><span>D1_BINDING</span><span>myon-db</span></div>
+              <div class="env-row"><span>R2_BUCKET</span><span>myon-media</span></div>
+              <div class="env-row"><span>ADMIN_TOKEN</span><span>••••••••</span></div>
+            </div>
+            <p class="hint">配置由 <b>wrangler.jsonc</b> 管理，后台只读；要改变量请重新部署。</p>
+          </div>
+        </section>
+
+        <!-- 危险区 -->
+        <section class="sp sp--wide sp--danger" aria-labelledby="sp-danger">
+          <div class="sp-head">
+            <span class="sec-num">!</span>
+            <h2 id="sp-danger">危险区</h2>
+            <span class="sp-en">DANGER</span>
+            <span class="sticker danger-tag">危险 / DANGER</span>
+          </div>
+          <div class="sp-body">
+            <div class="danger-row">
+              <div class="dr-txt">
+                <b>清除缓存</b>
+                <span>清空 CDN 与 Workers 边缘缓存；访客会重新拉取最新页面。</span>
+              </div>
+              <button class="danger-btn" id="btnPurge" type="button" data-title="清除缓存" data-desc="这会清空前台 CDN 与 Workers 的边缘缓存，访客会重新拉取最新页面。">清除缓存</button>
+            </div>
+            <div class="danger-row">
+              <div class="dr-txt">
+                <b>导出数据</b>
+                <span>把当前设置与关于页内容导出成一个 JSON 文件。</span>
+              </div>
+              <button class="danger-btn" id="btnExport" type="button" data-title="导出数据" data-desc="会立即下载 myon-export.json，包含当前站点设置与关于页草稿。">导出 JSON</button>
+            </div>
+            <div class="danger-row">
+              <div class="dr-txt">
+                <b>重建站点</b>
+                <span>重新触发构建，预计 40 秒；构建期间前台继续使用旧版本。</span>
+              </div>
+              <button class="danger-btn" id="btnRebuild" type="button" data-title="重建站点" data-desc="会重新触发一次构建，预计 40 秒。构建期间前台继续使用旧版本，完成后再切换。">重建站点</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <p class="page-note">设置写入 D1 的 settings 表 · 服务端需配置 ADMIN_TOKEN · 令牌只存在本机浏览器</p>
+  </div>
+
+
+<!-- ---------- 危险操作确认 ---------- -->
+<dialog class="dlg" id="cfmDlg" aria-labelledby="cfmTitle">
+  <div class="dlg-box">
+    <div class="cfm-head">
+      <span class="sec-num">!</span>
+      <span class="cfm-title" id="cfmTitle">确认操作</span>
+    </div>
+    <p class="cfm-text" id="cfmText"></p>
+    <p class="cfm-meta">前端模拟 · 不会真的改动线上数据</p>
+    <div class="cfm-f">
+      <button class="p-btn" id="cfmCancel" type="button">取消</button>
+      <button class="p-btn p-btn--pub" id="cfmOk" type="button">确认</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/pages/admin-settings.js"></script>
+</AdminLayout>

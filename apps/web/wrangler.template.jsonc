@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "myon-blog",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-10-12",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "myon-blog",
+      "database_id": "__D1_DATABASE_ID__",
+      "migrations_dir": "../../packages/back/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "__R2_BUCKET__"
+    }
+  ],
+  "vars": {
+    "SITE_URL": "__SITE_URL__",
+    "ENVIRONMENT": "__ENVIRONMENT__"
+  }
+}

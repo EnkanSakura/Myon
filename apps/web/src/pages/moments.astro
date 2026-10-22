@@ -1,0 +1,242 @@
+---
+// 迁移自 design 分支 design/site/moments.html。
+// 数据来自 D1：服务端在进程内调 /api/v1/moments?limit&offset（置顶优先 + 时间倒序）
+// 与 /api/v1/categories（分类计数），不直连数据库。
+// 服务端分页：?page=N，每页 12 条；total 用来显示页头计数、判断下一页。
+// 样式：public/css/pages/moments.css；脚本：public/js/pages/moments.js
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type {
+  CategoriesResponse,
+  MomentListItem,
+  Paginated,
+} from '@myon/shared';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { formatDateTime } from '../lib/format';
+import { mediaUrl } from '../lib/media';
+
+const binding = env as unknown as AppBindings;
+
+const PAGE_SIZE = 12;
+const rawPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const page =
+  Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, 10000) : 1;
+const offset = (page - 1) * PAGE_SIZE;
+
+let items: MomentListItem[] = [];
+let total = 0;
+let categories: CategoriesResponse = { posts: [], moments: [] };
+
+try {
+  const momentsRes = await app.request(
+    `/api/v1/moments?limit=${PAGE_SIZE}&offset=${offset}`,
+    {},
+    binding,
+  );
+  if (momentsRes.ok) {
+    const body = (await momentsRes.json()) as Paginated<MomentListItem>;
+    items = body.items ?? [];
+    total = body.total ?? 0;
+  } else {
+    console.error('moments 取数失败', momentsRes.status);
+  }
+
+  const categoriesRes = await app.request('/api/v1/categories', {}, binding);
+  if (categoriesRes.ok) {
+    categories = (await categoriesRes.json()) as CategoriesResponse;
+  } else {
+    console.error('categories 取数失败', categoriesRes.status);
+  }
+} catch (error) {
+  // 取数失败也要有页面：空数组 + 空态，不白屏。
+  console.error('moments 页面取数异常', error);
+}
+
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+const hasNext = offset + items.length < total;
+
+// 「最后更新」只取第一页的最新一条；翻页后这个时间没有意义，改用页码。
+const latestAt =
+  page === 1
+    ? items.reduce(
+        (latest, item) => (item.createdAt > latest ? item.createdAt : latest),
+        '',
+      )
+    : '';
+
+// 筛选标签以 D1 的分类计数为准；接口拿不到时退回动态自身的分类。
+const categoryNames =
+  categories.moments.length > 0
+    ? categories.moments.map((entry) => entry.name)
+    : [...new Set(items.map((item) => item.category))];
+
+const pinnedCount = items.filter((item) => item.pinned).length;
+
+/** 粉底 / 墨底只用来做视觉节奏：置顶条固定粉底强调，其余按序位交替。 */
+function variantOf(item: MomentListItem, index: number): string {
+  if (item.pinned) return 'moment--pink';
+  if (index % 4 === 1) return 'moment--pink';
+  if (index % 4 === 3) return 'moment--ink';
+  return '';
+}
+
+/** 面板序号：用全站序号（offset + index + 1），翻页后编号接着往下排。 */
+function cutNo(value: number): string {
+  return String(value).padStart(2, '0');
+}
+---
+
+<SiteLayout
+  title="动态 · Myon 同人志"
+  description="Myon 的动态：四格分镜式的便签与照片，按分类筛选，倒序摊开。"
+  active="moments"
+  sticker="PAGE 03 / 07"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/moments.css" />
+  </Fragment>
+
+<main class="room">
+  <div class="wrap">
+
+    <header class="room-head">
+      <div>
+        <div class="room-kicker">
+          <span class="sticker">CH.03 四格</span>
+          <span class="sticker sticker--paper sticker--rot">CUTS / {items.length}</span>
+        </div>
+        <h1>动态<span class="hl">。</span></h1>
+        <p class="sub">
+          <span class="nb">共 {total} 条</span>
+          {latestAt && <> · 最后更新 <span class="nb">{formatDateTime(latestAt)}</span></>}
+          {page > 1 && <> · 第 {page} 页</>}
+        </p>
+      </div>
+      <div class="room-stats" aria-label="动态统计">
+        <div class="stat-box is-pink"><span class="k">条数 / CUTS</span><span class="v">{total}</span></div>
+        <div class="stat-box"><span class="k">分类 / TAGS</span><span class="v">{categoryNames.length}</span></div>
+        <div class="stat-box is-ink"><span class="k">置顶 / PINNED</span><span class="v">{pinnedCount}</span></div>
+      </div>
+      <span class="chapter" aria-hidden="true">03</span>
+    </header>
+
+    <section class="toolbar panel-box" aria-label="筛选动态">
+      <span class="panel-tab">FILTER / 筛选</span>
+      <div class="tabs" role="group" aria-label="按分类筛选">
+        <button type="button" class="tag is-on" data-tag="all" aria-pressed="true" aria-controls="stream">全部</button>
+        {categoryNames.map((name) => (
+          <button type="button" class="tag" data-tag={name} aria-pressed="false" aria-controls="stream">{name}</button>
+        ))}
+      </div>
+      <div class="tb-right">
+        <label class="lens"><input type="checkbox" id="only-img"><span>只看带图</span></label>
+        <span class="viewcount" aria-live="polite">显示 <b id="shown">{items.length}</b> 条 <span class="vc-total">/ 共 {total} 条</span></span>
+      </div>
+    </section>
+
+    <div class="cutline" aria-hidden="true"><span class="sq"></span><span>PANELS · 倒序 / NEWEST FIRST</span><span class="ln"></span></div>
+
+    <div class="stream" id="stream">
+      {items.map((item, index) => {
+        const photo = mediaUrl(item.mediaKey);
+        return (
+          <article
+            class:list={[
+              'moment',
+              index < 8 ? `m${index + 1}` : 'm-more',
+              variantOf(item, index),
+              photo && 'has-tab',
+              item.pinned && 'is-pinned',
+            ]}
+            data-tag={item.category}
+            data-photo={photo ? '1' : '0'}
+          >
+            {photo && <span class="panel-tab">FIGURE</span>}
+            {item.pinned && <span class="sticker pin">置顶 / PINNED</span>}
+            <div class="mh">
+              <span class="tm">{formatDateTime(item.createdAt)}</span>
+              <span class="no">N° {cutNo(offset + index + 1)}</span>
+            </div>
+            <p>{item.body}</p>
+            {photo && (
+              <figure class="frame f-photo">
+                <img src={photo} alt={`动态配图 · ${item.category}`} loading="lazy" decoding="async" />
+                <figcaption class="cap">
+                  <span>FIGURE {cutNo(offset + index + 1)} · {item.category}</span>
+                  <span>P.03</span>
+                </figcaption>
+              </figure>
+            )}
+            <div class="mline">
+              分类 · {item.category}
+              {item.tag && item.tag !== item.category ? ` · 标签 · ${item.tag}` : ''}
+            </div>
+            <div class="mf">
+              <span>{photo ? 'FIGURE · 带图' : 'NOTE · 手记'}</span>
+              <button type="button" class="tag" data-tag={item.category} aria-pressed="false">#{item.category}</button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+
+    <div class="empty" id="empty" hidden={items.length > 0}>
+      <span class="zero" aria-hidden="true">0</span>
+      <div class="empty-body">
+        <span class="sticker sticker--ink">NO CUT / 空镜</span>
+        <h3>这一格没有内容<span class="hl">。</span></h3>
+        {items.length === 0 ? (
+          total === 0 ? (
+            <p class="empty-hint">作者还没发过公开的动态，等第一格贴上墙。</p>
+          ) : (
+            <>
+              <p class="empty-hint">第 {page} 页还没有动态，可能翻过头了。</p>
+              <a class="btn btn--pink" href="?page=1">回到最新 <span class="ar">↑</span></a>
+            </>
+          )
+        ) : (
+          <>
+            <p class="empty-cond">当前条件：<b id="emptyCond">全部</b></p>
+            <p class="empty-hint">换个标签，或者把「只看带图」关掉。</p>
+            <button type="button" class="btn btn--pink" id="clear-filter">清除筛选 <span class="ar">↺</span></button>
+          </>
+        )}
+      </div>
+    </div>
+
+    <section class="outro" aria-label="更多动态与订阅">
+      <div class="outro-left">
+        <div class="narration"><span class="nk">作者的话 / NOTE</span><p>这里没有大纲，想到哪写到哪。翻完了就等下一篇。</p></div>
+        <div class="outro-actions">
+          {hasNext && (
+            <a class="btn" href={`?page=${page + 1}`}>更早的动态 <span class="ar">↓</span></a>
+          )}
+          {page > 1 && (
+            <a class="arrow-link" href="?page=1">回到最新 <span class="ar">↑</span></a>
+          )}
+          <span class="outro-meta">
+            {page > totalPages ? `第 ${page} 页` : `第 ${page} / ${totalPages} 页`} · 共 {total} 条
+          </span>
+        </div>
+      </div>
+      <form class="sub-box panel-box" novalidate>
+        <span class="panel-tab">SUBSCRIBE</span>
+        <h3>新动态，一周一封<span class="hl">。</span></h3>
+        <p class="mono sub-k">NEW NOTES · EVERY SUNDAY · 不打扰</p>
+        <div class="sub-row">
+          <label class="vh" for="sub-email">邮箱</label>
+          <input id="sub-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>
+          <button type="submit" class="btn btn--pink">订阅</button>
+        </div>
+        <p class="sub-note" id="sub-note" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+  </div>
+
+  
+</main>
+
+  <script is:inline src="/js/pages/moments.js"></script>
+</SiteLayout>

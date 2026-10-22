@@ -1,0 +1,29 @@
+{
+  "name": "@myon/back",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts",
+    "./types": "./src/types.ts",
+    "./bangumi": "./src/bangumi.ts",
+    "./media": "./src/media.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@myon/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.13",
+    "marked": "^18.1.1",
+    "sanitize-html": "^2.18.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/node": "^26.6.5",
+    "@types/sanitize-html": "^2.16.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,284 @@
+---
+// 展柜：陈列中的藏品来自 D1（经 /api/v1/gallery），页头统计来自 /api/v1/stats。
+// 服务端分页：?page=N，每页 24 件；total 只用于判断有没有下一页，页头计数仍取全柜统计。
+// 样式：public/css/pages/gallery.css；脚本：public/js/pages/gallery.js
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { GalleryItem, Paginated, SiteStats } from '@myon/shared';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { formatDate } from '../lib/format';
+import { mediaUrl } from '../lib/media';
+
+const binding = env as unknown as AppBindings;
+
+const PAGE_SIZE = 24;
+const rawPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const page =
+  Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, 10000) : 1;
+const offset = (page - 1) * PAGE_SIZE;
+
+const [galleryRes, statsRes] = await Promise.all([
+  app.request(
+    `/api/v1/gallery?limit=${PAGE_SIZE}&offset=${offset}`,
+    {},
+    binding,
+  ),
+  app.request('/api/v1/stats', {}, binding),
+]);
+
+const galleryPage: Paginated<GalleryItem> = galleryRes.ok
+  ? ((await galleryRes.json()) as Paginated<GalleryItem>)
+  : { items: [], total: 0, limit: PAGE_SIZE, offset };
+const items = galleryPage.items;
+const pageTotal = galleryPage.total;
+const totalPages = Math.max(1, Math.ceil(pageTotal / PAGE_SIZE));
+const hasNext = offset + items.length < pageTotal;
+const stats = statsRes.ok ? ((await statsRes.json()) as SiteStats) : null;
+
+// 件数取全柜（含未陈列），展示中取 displayed=true；统计接口异常时退回分页接口的总数。
+const total = stats?.gallery.total ?? pageTotal;
+const displayed = stats?.gallery.displayed ?? pageTotal;
+
+/** 分类与数量：按当前这一页的陈列顺序推导，翻页只影响当页可筛的藏品。 */
+const categoryMap = new Map<string, number>();
+for (const item of items) {
+  categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + 1);
+}
+const categories = [...categoryMap].map(([name, count]) => ({ name, count }));
+const categoryTotal = stats?.gallery.categories?.length ?? categories.length;
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+/** 网格拼贴的节奏：宽度、旋转、画幅比例，按陈列顺序循环取用。 */
+const spans = ['e4', 'e5', 'e4', 'e3', 'e3', 'e5', 'e4'];
+const rots = [
+  '1.4deg',
+  '-1deg',
+  '.8deg',
+  '-1.6deg',
+  '1.2deg',
+  '-.9deg',
+  '1.5deg',
+  '-1.3deg',
+];
+const ratios = ['1/1', '4/3', '3/4'];
+
+const metaOf = (item: GalleryItem) =>
+  [item.category, item.era, `入藏 ${formatDate(item.createdAt)}`]
+    .filter(Boolean)
+    .join(' · ');
+const noteOf = (item: GalleryItem) => item.note?.trim() || '这件还没写展签。';
+const altOf = (item: GalleryItem) =>
+  [item.name, item.category, item.era].filter(Boolean).join('，');
+
+// 最新入藏的一件挂 NEW 贴纸（主展品已有 NEW ARRIVAL，不重复挂）。
+const newest = items.reduce<GalleryItem | null>(
+  (latest, item) =>
+    !latest || item.createdAt > latest.createdAt ? item : latest,
+  null,
+);
+
+const first = items[0] ?? null;
+const firstUrl = first ? mediaUrl(first.mediaKey) : null;
+
+const cards = items.map((item, index) => {
+  const main = index === 0;
+  return {
+    item,
+    main,
+    url: mediaUrl(item.mediaKey),
+    span: main ? 'ex-main' : spans[(index - 1) % spans.length],
+    rot: main ? '-.8deg' : rots[(index - 1) % rots.length],
+    ratio: ratios[(index - 1) % ratios.length],
+    isNewest: !main && newest?.id === item.id,
+    catPin: !main && newest?.id !== item.id && (index - 1) % 4 === 1,
+    meta: metaOf(item),
+    note: noteOf(item),
+    alt: altOf(item),
+    plate: main ? 'PLATE 00 · 主展品' : `PLATE ${pad(index + 1)}`,
+  };
+});
+---
+
+<SiteLayout
+  title="展柜 · Myon 同人志"
+  description={displayed > 0
+    ? `展柜：Myon 收藏的 ${displayed} 件手办与周边，按分类陈列的收藏目录${page > 1 ? `（第 ${page} 页）` : ''}。`
+    : '展柜：手办与周边的收藏目录，一件一格灯。'}
+  active="gallery"
+  sticker="PAGE 04 / 07 · 展柜"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/gallery.css" />
+  </Fragment>
+
+<main class="room">
+  <div class="wrap">
+
+    <section class="room-head">
+      <div>
+        <div class="room-kicker"><span class="sticker">CH.04 收藏</span><span class="sticker sticker--paper">CATALOGUE</span></div>
+        <h1>展柜<span class="hl">。</span></h1>
+        <p class="sub">手办与周边 · {displayed} 件 · 第二层左起第三格</p>
+      </div>
+      <div class="room-stats" aria-label="展柜统计">
+        <div class="stat-box"><span class="k">件数 / ITEMS</span><span class="v">{total}</span></div>
+        <div class="stat-box"><span class="k">分类数 / CATS</span><span class="v">{categoryTotal}</span></div>
+        <div class="stat-box is-pink"><span class="k">展示中 / ON VIEW</span><span class="v">{displayed}</span></div>
+      </div>
+      <span class="chapter" aria-hidden="true">04</span>
+    </section>
+
+    {items.length > 0 && (
+      <>
+        <div class="toolbar">
+          <div class="tabs" role="group" aria-label="按分类筛选展品">
+            <button class="tab is-on" type="button" data-cat="全部" data-total={items.length} aria-pressed="true">全部 <b>{items.length}</b></button>
+            {categories.map((category) => (
+              <button class="tab" type="button" data-cat={category.name} data-total={category.count} aria-pressed="false">{category.name} <b>{category.count}</b></button>
+            ))}
+          </div>
+          <div class="toolbar-count" aria-live="polite">已陈列 <b id="shownNo">{pad(items.length)}</b><span class="slash">/</span><span id="shownTotal">{pad(displayed)}</span> 件</div>
+        </div>
+
+        <div class="filter-note" id="filterNote" hidden>
+          <span>筛选 · FILTER <b id="noteCat">全部</b> · 馆藏 <span id="noteTotal">{items.length}</span> 件</span>
+          <button class="note-clear" type="button" id="noteClear">显示全部 ×</button>
+        </div>
+      </>
+    )}
+
+    {items.length > 0 ? (
+      <section class="gal-grid" id="galGrid" data-displayed={displayed} aria-label="展柜陈列">
+        {cards.map((card) => (
+          <figure
+            class:list={['ex', card.span]}
+            data-cat={card.item.category}
+            data-no={card.item.no}
+            data-name={card.item.name}
+            data-note={card.note}
+            data-meta={card.meta}
+            style={card.main ? undefined : `--rot:${card.rot}`}
+          >
+            {card.main && <span class="halo" aria-hidden="true" />}
+            {card.main && <span class="sticker sticker--ink new">NEW ARRIVAL</span>}
+            {card.isNewest && <span class="sticker pin">NEW</span>}
+            {card.catPin && (
+              <span class="sticker sticker--paper pin pin--left">CAT.04</span>
+            )}
+            <button class="ex-open" type="button" aria-label={`放大查看 ${card.item.no}「${card.item.name}」`}>
+              <div class:list={['frame', card.main && 'frame--ink']} style={card.main ? undefined : `--ar:${card.ratio}`}>
+                {card.url ? (
+                  <img src={card.url} alt={card.alt} loading={card.main ? 'eager' : 'lazy'} />
+                ) : (
+                  <div class="nofig"><b>未拍摄</b><span>NO IMAGE</span></div>
+                )}
+                <div class="cap"><span>{card.plate}</span><span>{card.main ? 'MYON COLLECTION' : 'MYON'}</span></div>
+              </div>
+            </button>
+            {card.main && (
+              <div class="main-label">
+                <div class="lk"><span>展签 / LABEL</span><span>NO. {card.item.no}</span></div>
+                <p class="note">{card.note}</p>
+                <div class="lm">{card.meta}<br />柜位：第二层左起第三格</div>
+                <span class="stamp">藏</span>
+              </div>
+            )}
+            <figcaption class="ex-meta">
+              <span class="mno">{card.item.no}</span>
+              <span class="mname">{card.item.name}</span>
+              <span class="mcat">{card.item.category}{card.item.era ? ` · ${card.item.era}` : ''}</span>
+            </figcaption>
+          </figure>
+        ))}
+
+        <aside class="closing" aria-label="展柜说明">
+          <div class="closing-no">
+            <b>{total}</b>
+            <span class="mono">件 / ITEMS</span>
+          </div>
+          <div class="closing-body">
+            <span class="sticker sticker--paper" style="align-self:flex-start">STOCK / 库存</span>
+            <p class="kai">柜子里一共 {total} 件，<br />分作 {categoryTotal} 类，慢慢添。</p>
+            <div class="closing-row">
+              <span class="mono">陈列中 {displayed} 件 · 共 {total} 件</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+    ) : (
+      <section class="gal-empty" aria-label="展柜空态">
+        <span class="sticker sticker--paper">{pageTotal > 0 ? (page > totalPages ? `PAGE ${pad(page)}` : `PAGE ${pad(page)} / ${pad(totalPages)}`) : '空柜 / EMPTY'}</span>
+        <p class="gal-empty-t">
+          {pageTotal === 0 ? (
+            <>柜子里还没有陈列中的藏品。<br />等灯亮起来，再来看一眼。</>
+          ) : (
+            <>第 {page} 页还没有展品，可能翻过头了。<br />这一页之前共陈列 {pageTotal} 件。</>
+          )}
+        </p>
+        {pageTotal > 0 && page > 1 && (
+          <a class="btn btn--pink" href="?page=1">回到第一页 <span class="ar" aria-hidden="true">↑</span></a>
+        )}
+      </section>
+    )}
+
+    {items.length > 0 && (
+      <div class="list-foot">
+        <span class="mono">第 {page} / {totalPages} 页 · 共 {pageTotal} 件 · 本页 {items.length} 件</span>
+        <div class="list-links">
+          {hasNext && (
+            <a class="btn btn--pink" href={`?page=${page + 1}`}>更早的藏品 <span class="ar" aria-hidden="true">→</span></a>
+          )}
+          {page > 1 && (
+            <a class="arrow-link" href="?page=1">回到第一页 <span class="ar" aria-hidden="true">↑</span></a>
+          )}
+        </div>
+      </div>
+    )}
+
+  </div>
+</main>
+
+{first && (
+  <dialog class="lb" id="lb" aria-labelledby="lbTitle">
+    <div class="lb-inner">
+      <div class="lb-fig">
+        <div class="frame frame--ink">
+          {firstUrl ? (
+            <img id="lbImg" src={firstUrl} alt={altOf(first)} />
+          ) : (
+            <img id="lbImg" alt="" hidden />
+          )}
+          <div class="lb-nofig" id="lbNofig" hidden={!!firstUrl}><b>未拍摄</b><span>NO IMAGE</span></div>
+          <div class="cap"><span id="lbPlate">PLATE 01 / {pad(items.length)}</span><span>MYON COLLECTION</span></div>
+        </div>
+      </div>
+      <div class="lb-side">
+        <div class="lb-top">
+          <span class="sticker" id="lbNo">{first.no}</span>
+          <span class="sticker sticker--paper" id="lbCat">{first.category}</span>
+          <button class="lb-close" type="button" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <h2 class="lb-title" id="lbTitle">{first.name}</h2>
+        <p class="lb-meta" id="lbMeta">{metaOf(first)}</p>
+        <div class="lb-label">
+          <div class="lk"><span>展签 / LABEL</span><span>为什么留着它</span></div>
+          <p class="note kai" id="lbNote">{noteOf(first)}</p>
+          <span class="stamp">藏</span>
+        </div>
+        <div class="lb-nav">
+          <button class="btn" type="button" id="lbPrev" aria-label="上一件">← 上一件</button>
+          <span class="lb-count"><b id="lbIdx">01</b> / <span id="lbTot">{pad(items.length)}</span></span>
+          <button class="btn btn--pink" type="button" id="lbNext" aria-label="下一件">下一件 →</button>
+        </div>
+        <div class="lb-hint">← → 换件 · ESC 关闭 · 点击背景关闭</div>
+      </div>
+    </div>
+  </dialog>
+)}
+
+  <script is:inline src="/js/pages/gallery.js"></script>
+</SiteLayout>

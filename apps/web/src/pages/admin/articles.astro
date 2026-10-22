@@ -1,0 +1,218 @@
+---
+// 后台 · 文章台账：列表从 /api/v1/admin/posts 读取，页面内完成增删改。
+// 样式：public/css/pages/admin-articles.css；脚本：public/js/pages/admin-articles.js
+import { apiBasePath } from '@myon/shared';
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+// 接口地址由服务端渲染给页面脚本，public/js 里不硬编码。
+const postsApi = `${apiBasePath}/admin/posts`;
+---
+
+<AdminLayout title="文章 · Myon 制作进行" crumb="文章" active="articles">
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-articles.css" />
+  </Fragment>
+
+  <div class="page" data-api={postsApi}>
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <span class="chapter" aria-hidden="true">08</span>
+
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">CONSOLE · 08</span>
+          <span class="sticker sticker--paper">内容 / ARTICLES</span>
+        </div>
+        <h1>文章<span class="dot">。</span></h1>
+        <p class="pdate">共 <span id="sumAll">—</span> 篇 <span class="sep">·</span> 本页 <span id="sumShown">—</span> 条 <span class="sep">·</span> 最后更新 <span id="sumUpdated">—</span></p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn btn--pink" id="btnNew" type="button">新建文章 <span class="ar" aria-hidden="true">＋</span></button>
+          <button class="btn" id="btnImport" type="button">导入 Markdown</button>
+          <button class="btn" id="btnExport" type="button">导出</button>
+          <input type="file" id="mdInput" accept=".md,.markdown,text/markdown" hidden />
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- 连接 / 错误提示 ---------- -->
+    <div class="notice notice--info" id="listBanner" role="status" hidden>
+      <span class="notice-k" id="bannerK">INFO</span>
+      <div class="notice-c">
+        <b id="bannerTitle"></b>
+        <p id="bannerText"></p>
+        <ul class="notice-issues" id="bannerIssues" hidden></ul>
+      </div>
+      <a class="notice-a" id="bannerAction" href="/admin/settings" hidden>去设置令牌 →</a>
+      <button class="notice-btn" id="bannerRetry" type="button" hidden>重试</button>
+    </div>
+
+    <!-- ---------- 工具条 ---------- -->
+    <div class="bar">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M15.6 15.6 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <label class="sr-only" for="q">搜索文章标题或 slug</label>
+        <input id="q" type="search" placeholder="搜索标题 / slug" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="tabs2" role="group" aria-label="按状态筛选">
+        <button class="tab2 is-on" type="button" data-status="all" aria-pressed="true">全部</button>
+        <button class="tab2" type="button" data-status="published" aria-pressed="false">已发布</button>
+        <button class="tab2" type="button" data-status="draft" aria-pressed="false">草稿</button>
+        <button class="tab2" type="button" data-status="archived" aria-pressed="false">归档</button>
+      </div>
+
+      <label class="sel">分类
+        <select id="catSel">
+          <option value="all">全部分类</option>
+        </select>
+      </label>
+      <label class="sel">排序
+        <select id="sortSel">
+          <option value="update">最近更新</option>
+          <option value="title">标题 A→Z</option>
+        </select>
+      </label>
+    </div>
+
+    <p class="bar-note">筛选与搜索只作用于当前页 · 翻页查看其余文章</p>
+
+    <p class="list-state" id="listState">正在读取文章…</p>
+
+    <!-- ---------- 表格 ---------- -->
+    <div class="tbl-wrap" id="tblWrap" hidden>
+      <table class="tbl tbl--articles">
+        <caption class="sr-only">后台文章列表，数据来自 D1</caption>
+        <colgroup>
+          <col />
+          <col style="width:150px" />
+          <col style="width:88px" />
+          <col style="width:98px" />
+          <col style="width:112px" />
+          <col style="width:116px" />
+          <col style="width:168px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">标题</th>
+            <th scope="col">slug</th>
+            <th scope="col">分类</th>
+            <th scope="col">状态</th>
+            <th scope="col">更新时间</th>
+            <th scope="col" class="r">字数 / 阅读</th>
+            <th scope="col" class="c-ops r">操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="empty" id="empty" hidden>
+      <div class="empty-c"><p class="empty-d" id="emptyText">还没有文章。</p></div>
+      <div class="empty-actions"><button class="btn" id="emptyBtn" type="button">新建文章</button></div>
+    </div>
+
+    <!-- ---------- 分页 ---------- -->
+    <div class="pager" id="pager" hidden>
+      <span class="pager-info">第 <b id="pgNow">1</b> 页 <span class="sep">/</span> 共 <b id="pgCount">1</b> 页 <span class="sep">·</span> 每页 20 条 <span class="sep">·</span> 共 <b id="pgTotal">0</b> 条</span>
+      <div class="pager-btns">
+        <button class="pager-btn" id="pgPrev" type="button" aria-label="上一页" disabled>← 上页</button>
+        <span class="pager-nums" id="pgNums"></span>
+        <button class="pager-btn" id="pgNext" type="button" aria-label="下一页" disabled>下页 →</button>
+      </div>
+    </div>
+
+    <div class="page-mark">
+      <span>P.08 / ARTICLES — 台账</span>
+      <span>标题 → slug → 状态 → 字数 · 数据来自 D1</span>
+    </div>
+  </div>
+
+  <!-- ---------- 新建 / 编辑文章 ---------- -->
+  <dialog class="dlg post-dlg" id="postDlg" aria-labelledby="postDlgTitle">
+    <form class="dlg-box post-box" id="postForm" novalidate>
+      <span class="dlg-tab">ARTICLE / 文章</span>
+      <div class="post-head">
+        <span class="sec-num" id="postDlgNo">NEW</span>
+        <h2 class="post-title" id="postDlgTitle">新建文章</h2>
+        <span class="post-dlg-state" id="postDlgState">未保存</span>
+      </div>
+
+      <div class="post-banner" id="formBanner" role="status" hidden>
+        <span class="post-banner-k" id="formBannerK">ERR</span>
+        <div class="post-banner-c">
+          <b id="formBannerTitle"></b>
+          <p id="formBannerText"></p>
+          <ul class="post-issues" id="formIssues" hidden></ul>
+        </div>
+      </div>
+
+      <div class="post-fields">
+        <div class="pf pf--wide">
+          <label for="fTitle">标题 / TITLE</label>
+          <input id="fTitle" type="text" maxlength="200" autocomplete="off" required />
+        </div>
+        <div class="pf">
+          <label for="fSlug">slug / SLUG</label>
+          <input id="fSlug" type="text" maxlength="120" spellcheck="false" autocomplete="off" required />
+          <p class="pf-hint">小写字母、数字、连字符</p>
+        </div>
+        <div class="pf">
+          <label for="fCategory">分类 / CATEGORY</label>
+          <input id="fCategory" type="text" maxlength="40" list="catList" autocomplete="off" required />
+          <datalist id="catList"></datalist>
+          <p class="pf-hint">可从已有分类里选，也可以新建</p>
+        </div>
+        <div class="pf">
+          <label for="fStatus">状态 / STATUS</label>
+          <select id="fStatus">
+            <option value="draft">草稿</option>
+            <option value="published">已发布</option>
+            <option value="archived">归档</option>
+          </select>
+        </div>
+        <div class="pf">
+          <label for="fExcerpt">摘要 / EXCERPT</label>
+          <textarea id="fExcerpt" rows="3" maxlength="400"></textarea>
+        </div>
+        <div class="pf pf--wide">
+          <label for="fBody">正文 / MARKDOWN</label>
+          <textarea id="fBody" rows="10" maxlength="200000" spellcheck="false"></textarea>
+          <p class="pf-hint" id="bodyHint">0 字 · 约 1 分钟</p>
+        </div>
+      </div>
+
+      <div class="post-foot">
+        <span class="post-meta" id="postMeta">新增的文章默认存为草稿 · 发布后前台可见</span>
+        <div class="post-actions">
+          <button class="p-btn" id="formCancel" type="button">取消</button>
+          <button class="p-btn p-btn--pub" id="formSave" type="submit">创建文章</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ---------- 删除确认 ---------- -->
+  <dialog class="dlg del-dlg" id="delDlg" aria-labelledby="delDlgTitle">
+    <div class="dlg-box">
+      <span class="dlg-tab">DELETE / 删除</span>
+      <div class="del-head">
+        <span class="sec-num">!</span>
+        <h2 class="del-title" id="delDlgTitle">删除这篇文章？</h2>
+      </div>
+      <p class="del-text">删除后文章会从前台和后台一起消失，操作不可撤销。</p>
+      <p class="del-target" id="delTarget"></p>
+      <div class="del-f">
+        <button class="p-btn" id="delCancel" type="button">取消</button>
+        <button class="p-btn p-btn--pub" id="delOk" type="button">删除</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/pages/admin-articles.js"></script>
+</AdminLayout>

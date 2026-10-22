@@ -1,0 +1,600 @@
+---
+/**
+ * 追番页。数据来自 D1（在进程内调用 /api/v1/bangumi），不再使用设计稿里的静态数字。
+ * 版式沿用 design 分支的 bangumi.html：在追卡、本周时刻表、最近更新与状态存档。
+ * 样式：public/css/pages/bangumi.css；脚本：public/js/pages/bangumi.js
+ */
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type {
+  BangumiShow,
+  BangumiStatus,
+  Paginated,
+  SiteStats,
+} from '@myon/shared';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { formatDate, formatDateTime } from '../lib/format';
+import { mediaUrl } from '../lib/media';
+
+const TZ = 'Asia/Shanghai';
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const STATUS_LABEL: Record<BangumiStatus, string> = {
+  watching: '在追',
+  watched: '看过',
+  wish: '想看',
+  paused: '暂缓',
+};
+
+interface DateParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+interface DayCell {
+  key: string;
+  label: string;
+  weekday: string;
+  isToday: boolean;
+  shows: { time: string; title: string }[];
+}
+
+/** 放送时间统一按 UTC+8 展示，不依赖服务器时区。 */
+const SHANGHAI_TIME = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+function readDateParts(date: Date): DateParts {
+  const values: Record<string, number> = {};
+  for (const part of SHANGHAI_TIME.formatToParts(date)) {
+    if (part.type !== 'literal') values[part.type] = Number(part.value);
+  }
+  return {
+    year: values.year ?? 1970,
+    month: values.month ?? 1,
+    day: values.day ?? 1,
+    hour: values.hour ?? 0,
+    minute: values.minute ?? 0,
+  };
+}
+
+function shanghaiParts(value: string | null | undefined): DateParts | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : readDateParts(date);
+}
+
+function dateKey(parts: DateParts): string {
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
+function weekdayOf(parts: DateParts): number {
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+}
+
+function daysBetween(from: DateParts, to: DateParts): number {
+  return Math.round(
+    (Date.UTC(to.year, to.month - 1, to.day) -
+      Date.UTC(from.year, from.month - 1, from.day)) /
+      86_400_000,
+  );
+}
+
+/** ISO 周数，页头「第 N 周」用。 */
+function isoWeekNumber(parts: DateParts): number {
+  const thursday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  thursday.setUTCDate(
+    thursday.getUTCDate() - ((thursday.getUTCDay() + 6) % 7) + 3,
+  );
+  const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  firstThursday.setUTCDate(
+    firstThursday.getUTCDate() - ((firstThursday.getUTCDay() + 6) % 7) + 3,
+  );
+  return (
+    1 + Math.round((thursday.getTime() - firstThursday.getTime()) / 604_800_000)
+  );
+}
+
+function scoreLabel(score: number | null): string {
+  return typeof score === 'number' && Number.isFinite(score)
+    ? score.toFixed(1)
+    : '—';
+}
+
+/** 进度条、EP 标签与统计卡共用同一口径，避免负进度和 NaN。 */
+function progressOf(show: BangumiShow) {
+  const total = Math.max(0, show.totalEps);
+  const watched = Math.max(0, show.watchedEps);
+  const shown = total > 0 ? Math.min(watched, total) : watched;
+  const percent =
+    total > 0 ? Math.min(100, Math.round((shown / total) * 100)) : 0;
+  const tickCount = total > 0 ? Math.min(total, 40) : 1;
+  const filled =
+    total > 0
+      ? Math.min(tickCount, Math.round((shown / total) * tickCount))
+      : 0;
+  return {
+    percent,
+    epLabel: total > 0 ? `EP.${pad2(shown)} / ${total}` : `EP.${pad2(shown)}`,
+    label:
+      total > 0
+        ? `已看 ${shown} 话，共 ${total} 话，进度 ${percent}%`
+        : `已看 ${shown} 话，总集数未定`,
+    ticks: Array.from({ length: tickCount }, (_, index) => index < filled),
+    meta: `${total > 0 ? `全 ${total} 话` : '总集数待定'} · 已看 ${shown} 话 · 评分 ${scoreLabel(show.score)}`,
+  };
+}
+
+function nextAirFor(show: BangumiShow, today: DateParts) {
+  const total = Math.max(0, show.totalEps);
+  const watched = Math.max(0, show.watchedEps);
+  const shown = total > 0 ? Math.min(watched, total) : watched;
+  const air = shanghaiParts(show.nextAirAt);
+  if (!air) {
+    return {
+      left: '下一话 · 待定',
+      right: total > 0 ? `${shown} / ${total}` : `已看 ${shown} 话`,
+    };
+  }
+  const diff = daysBetween(today, air);
+  const time = `${pad2(air.hour)}:${pad2(air.minute)}`;
+  const right =
+    diff < 0
+      ? '已放送 · 待更新'
+      : diff === 0
+        ? '今天'
+        : diff === 1
+          ? '明天'
+          : `还有 ${diff} 天`;
+  return { left: `下一话 · ${WEEKDAYS[weekdayOf(air)]} ${time}`, right };
+}
+
+const binding = env as unknown as AppBindings;
+
+// 服务端分页：?page=N，每页 20 条记录。
+const PAGE_SIZE = 20;
+const rawPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const page =
+  Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, 10000) : 1;
+const offset = (page - 1) * PAGE_SIZE;
+
+/** 读一页追番记录；D1 读取失败时按空数据渲染，页面不白屏，错误留在服务端日志里。 */
+async function fetchPage(
+  query: string,
+): Promise<{ items: BangumiShow[]; total: number }> {
+  try {
+    const res = await app.request(`/api/v1/bangumi${query}`, {}, binding);
+    if (res.status !== 200) {
+      console.error(`[bangumi] /api/v1/bangumi${query} 返回 ${res.status}`);
+      return { items: [], total: 0 };
+    }
+    const data = (await res.json()) as Paginated<BangumiShow>;
+    const list = Array.isArray(data.items) ? data.items : [];
+    const pageTotalValue =
+      typeof data.total === 'number' ? data.total : list.length;
+    return { items: list, total: pageTotalValue };
+  } catch (error) {
+    console.error('[bangumi] 读取追番数据失败', error);
+    return { items: [], total: 0 };
+  }
+}
+
+const [pageData, summaryData, stats] = await Promise.all([
+  fetchPage(`?limit=${PAGE_SIZE}&offset=${offset}`),
+  page > 1 ? fetchPage(`?limit=${PAGE_SIZE}`) : Promise.resolve(null),
+  (async (): Promise<SiteStats | null> => {
+    try {
+      const res = await app.request('/api/v1/stats', {}, binding);
+      return res.ok ? ((await res.json()) as SiteStats) : null;
+    } catch (error) {
+      console.error('[bangumi] 读取站点统计失败', error);
+      return null;
+    }
+  })(),
+]);
+
+/** 分页接口的一次读取结果：当页列表 + 用于判断下一页的总数。 */
+const pageItems = pageData.items;
+const pageTotal = pageData.total;
+const totalPages = Math.max(1, Math.ceil(pageTotal / PAGE_SIZE));
+const hasNext = offset + pageItems.length < pageTotal;
+
+// 第二页起，当页可能没有在追条目；页头统计和「在追」仍取第一页的条目，
+// 这样它们不会因为翻页而变小（在追排在最前，第一页足够包含全部在追）。
+const summaryItems = summaryData?.items.length ? summaryData.items : pageItems;
+const watchingTotal =
+  stats?.bangumi.watching ??
+  summaryItems.filter((item) => item.status === 'watching').length;
+
+const today = readDateParts(new Date());
+const todayKey = dateKey(today);
+const weekNumber = isoWeekNumber(today);
+const mondayTime =
+  Date.UTC(today.year, today.month - 1, today.day) -
+  ((weekdayOf(today) + 6) % 7) * 86_400_000;
+
+const watching = summaryItems.filter((item) => item.status === 'watching');
+const totalEps = watching.reduce(
+  (sum, show) => sum + Math.max(0, show.totalEps),
+  0,
+);
+const watchedEps = watching.reduce((sum, show) => {
+  const total = Math.max(0, show.totalEps);
+  const watched = Math.max(0, show.watchedEps);
+  return sum + (total > 0 ? Math.min(watched, total) : watched);
+}, 0);
+const scores = watching
+  .map((show) => show.score)
+  .filter(
+    (score): score is number =>
+      typeof score === 'number' && Number.isFinite(score),
+  );
+const averageScore =
+  scores.length > 0
+    ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+    : null;
+const averageScoreText = averageScore === null ? '—' : averageScore.toFixed(1);
+const latestUpdatedAt = summaryItems.reduce<string | null>(
+  (latest, item) =>
+    item.updatedAt && (!latest || item.updatedAt > latest)
+      ? item.updatedAt
+      : latest,
+  null,
+);
+const latestUpdatedText = latestUpdatedAt
+  ? formatDateTime(latestUpdatedAt)
+  : '';
+
+const watchingCards = watching.map((show, index) => {
+  const [titleLeading = show.title, ...titleRest] = show.title.split(' ');
+  return {
+    show,
+    no: String(index + 1).padStart(2, '0'),
+    titleLeading,
+    titleRest: titleRest.join(' '),
+    cover: mediaUrl(show.coverKey),
+    progress: progressOf(show),
+    next: nextAirFor(show, today),
+  };
+});
+
+// 本周时刻表：只排本周内（UTC+8）确实有下次放送的条目。
+const week: DayCell[] = Array.from({ length: 7 }, (_, index) => {
+  const day = new Date(mondayTime + index * 86_400_000);
+  const parts: DateParts = {
+    year: day.getUTCFullYear(),
+    month: day.getUTCMonth() + 1,
+    day: day.getUTCDate(),
+    hour: 0,
+    minute: 0,
+  };
+  const key = dateKey(parts);
+  return {
+    key,
+    label: `${pad2(parts.month)}.${pad2(parts.day)}`,
+    weekday: WEEKDAYS[weekdayOf(parts)],
+    isToday: key === todayKey,
+    shows: [],
+  };
+});
+const weekIndex = new Map(week.map((day, index) => [day.key, index]));
+for (const show of watching) {
+  const air = shanghaiParts(show.nextAirAt);
+  if (!air) continue;
+  const index = weekIndex.get(dateKey(air));
+  if (index === undefined) continue;
+  week[index].shows.push({
+    time: `${pad2(air.hour)}:${pad2(air.minute)}`,
+    title: show.title,
+  });
+}
+const weekShowCount = week.reduce((sum, day) => sum + day.shows.length, 0);
+const backlogCount = watching.filter(
+  (show) => !shanghaiParts(show.nextAirAt),
+).length;
+const weekRange = `${week[0].label} — ${week[6].label}`;
+
+const recent = [...pageItems]
+  .sort((a, b) => {
+    if (a.updatedAt === b.updatedAt) return 0;
+    return a.updatedAt < b.updatedAt ? 1 : -1;
+  })
+  .slice(0, 6)
+  .map((show) => ({
+    show,
+    date: formatDate(show.updatedAt).slice(5) || '—',
+    score: scoreLabel(show.score),
+    status: STATUS_LABEL[show.status],
+    ep:
+      show.status === 'watching' && show.watchedEps > 0
+        ? `EP.${pad2(show.watchedEps)}`
+        : '',
+  }));
+
+const statusBuckets = (
+  ['watching', 'watched', 'wish', 'paused'] as BangumiStatus[]
+).map((status) => ({
+  status,
+  label: STATUS_LABEL[status],
+  count: summaryItems.filter((item) => item.status === status).length,
+}));
+---
+
+<SiteLayout
+  title="追番 · Myon 同人志"
+  description={`Myon 的追番记录：在追进度、本周放送时刻表、最近更新与状态存档${page > 1 ? `（第 ${page} 页）` : ''}。`}
+  active="bangumi"
+  sticker="PAGE 05 / 07 · 追番"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/bangumi.css" />
+  </Fragment>
+
+<main class="room">
+  <div class="wrap">
+
+    <header class="room-head">
+      <div>
+        <div class="room-kicker">
+          <span class="sticker">CH.05 放送</span>
+          <span class="sticker sticker--paper sticker--rot">{today.month} 月号</span>
+        </div>
+        <h1>追番<span class="hl">。</span></h1>
+        <p class="sub">
+          数据来自 Bangumi · 存于 D1 · {latestUpdatedText ? `最近更新 ${latestUpdatedText}` : '暂无记录'}
+        </p>
+      </div>
+      <div class="room-stats">
+        <div class="stat-box is-pink"><span class="k">在追 / WATCHING</span><span class="v">{watchingTotal}<small>部</small></span></div>
+        <div class="stat-box"><span class="k">总集数 / EPS</span><span class="v">{totalEps.toLocaleString('en-US')}<small>话</small></span></div>
+        <div class="stat-box"><span class="k">已看 / WATCHED</span><span class="v">{watchedEps.toLocaleString('en-US')}<small>话</small></span></div>
+        <div class="stat-box is-ink"><span class="k">平均分 / AVG</span><span class="v">{averageScoreText}<small>分</small></span></div>
+      </div>
+      <span class="chapter" aria-hidden="true">05</span>
+    </header>
+
+    <!-- 同步条：没有真实同步任务，按钮只保留占位动效，时间来自数据里的 updatedAt -->
+    <div class="syncbar" id="syncbar" data-updated={latestUpdatedText}>
+      <div class="sync-state" role="status" aria-live="polite">
+        <span class="sq" aria-hidden="true"></span>
+        <b id="syncText">本地快照</b>
+        <span class="sync-meta" id="syncMeta">
+          {latestUpdatedText ? `最近更新 · ${latestUpdatedText} · 同步任务未接入` : '暂无数据 · 同步任务未接入'}
+        </span>
+      </div>
+      <div class="sync-right">
+        <span class="sync-api">BANGUMI API · V0</span>
+        <button class="btn btn--pink" type="button" id="syncBtn">
+          <span id="syncBtnLabel">立即同步</span>
+          <span class="ar" aria-hidden="true">↻</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 01 在追 -->
+    <section class="sec" id="watching" aria-labelledby="watchingTitle">
+      <div class="sec-head">
+        <div class="sec-title">
+          <h2 id="watchingTitle">在追</h2>
+          <span class="sticker">WATCHING</span>
+        </div>
+        <div class="sec-side">
+          <span class="mono">在追 {watching.length} 部 · 共 {totalEps} 话</span>
+          <a class="arrow-link" href="#archive">状态存档 <span class="ar">→</span></a>
+        </div>
+      </div>
+
+      {
+        watchingCards.length > 0 ? (
+          <div class="programs">
+            {watchingCards.map((card) => (
+              <article class="program" aria-labelledby={`p${card.no}t`}>
+                <div class="ptop">
+                  <span class="pno">{card.no}</span>
+                  <span class="ep">{card.progress.epLabel}</span>
+                </div>
+                {card.cover ? (
+                  <div class="cover frame">
+                    <img
+                      src={card.cover}
+                      alt={`《${card.show.title}》封面`}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                ) : (
+                  <div class="cover frame is-empty" aria-hidden="true">
+                    <span>NO COVER</span>
+                  </div>
+                )}
+                <h3 id={`p${card.no}t`}>
+                  {card.titleLeading}
+                  {card.titleRest && <br />}
+                  {card.titleRest}
+                </h3>
+                <div class="meta">{card.progress.meta}</div>
+                <div class="prog" role="img" aria-label={card.progress.label}>
+                  {card.progress.ticks.map((filled) => (
+                    <i class={filled ? 'on' : undefined}></i>
+                  ))}
+                </div>
+                <div class="next">
+                  <span>{card.next.left}</span>
+                  <span><b>{card.next.right}</b></span>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div class="empty-card panel-box">
+            <span class="panel-tab">NO ON AIR</span>
+            <span class="zero" aria-hidden="true">0</span>
+            <div class="empty-body">
+              <span class="sticker sticker--ink">暂无在追</span>
+              <h3>这一季还没有在追的番<span class="hl">。</span></h3>
+              <p>有在追的番时，会按下次放送时间排在这里。</p>
+            </div>
+          </div>
+        )
+      }
+    </section>
+
+    <!-- 02 本周时刻表（来源：在追条目的 nextAirAt） -->
+    <section class="sec" id="schedule" aria-labelledby="scheduleTitle">
+      <div class="sec-head">
+        <div class="sec-title">
+          <h2 id="scheduleTitle">本周时刻表</h2>
+          <span class="sticker sticker--paper">{weekRange}</span>
+        </div>
+        <div class="sec-side">
+          <span class="mono">第 {weekNumber} 周 · 均为 UTC+8</span>
+        </div>
+      </div>
+
+      <div class="week-grid">
+        <div class="schedule" role="table" aria-label="本周放送时刻表">
+          {
+            week.map((day) => (
+              <div class={day.isToday ? 'd is-today' : 'd'} role="row">
+                <div class="dh">
+                  <b>{day.weekday}</b>
+                  <span>{day.label}</span>
+                </div>
+                {day.shows.length > 0 ? (
+                  day.shows.map((show) => (
+                    <div class="show">
+                      <span class="st">{show.time} · 放送</span>
+                      <span class="sn">{show.title}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span class="empty">—</span>
+                )}
+              </div>
+            ))
+          }
+        </div>
+
+        <aside class="week-side">
+          <div class="narration">
+            <span class="nk">本周手记 / MEMO</span>
+            <p>
+              {weekShowCount > 0
+                ? `这一周还有 ${weekShowCount} 话要等，时间来自 D1 记录的下次放送。`
+                : '这一周没有排进时刻表的放送，慢慢补番。'}
+            </p>
+          </div>
+          <span class="sticker sticker--ink">ON AIR · {watching.length} 部</span>
+        </aside>
+      </div>
+      <p class="week-foot">
+        <span>本周放送 {weekShowCount} 话 · 补番 {backlogCount} 部</span>
+        <span>放送时间以 Bangumi 收录为准</span>
+      </p>
+    </section>
+
+    <!-- 03 最近更新 / 04 状态存档 -->
+    <div class="sec recent-wrap" id="recent">
+      <section class="recent" aria-labelledby="recentTitle">
+        <div class="sec-head">
+          <div class="sec-title">
+            <h2 id="recentTitle">最近更新</h2>
+            <span class="sticker">RECENT</span>
+          </div>
+          <div class="sec-side">
+            <span class="mono">
+              {recent.length > 0
+                ? `${page > 1 ? '本页' : '最近'} ${recent.length} 条 · 按更新时间`
+                : '暂无记录'}
+            </span>
+          </div>
+        </div>
+        {
+          recent.length > 0 ? (
+            <div class="rows">
+              {recent.map((row) => (
+                <div class="r">
+                  <span class="no">{row.date}</span>
+                  <span>
+                    <span class="t">
+                      《{row.show.title}》
+                      {row.ep && <span class="ep">{row.ep}</span>}
+                    </span>
+                  </span>
+                  <span class="m">
+                    <span class="rate">{row.score}</span>
+                    <span class="sticker">{row.status}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p class="list-empty">
+              {pageTotal === 0 ? '还没有追番记录。' : `第 ${page} 页没有更多记录了。`}
+            </p>
+          )
+        }
+        {recent.length === 0 && page > 1 && pageTotal > 0 && (
+          <a class="arrow-link" href="?page=1">回到第一页 <span class="ar" aria-hidden="true">↑</span></a>
+        )}
+      </section>
+
+      <aside class="panel-box archive" id="archive" aria-labelledby="archiveTitle">
+        <span class="panel-tab">STATUS / ARCHIVE</span>
+        <div class="archive-in">
+          <h2 id="archiveTitle">状态存档</h2>
+          <ol class="seasons">
+            {statusBuckets.map((bucket) => (
+              <li>
+                <span
+                  class="srow"
+                  aria-current={bucket.status === 'watching' && bucket.count > 0 ? 'true' : undefined}
+                >
+                  <span class="sname">{bucket.label}</span>
+                  <span class="smeta">{bucket.count} 部</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p class="kai-note">
+            {pageTotal > 0
+              ? `共 ${pageTotal} 部记录，${watchingTotal} 部在追。`
+              : '还没有追番记录。'}
+          </p>
+          <span class="sticker sticker--paper">
+            {latestUpdatedAt ? `最近更新 ${formatDate(latestUpdatedAt)}` : '等待数据'}
+          </span>
+        </div>
+      </aside>
+    </div>
+
+    {pageTotal > 0 && pageItems.length > 0 && (
+      <div class="list-foot">
+        <span class="mono">第 {page} / {totalPages} 页 · 本页 {pageItems.length} 条 · 共 {pageTotal} 条记录</span>
+        <div class="list-links">
+          {hasNext && (
+            <a class="btn btn--pink" href={`?page=${page + 1}`}>更多记录 <span class="ar" aria-hidden="true">→</span></a>
+          )}
+          {page > 1 && (
+            <a class="arrow-link" href="?page=1">回到第一页 <span class="ar" aria-hidden="true">↑</span></a>
+          )}
+        </div>
+      </div>
+    )}
+
+  </div>
+</main>
+
+  <script is:inline src="/js/pages/bangumi.js"></script>
+</SiteLayout>

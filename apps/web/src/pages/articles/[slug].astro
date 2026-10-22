@@ -1,0 +1,153 @@
+---
+/**
+ * 文章详情。内容来自 D1（经 /api/v1/posts/:slug），正文是 Markdown 渲染结果。
+ * 版式沿用 design 分支的 article.html，正文里的富样式块（代码卡片、目录、
+ * 阅读进度、复制按钮）由 markdown 渲染器和 /js/pages/article.js 提供。
+ */
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { PostDetailResponse, PostListItem } from '@myon/shared';
+import SiteLayout from '../../layouts/SiteLayout.astro';
+
+const { slug = '' } = Astro.params;
+const binding = env as unknown as AppBindings;
+
+const detail = await app.request(
+  `/api/v1/posts/${encodeURIComponent(slug)}`,
+  {},
+  binding,
+);
+const post =
+  detail.status === 200 ? ((await detail.json()) as PostDetailResponse) : null;
+if (!post) Astro.response.status = 404;
+
+let neighbors: {
+  prev: PostListItem | null;
+  next: PostListItem | null;
+  index: number;
+  total: number;
+} = { prev: null, next: null, index: 0, total: 0 };
+
+if (post) {
+  const list = await app.request('/api/v1/posts', {}, binding);
+  if (list.status === 200) {
+    const { items } = (await list.json()) as { items: PostListItem[] };
+    const index = items.findIndex((item) => item.slug === post.slug);
+    neighbors = {
+      prev: index > 0 ? items[index - 1] : null,
+      next: index >= 0 && index < items.length - 1 ? items[index + 1] : null,
+      index: index + 1,
+      total: items.length,
+    };
+  }
+}
+
+const formatDate = (value: string | null) =>
+  value ? value.slice(0, 10).replaceAll('-', '.') : '未发布';
+const charCount = post
+  ? post.bodyMd.replace(/\s/g, '').length.toLocaleString('en-US')
+  : '0';
+---
+
+<SiteLayout
+  title={post ? `${post.title} · Myon 同人志` : '文章不存在 · Myon 同人志'}
+  description={post?.excerpt ?? '这篇文章不存在或还没发布。'}
+  active="articles"
+  sticker="PAGE 02 / 07 · 文章"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/article.css" />
+  </Fragment>
+
+  <div class="readbar" id="readbar" aria-hidden="true"></div>
+
+  {
+    post ? (
+      <main class="room">
+        <div class="wrap">
+          <header class="art-head">
+            <div class="art-kicker">
+              <span class="sticker">{post.category}</span>
+              <span class="sticker sticker--paper">{formatDate(post.publishedAt)}</span>
+              <span class="sticker sticker--paper">{post.readingMinutes} 分钟</span>
+              <span class="sticker sticker--paper">{charCount} 字</span>
+            </div>
+            <h1>{post.title}</h1>
+            {post.excerpt && <p class="dek">{post.excerpt}</p>}
+            <div class="byline">
+              <span class="who">Myon</span>
+              <span class="sep">/</span>
+              <span>写于 {formatDate(post.publishedAt)}</span>
+              <span class="sep">/</span>
+              <span>数据：D1 · 图片：R2</span>
+              <a class="tag" href="/articles">{post.category}</a>
+            </div>
+            <span class="chapter" aria-hidden="true">02</span>
+          </header>
+
+          <div class="art-layout">
+            <article class="body">
+              <Fragment set:html={post.html} />
+              <div class="art-end">
+                {neighbors.prev && (
+                  <a class="r" href={`/articles/${neighbors.prev.slug}`}>
+                    <span class="k">← 上一篇</span>
+                    <span class="t">{neighbors.prev.title}</span>
+                  </a>
+                )}
+                {neighbors.next && (
+                  <a href={`/articles/${neighbors.next.slug}`}>
+                    <span class="k">下一篇 →</span>
+                    <span class="t">{neighbors.next.title}</span>
+                  </a>
+                )}
+              </div>
+              <div class="backline">
+                <a href="/articles">← 回到文章索引</a>
+                <span>
+                  第 {neighbors.index} 篇 / 共 {neighbors.total} 篇
+                </span>
+                <a href="/">首页</a>
+              </div>
+            </article>
+
+            <aside class="toc" aria-label="目录">
+              <div class="tc"><span>目录 / CONTENTS</span><b>P.02</b></div>
+              <ol>
+                {post.toc.map((entry, i) => (
+                  <li>
+                    <a href={`#${entry.id}`}>
+                      <span class="n">{String(i + 1).padStart(2, '0')}</span>
+                      {entry.label}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+              <div class="pct">阅读进度<b id="pct">0%</b></div>
+            </aside>
+          </div>
+        </div>
+      </main>
+    ) : (
+      <main class="room">
+        <div class="wrap" style="padding:150px 0 120px">
+          <h1 style="font-size:clamp(38px,5vw,64px);font-weight:900;line-height:1.2">
+            这篇还没写下。
+          </h1>
+          <p style="margin-top:18px;font-size:15px;color:var(--ink-62)">
+            文章可能已经删掉，或者还没发布。
+          </p>
+          <p style="margin-top:28px">
+            <a href="/articles" style="font-weight:900;border-bottom:3px solid var(--ink)">
+              ← 回到文章索引
+            </a>
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script is:inline src="/js/pages/article.js"></script>
+</SiteLayout>

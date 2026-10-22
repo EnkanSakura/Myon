@@ -1,0 +1,81 @@
+---
+/**
+ * 主站内页壳：head（字体 / 主题 / v2.css）+ 顶栏 + 浮动底栏 + 共用脚本。
+ * 首页是七页翻页结构，单独写在 `pages/index.astro`，不走这个壳。
+ *
+ * 页面特有样式放 `public/css/pages/<name>.css`，通过 `head` slot 在 v2.css
+ * 之后引入，保证覆盖顺序；页面脚本同理放 `public/js/pages/<name>.js`。
+ */
+import { defaultSiteSettings, toPublicSiteSettings } from '@myon/shared';
+import SiteBar from '../components/SiteBar.astro';
+import ThemeTokens from '../components/ThemeTokens.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  sticker: string;
+  active?: 'articles' | 'moments' | 'gallery' | 'bangumi' | 'tools' | null;
+}
+
+const { title, description, sticker, active = null } = Astro.props;
+
+const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
+
+const nav = [
+  { id: 'articles', href: '/articles', label: '文章' },
+  { id: 'moments', href: '/moments', label: '动态' },
+  { id: 'gallery', href: '/gallery', label: '展柜' },
+  { id: 'bangumi', href: '/bangumi', label: '追番' },
+  { id: 'tools', href: '/tools', label: '工具' },
+] as const;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate" type="application/rss+xml" title="Myon · RSS" href="/rss.xml" />
+    <script is:inline>
+      try {
+        var t = localStorage.getItem('myon-theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+        else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = 'dark';
+      } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="/css/v2.css" />
+    <ThemeTokens themeColor={site.themeColor} metaColor={site.themeColor} />
+    <slot name="head" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Myon 首页">
+        <b>MYON</b><span>同人志 / 2026</span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        {
+          nav.map((item) => (
+            <a href={item.href} aria-current={item.id === active ? 'page' : undefined}>
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+      <div class="page-sticker">{sticker}</div>
+      <div class="topmeta">
+        <span><i class="lamp"></i>营业中</span>
+        <a href="/admin">后台</a>
+      </div>
+    </header>
+
+    <slot />
+
+    <SiteBar settings={site} />
+
+    <script is:inline src="/js/site.js" defer></script>
+  </body>
+</html>

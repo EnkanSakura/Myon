@@ -1,0 +1,40 @@
+[
+  {
+    "file": "page.png",
+    "state": null,
+    "size": "1440x900",
+    "zoom": 1,
+    "animationWaitMs": 0,
+    "issues": [],
+    "lint": [
+      {
+        "rule": "headingSpacing",
+        "label": "标题离上文比离下文还近",
+        "count": 1,
+        "examples": [
+          "h1.reveal「灯下的一格。」（上 18px，下 24px）"
+        ]
+      },
+      {
+        "rule": "contrastLow",
+        "label": "文字对比度不达标（正文低于 4.5:1，大字低于 3:1）",
+        "count": 10,
+        "examples": [
+          "span.k「最后更新」（4.03:1）",
+          "span.k「展柜」（4.03:1）",
+          "span.sticker「全七页 / ALL 7」（1.99:1）"
+        ]
+      },
+      {
+        "rule": "smallText",
+        "label": "正文小于 13px",
+        "count": 3,
+        "examples": [
+          "p「你好，我是 Myon。这里是我自己写、自己排的一」（12px）",
+          "li「把博客从 Pages + Workers + D」（12px）",
+          "p「原本只是用笔记软件记点东西，后来想要一个能自己排」（12px）"
+        ]
+      }
+    ]
+  }
+]

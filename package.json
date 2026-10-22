@@ -1,0 +1,32 @@
+{
+  "name": "myon",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @myon/web dev",
+    "build": "pnpm --filter @myon/web build",
+    "preview": "pnpm --filter @myon/web preview",
+    "check": "pnpm -r --if-present check",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm --filter @myon/web test:e2e",
+    "types": "pnpm --filter @myon/web types",
+    "wrangler:config": "node apps/web/scripts/generate-wrangler.mjs",
+    "db:migrate:local": "pnpm --filter @myon/web db:migrate:local",
+    "db:migrate:remote": "pnpm --filter @myon/web db:migrate:remote",
+    "db:seed:local": "pnpm --filter @myon/web db:seed:local",
+    "bangumi:sync:local": "node packages/back/scripts/bangumi-sync-local.mjs",
+    "deploy": "pnpm --filter @myon/web deploy",
+    "deploy:dry": "pnpm --filter @myon/web deploy:dry"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "typescript": "^6.0.3"
+  }
+}

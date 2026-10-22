@@ -1,0 +1,88 @@
+---
+// 迁移自 design 分支 design/site/admin-about.html
+// 样式：public/css/pages/admin-about.css；脚本：public/js/pages/admin-about.js
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout
+  title="关于 / README · Myon 制作进行"
+  crumb="关于 · README"
+  active="about"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-about.css" />
+  </Fragment>
+
+<div class="page">
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">CONSOLE · README</span>
+          <span class="sticker sticker--paper">首页封面</span>
+        </div>
+        <h1>关于 / README<span class="dot">。</span></h1>
+        <p class="pdate">首页封面叠放展示 <span class="sep">·</span> 支持 Markdown <span class="sep">·</span> 保存后立即生效</p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn" id="resetBtn" type="button">恢复默认</button>
+          <button class="btn btn--pink" id="saveBtn" type="button">保存</button>
+        </div>
+        <p class="ph-note">写入 localStorage['myon-about']</p>
+      </div>
+    </header>
+
+    <!-- ---------- 编辑器 + 预览 ---------- -->
+    <div class="ab-grid">
+      <section class="ab-panel" aria-labelledby="ab-editor">
+        <div class="ab-head">
+          <span class="sec-num">01</span>
+          <h2 id="ab-editor">编辑器</h2>
+          <span class="ab-en">MARKDOWN</span>
+          <span class="ab-file">README.md</span>
+        </div>
+        <div class="ab-body ab-body--editor">
+          <label class="sr-only" for="mdInput">README Markdown 内容</label>
+          <textarea class="md-input" id="mdInput" spellcheck="false" placeholder="# 关于 Myon&#10;&#10;在这里写一段关于自己的话。"></textarea>
+        </div>
+        <div class="ab-foot">
+          <span>Markdown · 标题 / 列表 / 引用 / 粗斜体 / 行内代码 / 链接</span>
+          <span id="mdCounts">—</span>
+        </div>
+      </section>
+
+      <section class="ab-panel" aria-labelledby="ab-preview">
+        <div class="ab-head">
+          <span class="sec-num">02</span>
+          <h2 id="ab-preview">预览</h2>
+          <span class="ab-en">LIVE</span>
+          <span class="ab-file">首页 01 封面 · 纸卡</span>
+        </div>
+        <div class="ab-body ab-body--preview">
+          <aside class="about-card" aria-label="首页关于卡预览">
+            <div class="ah"><span>README.md · 关于</span></div>
+            <div class="about-body" id="mdPreview"></div>
+          </aside>
+        </div>
+        <div class="ab-foot">
+          <span>渲染自 js/markdown.js</span>
+          <span id="sourceTag">来源：默认内容</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="ab-bar">
+      <p class="ab-hint"><i class="bar-sq" aria-hidden="true"></i>前台第一页每次切回都会逐段淡入这份内容。</p>
+      <p class="save-state" id="saveState" role="status" aria-live="polite">来源：默认内容 · 尚未保存</p>
+    </div>
+  </div>
+
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/markdown.js"></script>
+  <script is:inline src="/js/pages/admin-about.js"></script>
+</AdminLayout>

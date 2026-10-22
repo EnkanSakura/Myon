@@ -1,0 +1,313 @@
+# 部署指南 · Myon
+
+本仓库是单 Worker 部署：`@myon/web`（Astro）在构建时把 `@myon/back`（Hono）打进同一个 Worker，
+运行时绑定 D1（`DB`）、R2（`MEDIA`）、KV（`SESSION`）与静态资产（`ASSETS`）。
+
+部署配置由 `apps/web/wrangler.template.jsonc` + 环境变量生成，**`apps/web/wrangler.jsonc`
+是生成文件、不进仓库**。GitHub Actions 在 CI / Deploy 里统一跑 `pnpm wrangler:config` 生成它。
+
+---
+
+## 1. 前置条件
+
+- 一个 Cloudflare 账号（Workers、D1、R2 可用）。
+- 一个可用的域名（可选；用 Cloudflare 托管域名访问体验最好）。
+- Node.js ≥ 22.22，pnpm 11（仓库 `packageManager` 字段已固定；可用 `corepack enable`）。
+- 把仓库 fork / clone 到本地，并能在 GitHub 上开启 Actions。
+
+本地核对版本：
+
+```bash
+node -v    # >= 22.22
+pnpm -v    # 11.x
+```
+
+跑第 2 节的 `pnpm exec wrangler ...` 之前，先在仓库根目录安装依赖并生成一次 wrangler 配置：
+
+```bash
+pnpm install
+pnpm wrangler:config   # 生成 apps/web/wrangler.jsonc，详见第 4 节
+```
+
+`apps/web` 里调用的 `wrangler` 来自本地依赖（版本由 `pnpm-lock.yaml` 固定）；未安装依赖时
+`pnpm exec` 会回退到全局 wrangler，版本可能与仓库不一致。
+
+---
+
+## 2. 创建 D1 与 R2
+
+先登录 Cloudflare（本地开发机）：
+
+```bash
+cd apps/web
+pnpm exec wrangler login
+```
+
+### 2.1 D1
+
+```bash
+cd apps/web
+pnpm exec wrangler d1 create myon-blog
+```
+
+命令输出里会包含 `database_id`（形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`），把它记下来，
+填到 GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`。`database_name` 建议保持 `myon-blog`
+（Deploy workflow 的迁移命令按这个名字执行）。
+
+迁移只需要在 Deploy workflow 里跑（见第 5 节）；本地开发用（这两个命令读生成的
+`apps/web/wrangler.jsonc`，需先按第 4 节执行 `pnpm wrangler:config`）：
+
+```bash
+pnpm db:migrate:local
+pnpm db:seed:local   # 可选：写入本地演示数据
+```
+
+### 2.2 R2
+
+```bash
+cd apps/web
+pnpm exec wrangler r2 bucket create myon-media
+```
+
+如果用了别的 bucket 名称，把它填到 GitHub Variable `R2_BUCKET`（默认 `myon-media`）。
+
+> D1 与 R2 都只创建一次；以后换账号/换环境再重复本节。
+
+---
+
+## 3. GitHub 配置
+
+位置：仓库 `Settings → Secrets and variables → Actions`。
+
+### 3.1 Secrets
+
+前 3 个是 GitHub Actions 读取的 Secret，配在仓库 `Settings → Secrets and variables → Actions`；
+`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，用 `wrangler secret put` 配到 Worker
+（见 3.3），填在 GitHub 里不会生效。
+
+| 名称 | 必填 | 配置位置 | 用途 |
+| --- | --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 是 | GitHub Secret | Actions 调 Cloudflare API：部署 Worker、跑 D1 迁移 |
+| `CLOUDFLARE_ACCOUNT_ID` | 是 | GitHub Secret | Cloudflare 账号 ID（Dashboard 右下角 / Workers 概览可见） |
+| `CLOUDFLARE_D1_DATABASE_ID` | 是 | GitHub Secret | 第 2.1 节拿到的 D1 database_id；Deploy 用它生成 wrangler 配置 |
+| `ADMIN_TOKEN` | 否 | Worker secret | 后台写接口的临时门禁；**当前 Deploy workflow 不会自动上传**，见 3.3 |
+| `ACCESS_TEAM_DOMAIN` | 否 | Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
+| `ACCESS_AUD` | 否 | Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
+| `BANGUMI_ACCESS_TOKEN` | 否 | Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
+| `BANGUMI_USERNAME` | 否 | Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
+
+`CLOUDFLARE_API_TOKEN` 建议权限：
+
+- `Account → Workers Scripts → Edit`
+- `Account → D1 → Edit`
+- `Account → R2 → Edit`（如需在部署流程里管理 bucket；仅发布 Worker 时非必需）
+
+可先选 Cloudflare 的 “Edit Cloudflare Workers” 模板，再额外勾选 D1。
+
+### 3.2 Variables（不是 Secret）
+
+| 名称 | 必填 | 用途 |
+| --- | --- | --- |
+| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.studio`），Deploy 的 smoke test 会 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
+| `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.studio`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
+| `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
+
+### 3.3 Worker 的运行时密钥（可选，用 wrangler 配一次）
+
+`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 属于 Worker 运行时环境变量/密钥，不在 wrangler 配置模板里，
+所以**当前 Deploy workflow 不会自动写入**。在本地配置一次即可（Cloudflare 会保留到被覆盖/删除）。
+先用第 4 节的 `pnpm wrangler:config` 生成 `wrangler.jsonc`，`wrangler secret put` 需要它来识别 Worker 名称：
+
+```bash
+cd apps/web
+
+# 后台写接口令牌（不接 Access 时用）
+pnpm exec wrangler secret put ADMIN_TOKEN
+
+# Cloudflare Access 模式（与 ADMIN_TOKEN 二选一，配置 Access 后代码优先校验 Access JWT）
+pnpm exec wrangler secret put ACCESS_TEAM_DOMAIN
+pnpm exec wrangler secret put ACCESS_AUD
+
+# Bangumi 同步
+pnpm exec wrangler secret put BANGUMI_ACCESS_TOKEN
+pnpm exec wrangler secret put BANGUMI_USERNAME
+```
+
+也可以在 Cloudflare Dashboard 的 Worker → Settings → Variables and Secrets 里配置。
+若希望在 CI 里自动上传，可以在 `.github/workflows/deploy.yml` 的 Deploy 前加
+`wrangler secret put`（注意不要把密钥写进日志）。
+
+---
+
+## 4. 本地生成 wrangler 配置
+
+`apps/web/wrangler.jsonc` 是**生成文件、不入库**。克隆仓库/换机器后，在本地开发前先生成一次：
+
+```bash
+pnpm install
+pnpm wrangler:config
+```
+
+可选环境变量（都有默认值）：
+
+```bash
+D1_DATABASE_ID=xxxx-xxxx pnpm wrangler:config
+R2_BUCKET=myon-media SITE_URL=https://myon.studio ENVIRONMENT=development pnpm wrangler:config
+```
+
+脚本会：
+
+1. 读取 `apps/web/wrangler.template.jsonc`；
+2. 替换 `__D1_DATABASE_ID__` / `__R2_BUCKET__` / `__SITE_URL__` / `__ENVIRONMENT__`；
+3. 校验生成结果（JSON 可解析、`main` 指向 `./src/worker.ts`、Cron 触发器存在）；
+4. 写到 `apps/web/wrangler.jsonc`，并打印一行摘要。
+
+生成后本地开发即可照常：
+
+```bash
+cp apps/web/.dev.vars.example apps/web/.dev.vars   # 填本地令牌等
+pnpm dev
+```
+
+注意事项：
+
+- **不要把 `apps/web/wrangler.jsonc` 提交进仓库**。仓库根 `.gitignore` 已包含
+  `apps/web/wrangler.jsonc`，正常情况下它不会被 `git status` 跟踪；只有当历史提交里
+  还跟踪着这个文件时，才需要执行一次 `git rm --cached apps/web/wrangler.jsonc`
+  停止跟踪（历史里的旧文件不影响运行）。
+- 改绑定/变量请改 **`wrangler.template.jsonc`**，不要改生成文件。
+- 绑定变化后如类型不匹配，运行 `pnpm types` 重新生成 `apps/web/worker-configuration.d.ts`
+  （该文件入库，变更时随代码提交）。
+- 本地生成的配置里 D1 `database_id` 默认是全 0 占位，仅用于本地/CI e2e，指向本地 D1 模拟数据。
+
+---
+
+## 5. 首次部署流程
+
+Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `workflow_dispatch` 时触发，
+使用 GitHub Environment `production`（可在仓库里配置审批人）。步骤：
+
+1. `pnpm install --frozen-lockfile`；
+2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空，否则直接失败并提示去 Secrets 配置；
+3. `pnpm wrangler:config` 生成生产配置：
+   `D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables（可选），`ENVIRONMENT=production`；
+4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
+5. `wrangler d1 migrations apply myon-blog --remote`（按键顺序应用 `packages/back/migrations/`）；
+6. `wrangler deploy`（单 Worker，含 Cron triggers）；
+7. smoke：若配置了 `PRODUCTION_URL`，curl `$PRODUCTION_URL/api/health`。
+
+**操作**：把改动 push 到 `main`（或手动 Run workflow）→ 打开仓库 Actions → 选 `Deploy` →
+点开这次 run 看每个 step 日志。失败时先看红叉 step，常见原因见第 9 节。
+
+生产不要跑 `db:seed:local`（seed 只用于本地演示）。如需初始化演示内容，在 `apps/web` 下用
+`pnpm exec wrangler d1 execute myon-blog --remote --file=...` 自行把控（需已 `wrangler login`
+或配置 `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`），正常生产直接由后台录入。
+
+---
+
+## 6. Cloudflare Access（可选）
+
+后台页面本身没有登录，写接口用 `ADMIN_TOKEN` 临时门禁；接 Cloudflare Access 后改用 Access JWT，
+更安全。需要 **两个 Access 应用**：
+
+| 应用 | 保护路径 | 作用 |
+| --- | --- | --- |
+| A. 后台界面 | `/admin*` | 访问后台页面时要求登录（邮箱/SSO） |
+| B. 后台 API | `/api/v1/admin/*` | 给 API 请求加 `Cf-Access-Jwt-Assertion`，由 Worker 校验 |
+
+配置步骤（Cloudflare Zero Trust → Access → Applications → Self-hosted）：
+
+1. 应用 A：域名 = 站点域名，路径 = `/admin*`，加允许策略（邮箱/域名/组）；
+2. 应用 B：域名 = 站点域名，路径 = `/api/v1/admin/*`，策略与应用 A 一致；
+3. 记下应用 B 的 **Audience Tag**（`ACCESS_AUD`）和团队域名（`ACCESS_TEAM_DOMAIN`，形如
+   `<team>.cloudflareaccess.com`）；
+4. 把两者用 `wrangler secret put` 配到 Worker（见 3.3），重新部署或等待生效；
+5. 此时 Worker 的 `requireAdmin` 优先校验 Access JWT，`ADMIN_TOKEN` 不再参与；两个变量必须成对配置，
+   只配一个会回退到 `ADMIN_TOKEN` 模式。
+
+验证：无痕窗口打开 `https://<站点>/admin` 应跳转 Access 登录；登录后后台接口正常；
+不带 JWT 直接 curl `/api/v1/admin/bangumi` 时，请求会先被 Access 在边缘拦截
+（通常是 302 跳登录页，非浏览器客户端也可能是 403），到不了 Worker；只有带合法
+Access JWT 的请求才会进入 Worker 的 `requireAdmin` 校验。
+
+---
+
+## 7. Bangumi 定时同步
+
+- `apps/web/src/worker.ts` 是自定义 Worker 入口：`fetch` 交给 Astro，`scheduled` 每 6 小时调一次
+  `syncBangumi()`；定时规则来自模板里的 `triggers.crons: ["0 */6 * * *"]`。
+- 生产同步由 Worker **直连** `api.bgm.tv`；需要 Worker secret `BANGUMI_ACCESS_TOKEN` +
+  `BANGUMI_USERNAME`，缺任一个时同步会直接跳过（后台手动同步会提示未配置）。
+- 手动触发：后台 `/admin/bangumi` 的「同步 Bangumi」按钮；或 Cloudflare Dashboard →
+  Worker → Triggers 查看 Cron 配置。
+- 查看日志：`cd apps/web && pnpm exec wrangler tail`（看 `bangumi sync` 输出）。
+- 本地调试用代理同步脚本（会走本机代理，不经过部署）：
+
+  ```bash
+  pnpm bangumi:sync:local --dry-run   # 只拉取预览
+  pnpm bangumi:sync:local             # 写本地 D1
+  ```
+
+  默认代理 `http://127.0.0.1:7890`，可用 `BANGUMI_PROXY` 覆盖、`BANGUMI_PROXY=` 表示直连；
+  凭据优先读环境变量，否则读 `apps/web/.dev.vars`（详见脚本 `--help`）。
+
+---
+
+## 8. 部署后验收清单
+
+把 `https://<你的域名>` 换成实际地址：
+
+```bash
+# 健康探针（不版本化，必须 200 且返回 JSON）
+curl -fsS https://<域名>/api/health
+
+# 首页 / 文章 / RSS / 后台
+curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/
+curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/articles
+curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/rss.xml
+curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/admin   # 开了 Access 时是 302 跳登录
+```
+
+人工检查：
+
+- [ ] 首页、文章、动态、展柜、追番、工具六个前台页面可打开，样式正常、无 404 资源。
+- [ ] 后台 `/admin` 可打开（Access 模式下能登录）；设置页能保存并刷新仍是新值。
+- [ ] 上传一张图片后前台能看到（`/media/<key>` 可访问）。
+- [ ] `/rss.xml` 内容里的站点地址正确（域名来自 `apps/web/astro.config.mjs` 的 `site`，不对就改它并重新构建部署）。
+- [ ] Bangumi 手动同步按钮返回结果合理（未配置令牌会提示「未配置 BANGUMI_ACCESS_TOKEN，已跳过」）。
+- [ ] Cloudflare Dashboard → Worker → Triggers 能看到 6 小时 Cron。
+- [ ] Workers Logs / `wrangler tail` 中没有持续报错。
+
+---
+
+## 9. 回滚与故障排查
+
+### 回滚
+
+```bash
+cd apps/web
+pnpm exec wrangler deployments list        # 看最近部署及对应的 Version ID
+pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 100% 流量的版本（跳过最新部署）
+```
+
+或在 GitHub Actions 里对上一个正常提交重新 Run `Deploy` workflow。
+注意：**D1 迁移是往前执行的**，回滚 Worker 不会回滚数据库；涉及表结构变更时要单独评估。
+
+### 常见问题
+
+| 现象 | 排查 |
+| --- | --- |
+| Deploy 在 `Check required secrets` 失败 | GitHub Secrets 缺 `CLOUDFLARE_D1_DATABASE_ID`（错误信息会给出 `::error::` 提示） |
+| Deploy 在生成配置/构建后失败 | 看 step 日志；本地复现：`D1_DATABASE_ID=xxx pnpm wrangler:config && pnpm build`（脚本读的是 `D1_DATABASE_ID`，不是 GitHub Secret 名 `CLOUDFLARE_D1_DATABASE_ID`） |
+| `wrangler deploy` 鉴权失败（401/403） | 检查 `CLOUDFLARE_API_TOKEN` 权限与 `CLOUDFLARE_ACCOUNT_ID`；token 是否过期 |
+| D1 迁移报找不到数据库 | `database_name` 应为 `myon-blog`；确认 Secret 里的 database_id 与账号一致；本地可 `cd apps/web && pnpm exec wrangler d1 migrations list myon-blog --remote`（要在 `apps/web` 下执行，根目录会回退到全局 wrangler） |
+| 部署成功但 Cron 不触发 | 确认生成配置里有 `triggers.crons`（模板固定配置，别手改生成文件）；重新 deploy；Dashboard → Triggers 是否有记录；Cron 只在生产 Worker 上跑 |
+| 后台接口 401 | Access 模式：`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` 必须成对且 AUD 来自 API 应用；令牌模式：`x-admin-token` 与 Worker 的 `ADMIN_TOKEN` 一致 |
+| 后台接口 503 | Worker 既没配 Access 也没配 `ADMIN_TOKEN`，按 3.3 配置其一后重新部署 |
+| Bangumi 同步提示 `not_configured` | Worker secrets 缺 `BANGUMI_ACCESS_TOKEN`/`BANGUMI_USERNAME`，按 3.3 配置 |
+| 图片 404 / 上传后看不到 | 检查 `R2_BUCKET` 变量与真实 bucket 名一致；`GET /media/<key>` 会先查 R2、再回退 `public/assets` |
+| RSS/绝对链接域名不对 | 改 `apps/web/astro.config.mjs` 的 `site` 后重新构建部署；Worker 变量 `SITE_URL` 目前代码里没有读取 |
+| 本地 `wrangler` 命令报配置缺失 | 先 `pnpm wrangler:config`；`wrangler.jsonc` 是生成文件，不入库 |
+| wrangler 版本不一致/命令找不到 | 用仓库脚本（`pnpm ...`）而不是全局 `npx wrangler`；先 `pnpm install`，版本由 `pnpm-lock.yaml` 固定 |
+| 生成配置文件出现在 `git status` | 不应提交。仓库根 `.gitignore` 已忽略 `apps/web/wrangler.jsonc`；若该文件被历史提交跟踪，用 `git rm --cached apps/web/wrangler.jsonc` 停止跟踪 |
+| Windows 本地 `pnpm dev` 一启动就失败，日志是 `CreateDirectory: #5 拒绝访问`（`path = miniflare-email-store`） | 项目目录被打上了「低完整性级别」标签（常见于仓库在受限/沙箱环境里创建或安装依赖）：`workerd.exe` 会以低完整性运行，写不了 `%TEMP%`。在 PowerShell 里把仓库根目录重置为 Medium 完整性后重跑 `pnpm dev`：`icacls <仓库根目录> /setintegritylevel "(OI)(CI)M" /T /C /Q` |

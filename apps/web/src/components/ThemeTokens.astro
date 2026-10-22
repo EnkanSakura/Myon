@@ -1,0 +1,24 @@
+---
+/**
+ * 把后台配置的主题色注入成 CSS 变量。
+ * 默认色不注入任何东西：v2.css 里的默认调色板就是设计基线，零改动。
+ */
+import { isDefaultThemeColor, themePalette } from '@myon/shared';
+
+interface Props {
+  themeColor: string;
+  /** 传了就渲染 <meta name="theme-color">；后台传自己的深墨色。 */
+  metaColor?: string;
+}
+
+const { themeColor, metaColor } = Astro.props;
+const palette = themePalette(themeColor);
+const custom = !isDefaultThemeColor(themeColor);
+
+const css = custom
+  ? `:root{--pink:${palette.pink};--pink-soft:${palette.pinkSoft};--pink-wash:${palette.pinkWash};--pink-deep:${palette.pinkDeep};--on-pink:${palette.onPink}}`
+  : '';
+---
+
+{metaColor && <meta name="theme-color" content={metaColor} />}
+{custom && <style is:inline set:html={css}></style>}

@@ -1,0 +1,150 @@
+/* ==========================================================================
+   06 工具 —— 部室抽屉。左边八个抽屉，右边是拉开的那一格。
+   页面特有样式，只作用于本页。
+   ========================================================================== */
+
+/* 页头：几何与统计条由 v2.css 统一提供；本页只保留导读宽度 */
+.room-head .sub{max-width:700px}
+.stat-box .v--word{font-family:var(--sans);font-size:16px;font-weight:900;letter-spacing:.02em;line-height:1.35;display:block;padding:2px 0}
+
+/* ---------- 两栏 ---------- */
+.tools-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:34px;align-items:start;margin-top:22px}
+
+/* ---------- 左：工具索引 ---------- */
+.index .index-in{padding:26px 14px 14px}
+.index-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.index-head .idx-title{font-size:13px;font-weight:900;letter-spacing:.02em}
+.index-head .mono{font-size:10px;letter-spacing:.1em;color:var(--ink-62)}
+.index-head .mono b{font-family:var(--disp);font-size:12px;letter-spacing:0;color:var(--ink)}
+.search{position:relative}
+.search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-62);pointer-events:none}
+.search input{width:100%;height:40px;padding:0 12px 0 38px;font-size:14px;font-weight:700;letter-spacing:.02em}
+.search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.tool-list{margin-top:12px;border-top:2px solid var(--ink)}
+.tool{position:relative;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;
+  width:100%;height:44px;padding:0 7px;border-bottom:2px solid var(--line-2);text-align:left;
+  transition:background .14s var(--ease),padding .14s var(--ease)}
+.tool:hover{background:var(--pink-wash);padding-left:11px}
+.tool:focus-visible{outline:3px solid var(--pink-deep);outline-offset:-3px}
+.tool .tno{font-family:var(--disp);font-size:12px;line-height:1;color:var(--ink-62)}
+.tool .tname{display:block;font-size:14px;font-weight:900;line-height:1.2;letter-spacing:-.01em}
+.tool .tdesc{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.01em;color:var(--ink-62);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool .tcount{font-family:var(--disp);font-size:12px;line-height:1;color:var(--ink-62)}
+.tool[aria-current="true"]{background:var(--pink);box-shadow:inset 0 0 0 2px var(--shade);padding-left:9px}
+.tool[aria-current="true"] .tno,.tool[aria-current="true"] .tcount{color:var(--on-pink)}
+.tool[aria-current="true"] .tdesc{color:color-mix(in srgb, var(--on-pink) 80%, transparent)}
+.tool[hidden]{display:none}
+.index-foot{display:flex;justify-content:space-between;gap:10px;margin-top:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62)}
+.search-empty{margin-top:12px;border:2px solid var(--ink);background:var(--paper-2);padding:12px 12px 14px}
+.search-empty[hidden]{display:none}
+.search-empty p{font-size:13px;font-weight:700;line-height:1.6;color:var(--ink-80)}
+.search-empty .q{background:var(--pink);padding:0 3px}
+.clear-btn{margin-top:9px;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.12em;font-weight:500;border-bottom:2px solid var(--ink);padding-bottom:2px}
+.clear-btn:hover{color:var(--pink-deep);border-color:var(--pink-deep)}
+
+/* ---------- 右：工作台 ---------- */
+.bench .bench-in{padding:24px 24px 18px}
+.bench-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.bench-head .bk{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62);display:block;margin-bottom:7px}
+.bench-head h2{font-size:clamp(28px,3vw,38px);line-height:1.1;letter-spacing:-.02em}
+.bench-stamp{flex:none;transform:rotate(2deg)}
+.bench-stamp .sticker{font-size:10px;padding:4px 8px 3px}
+.bench-desc{margin-top:10px;font-size:14px;line-height:1.8;color:var(--ink-62);max-width:640px}
+.bench-body{margin-top:18px}
+
+/* 表单 */
+.form-row{display:grid;grid-template-columns:minmax(0,1fr) 164px 164px;gap:14px;align-items:end}
+.flabel{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62);margin-bottom:6px}
+.field .input{width:100%;height:52px;padding:0 12px;font-family:var(--mono);font-size:19px;letter-spacing:.03em}
+.field .input::placeholder{font-family:var(--sans);font-size:13px;font-weight:400}
+.seg{display:grid;grid-template-columns:1fr 1fr;height:52px;border:2px solid var(--ink);background:var(--paper)}
+.seg-btn{font-size:13px;font-weight:900;letter-spacing:.02em;background:var(--paper);transition:background .12s var(--ease),color .12s var(--ease)}
+.seg-btn + .seg-btn{border-left:2px solid var(--ink)}
+.seg-btn:hover{background:var(--pink-wash)}
+.seg-btn:focus-visible{outline:3px solid var(--pink-deep);outline-offset:-3px}
+.seg-btn.is-on{background:var(--pink)}
+.selwrap{position:relative}
+.selwrap select{width:100%;height:52px;padding:0 34px 0 12px;font-family:var(--mono);font-size:13px;letter-spacing:.04em;
+  appearance:none;-webkit-appearance:none;cursor:pointer}
+.selwrap .ic{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--ink)}
+.selwrap select option{background:var(--paper);color:var(--ink)}
+
+/* 结果 */
+.result{position:relative;margin-top:20px;border:3px solid var(--ink);background:var(--paper);box-shadow:var(--hard-sm);padding:14px 18px 14px 30px;overflow:hidden}
+.result::before{content:"";position:absolute;left:0;top:0;bottom:0;width:12px;background:var(--pink);border-right:3px solid var(--ink)}
+.res-cap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.res-cap .sticker{font-size:10px;padding:3px 7px 2px}
+.res-cap .mono{font-size:10px;letter-spacing:.1em;color:var(--ink-62)}
+.res-time{margin-top:10px;font-family:var(--mono);font-weight:500;font-size:clamp(20px,2.7vw,38px);line-height:1.15;
+  letter-spacing:.005em;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.res-time.is-empty{color:var(--ink-62)}
+.res-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink-62)}
+.res-foot .sep{color:var(--ink-25)}
+
+/* 动作 */
+.bench-actions{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
+.bench-actions .btn{height:46px;font-size:13px;padding:0 18px}
+.bench-actions .btn .ar{font-family:var(--mono);font-size:11px}
+.copy-note{min-height:26px;margin-top:12px}
+.copy-note.is-on{display:inline-block;background:var(--pink);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--shade);
+  padding:4px 10px 3px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink)}
+
+/* 其余七格：抽屉规格页 */
+.altpanel[hidden],.panel-ts[hidden]{display:none}
+.spec{border-top:3px solid var(--ink)}
+.spec .sr{display:grid;grid-template-columns:132px minmax(0,1fr);gap:16px;align-items:baseline;
+  padding:11px 2px;border-bottom:2px solid var(--line-2)}
+.spec .sk{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62)}
+.spec .sv{font-size:15px;font-weight:900;line-height:1.5;letter-spacing:-.01em}
+.alt-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-top:16px;flex-wrap:wrap}
+.alt-foot .kai-note{font-family:var(--kai);font-size:15px;line-height:1.7;color:var(--ink-62);max-width:44ch}
+.alt-foot .arrow-link{margin-bottom:2px}
+
+/* 底部说明 */
+.tools-note{margin-top:16px;padding-top:12px;border-top:2px solid var(--ink);
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink-62);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tools-note i{display:block;width:22px;height:3px;background:var(--pink);border:1px solid var(--ink);flex:none}
+.foot .colophon{color:color-mix(in srgb, var(--paper) 70%, transparent)}
+.foot p.foot-state{max-width:none}
+.mbr{display:none}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1100px){
+  .room-head{padding-top:calc(var(--topbar-h) + 22px);padding-bottom:20px}
+  .room-head .chapter{font-size:104px;opacity:.22}
+  .tools-layout{grid-template-columns:286px minmax(0,1fr);gap:24px}
+  .form-row{grid-template-columns:minmax(0,1fr) 148px 148px;gap:12px}
+  .bench .bench-in{padding:20px 20px 18px}
+  .res-time{font-size:clamp(20px,2.9vw,34px)}
+}
+@media (max-width:760px){
+  .page-sticker{font-size:10px;letter-spacing:.06em;padding:4px 6px}
+  .topmeta{display:none}
+  .mbr{display:inline}
+  .room-head{padding-top:calc(var(--topbar-h) + 14px);padding-bottom:18px}
+  .room-head .chapter{font-size:84px;top:calc(var(--topbar-h) + 2px);opacity:.18}
+  .room-stats{gap:6px}
+  .stat-box{min-width:0;padding:7px 9px 6px}
+  .stat-box .k{font-size:10px}
+  .stat-box .v{font-size:19px}
+  .tools-layout{grid-template-columns:1fr;gap:22px;margin-top:18px}
+  .index .index-in{padding:22px 12px 12px}
+  .tool{height:50px}
+  .bench .bench-in{padding:22px 14px 16px}
+  .bench-stamp{display:none}
+  .bench-desc{font-size:14px}
+  .form-row{grid-template-columns:1fr;gap:12px}
+  .field .input{height:48px;font-size:17px}
+  .seg,.selwrap select{height:48px}
+  .result{margin-top:16px;padding:12px 13px 12px 24px}
+  .result::before{width:9px}
+  .res-time{font-size:20px;white-space:normal;word-break:break-all;line-height:1.4}
+  .bench-actions .btn{height:44px;font-size:13px;flex:1 1 auto;justify-content:center}
+  .spec .sr{grid-template-columns:1fr;gap:3px;padding:9px 2px}
+  .spec .sv{font-size:14px}
+  .alt-foot .arrow-link{margin-top:2px}
+}

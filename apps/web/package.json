@@ -1,0 +1,32 @@
+{
+  "name": "@myon/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test:e2e": "playwright test",
+    "types": "wrangler types",
+    "db:migrate:local": "wrangler d1 migrations apply myon-blog --local",
+    "db:migrate:remote": "wrangler d1 migrations apply myon-blog --remote",
+    "db:seed:local": "node ../../packages/back/scripts/seed-local.mjs",
+    "bangumi:sync:local": "node ../../packages/back/scripts/bangumi-sync-local.mjs",
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run --outdir=.wrangler/dry-run"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.4.1",
+    "@myon/back": "workspace:*",
+    "@myon/shared": "workspace:*",
+    "astro": "^7.4.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.11",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.151.3"
+  }
+}

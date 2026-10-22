@@ -1,0 +1,241 @@
+---
+// 文章目次：数据来自 D1（经 /api/v1/posts 与 /api/v1/stats）。
+// 服务端分页：?page=N，每页 20 篇；total 用来显示页头计数、判断下一页。
+// 样式：public/css/pages/articles.css；脚本：public/js/pages/articles.js
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { Paginated, PostListItem, SiteStats } from '@myon/shared';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import { formatDate, yearOf } from '../lib/format';
+
+const binding = env as unknown as AppBindings;
+
+const PAGE_SIZE = 20;
+const rawPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const page =
+  Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, 10000) : 1;
+const offset = (page - 1) * PAGE_SIZE;
+
+const [postsRes, statsRes] = await Promise.all([
+  app.request(`/api/v1/posts?limit=${PAGE_SIZE}&offset=${offset}`, {}, binding),
+  app.request('/api/v1/stats', {}, binding),
+]);
+
+const postsPage: Paginated<PostListItem> = postsRes.ok
+  ? ((await postsRes.json()) as Paginated<PostListItem>)
+  : { items: [], total: 0, limit: PAGE_SIZE, offset };
+const posts = postsPage.items;
+const total = postsPage.total;
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+const hasNext = offset + posts.length < total;
+const stats = statsRes.ok ? ((await statsRes.json()) as SiteStats) : null;
+
+// 只有第一页把第一篇做成「本期主打」；翻页后按普通目次排。
+const featured = page === 1 ? (posts[0] ?? null) : null;
+const rest = featured ? posts.slice(1) : posts;
+const latestYear = posts.length > 0 ? yearOf(posts[0]?.publishedAt) : '';
+const lastUpdated = page === 1 ? (posts[0]?.publishedAt ?? null) : null;
+
+const words = stats?.posts.words ?? 0;
+const wordLabel =
+  words >= 10000 ? `${(words / 10000).toFixed(1)} 万` : `${words}`;
+const categories = stats?.categories.posts ?? [];
+const tagCount = categories.length;
+
+// 年份索引只统计当前这一页的数据；筛选在当页完成，不改变页头 total。
+const yearGroups = new Map<string, PostListItem[]>();
+for (const post of posts) {
+  const year = yearOf(post.publishedAt);
+  if (!year) continue;
+  const group = yearGroups.get(year) ?? [];
+  group.push(post);
+  yearGroups.set(year, group);
+}
+const years = [...yearGroups.entries()].map(([year, list]) => ({
+  year,
+  count: list.length,
+}));
+const activeYear = years[0]?.year ?? 'all';
+---
+
+<SiteLayout
+  title="文章 · Myon 同人志"
+  description={`${total} 篇长文的目录：技术、设计、动画、随笔，按年份排的目次页。`}
+  active="articles"
+  sticker="PAGE 02 / 07 · 文章"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/articles.css" />
+  </Fragment>
+
+<main class="room">
+  <div class="wrap">
+
+    <section class="room-head">
+      <div>
+        <div class="room-kicker"><span class="sticker">CH.02 目次</span><span class="sticker sticker--paper">CONTENTS</span></div>
+        <h1>文章<span class="hl">。</span></h1>
+        <p class="sub">
+          <span class="nb">共 {total} 篇</span>
+          {lastUpdated && <> · 最后更新 {formatDate(lastUpdated)}</>}
+          {page > 1 && <> · 第 {page} 页</>}
+        </p>
+      </div>
+      <div class="room-stats">
+        <div class="stat-box is-pink"><span class="k">篇数 / POSTS</span><span class="v">{total}</span></div>
+        <div class="stat-box"><span class="k">字数 / WORDS</span><span class="v">{wordLabel}</span></div>
+        <div class="stat-box"><span class="k">标签 / TAGS</span><span class="v">{tagCount}</span></div>
+      </div>
+      <span class="chapter" aria-hidden="true">02</span>
+    </section>
+
+    <div class="toolbar">
+      <div class="tabs" role="group" aria-label="按标签筛选文章">
+        <button class="tab is-on" type="button" data-tag="全部" aria-pressed="true">全部</button>
+        {categories.map((category) => (
+          <button class="tab" type="button" data-tag={category.name} aria-pressed="false">
+            {category.name}
+          </button>
+        ))}
+      </div>
+      <div class="toolbar-count" aria-live="polite">显示 <b id="shownCount">{posts.length}</b> 篇 <span class="slash">/</span> 共 {total} 篇</div>
+    </div>
+
+    <div class="contents">
+
+      <aside class="years" aria-label="按年索引">
+        <span class="y-halo" aria-hidden="true"></span>
+        <div class="y-head"><span class="sticker sticker--paper">按年 / YEAR</span><span class="mono">ISSUE {latestYear || '—'}</span></div>
+        {
+          years.map((group) => (
+            <button
+              class:list={['year', { 'is-on': group.year === activeYear }]}
+              type="button"
+              data-year={group.year}
+              aria-pressed={group.year === activeYear ? 'true' : 'false'}
+            >
+              <span class="yy">{group.year}</span>
+              <span class="yc">{group.count} 篇</span>
+            </button>
+          ))
+        }
+        {years.length === 0 && (
+          <p class="y-note">
+            {total === 0 ? '还没有发布过文章。' : `第 ${page} 页没有文章。`}
+          </p>
+        )}
+        {
+          years.length > 0 && (
+            <div class="narration">
+              <span class="nk">作者的话 / NOTE</span>
+              <p>目录按年份排。翻旧文像翻旧刊，纸黄了，版式还在。</p>
+            </div>
+          )
+        }
+      </aside>
+
+      <div class="list-col">
+        <div class="list-head">
+          <span class="sticker">目次 / INDEX</span>
+          <span class="list-rule"></span>
+          <span class="mono">VOL. {latestYear || '—'} · 第 02 页</span>
+        </div>
+
+        <div class="rows" id="list">
+
+          {
+            featured && (
+              <a
+                class="r is-feat"
+                href={`/articles/${featured.slug}`}
+                data-tag={featured.category}
+                data-year={yearOf(featured.publishedAt)}
+              >
+                <span class="no">01</span>
+                <span class="body">
+                  <span class="feat-label"><span class="sticker">FEATURED</span><span class="mono">本期主打</span></span>
+                  <span class="t">{featured.title}</span>
+                  {featured.excerpt && <span class="d">{featured.excerpt}</span>}
+                  <span class="rtags">
+                    <span class="tag">{featured.category}</span>
+                  </span>
+                </span>
+                <span class="m">
+                  {formatDate(featured.publishedAt)}
+                  <br />
+                  {featured.readingMinutes} 分钟
+                </span>
+              </a>
+            )
+          }
+
+          {
+            rest.map((post, index) => (
+              <a
+                class="r"
+                href={`/articles/${post.slug}`}
+                data-tag={post.category}
+                data-year={yearOf(post.publishedAt)}
+              >
+                <span class="no">{String(offset + index + (featured ? 2 : 1)).padStart(2, '0')}</span>
+                <span class="body">
+                  <span class="t">{post.title}</span>
+                  {post.excerpt && <span class="d">{post.excerpt}</span>}
+                  <span class="rtags">
+                    <span class="tag">{post.category}</span>
+                  </span>
+                </span>
+                <span class="m">
+                  {formatDate(post.publishedAt)}
+                  <br />
+                  {post.readingMinutes} 分钟
+                </span>
+              </a>
+            ))
+          }
+
+        </div>
+
+        <div class="empty" id="empty">
+          <p>「<b id="emptyTag"></b>」下面还是空的。</p>
+          <button class="btn btn--pink" type="button" id="clearFilter">清除筛选 <span class="ar">×</span></button>
+        </div>
+
+        {posts.length === 0 && (
+          <div class="empty is-on" id="emptyPage">
+            <p>
+              {total === 0
+                ? '还没有发布过文章。'
+                : `第 ${page} 页还没有文章，可能翻过头了。`}
+            </p>
+            {total > 0 && (
+              <a class="btn btn--pink" href="?page=1">回到最新 <span class="ar">↑</span></a>
+            )}
+          </div>
+        )}
+
+        <div class="list-foot">
+          <span class="mono">
+            {page > totalPages
+              ? `第 ${page} 页`
+              : `第 ${page} / ${totalPages} 页`} · 共 {total} 篇 · {wordLabel}字 · 按年归档见左栏
+          </span>
+          <div class="list-links">
+            {hasNext && (
+              <a class="btn btn--pink" href={`?page=${page + 1}`}>更早的文章 <span class="ar">→</span></a>
+            )}
+            {page > 1 && (
+              <a class="arrow-link" href="?page=1">回到最新 <span class="ar">↑</span></a>
+            )}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</main>
+
+  <script is:inline src="/js/pages/articles.js"></script>
+</SiteLayout>

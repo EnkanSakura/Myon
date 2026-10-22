@@ -1,0 +1,56 @@
+---
+/**
+ * 全站浮动底栏：浮在内容之上，三格布局。
+ * 左格由页面决定（首页放翻页器，其余页面是版权 + 技术支持），
+ * 中格是备案号，右格是 RSS 与邮箱，内容都来自后台设置。
+ *
+ * 技术支持与备案号允许包含多个 <a>：后端 `/api/v1/site` 已做白名单过滤，
+ * 这里用 set:html 输出；没有写链接的纯文本仍按原样式渲染，备案号自动包外链。
+ */
+import type { PublicSiteSettings } from '@myon/shared';
+
+interface Props {
+  settings: PublicSiteSettings;
+}
+
+const { settings } = Astro.props;
+const icpHasLink = /<a[\s>]/i.test(settings.footerIcp ?? '');
+---
+
+<footer class="sitebar" aria-label="页脚">
+  <div class="sb-left">
+    <slot name="left">
+      <span class="sb-copy">{settings.footerCopyright}</span>
+      <span class="sb-tech" set:html={settings.footerTech} />
+    </slot>
+  </div>
+
+  <div class="sb-mid">
+    {
+      settings.footerIcp &&
+        (icpHasLink ? (
+          <span class="sb-icp" set:html={settings.footerIcp} />
+        ) : (
+          <a
+            class="sb-icp"
+            href="https://beian.miit.gov.cn/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {settings.footerIcp}
+          </a>
+        ))
+    }
+  </div>
+
+  <div class="sb-right">
+    {settings.footerRss && <a class="sb-rss" href={settings.footerRss}>RSS 订阅</a>}
+    {
+      settings.footerEmail && (
+        <a class="sb-mail" href={`mailto:${settings.footerEmail}`}>
+          {settings.footerEmail}
+        </a>
+      )
+    }
+  </div>
+</footer>

@@ -1,0 +1,254 @@
+---
+// 迁移自 design 分支 design/site/admin-moments.html。
+// 数据走 /api/v1/admin/moments（需要 x-admin-token，令牌存在浏览器 localStorage）。
+// 样式：public/css/pages/admin-moments.css；脚本：public/js/pages/admin-moments.js
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { CategoriesResponse } from '@myon/shared';
+import { apiBasePath } from '@myon/shared';
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { mediaUrl } from '../../lib/media';
+
+const binding = env as unknown as AppBindings;
+
+// 接口地址由服务端渲染给页面脚本，public/js 里不硬编码路径。
+const momentsApi = `${apiBasePath}/admin/moments`;
+const mediaApi = `${apiBasePath}/admin/media`;
+
+// 分类建议来自公开的分类计数（/categories 不需要令牌）；取不到就用一组默认值。
+let momentCategories: string[] = [];
+try {
+  const categoriesRes = await app.request('/api/v1/categories', {}, binding);
+  if (categoriesRes.ok) {
+    const data = (await categoriesRes.json()) as CategoriesResponse;
+    momentCategories = data.moments.map((entry) => entry.name);
+  }
+} catch (error) {
+  console.error('后台动态页读取分类失败', error);
+}
+const categoryOptions =
+  momentCategories.length > 0
+    ? momentCategories
+    : ['日常', '技术', '收藏', '看番', '碎念'];
+const defaultCategory = categoryOptions.includes('日常')
+  ? '日常'
+  : (categoryOptions[0] ?? '日常');
+
+// 图片预览的 URL 规则来自 mediaUrl()，脚本只负责把 key 拼回去。
+const mediaSample = mediaUrl('__KEY__');
+const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
+---
+
+<AdminLayout
+  title="动态 · Myon 制作进行"
+  crumb="动态"
+  active="moments"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-moments.css" />
+  </Fragment>
+
+<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-media-base={mediaBase}>
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <span class="chapter" aria-hidden="true">N.03</span>
+
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">NOTES / ADMIN</span>
+          <span class="sticker sticker--paper">共 <span id="stickerPub">—</span> 条</span>
+        </div>
+        <h1>动态<span class="dot">。</span></h1>
+        <p class="pdate"><span id="noteTotalHead">—</span> 条 <span class="sep">·</span> 今天 <span id="noteToday">—</span> 条 <span class="sep">·</span> 最后发布 <span id="noteLast">—</span></p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn btn--pink" id="btnCompose" type="button">发动态 <span class="ar" aria-hidden="true">＋</span></button>
+          <button class="btn" id="btnTokenOpen" type="button">管理令牌</button>
+          <a class="btn" href="/moments">看前台动态 <span class="ar" aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- 连接状态 / 令牌提示 ---------- -->
+    <div class="notice notice--info" id="amBanner" role="status" hidden>
+      <span class="notice-k" id="amBannerK">INFO</span>
+      <div class="notice-c">
+        <b id="amBannerTitle"></b>
+        <p id="amBannerText"></p>
+      </div>
+      <button class="notice-btn" id="btnToken" type="button">填写管理令牌</button>
+    </div>
+
+    <!-- ---------- 01 发布 ---------- -->
+    <section class="sec" aria-labelledby="h-compose">
+      <div class="sec-h">
+        <span class="sec-num">01</span>
+        <h2 id="h-compose">发一条</h2>
+        <span class="sec-en">COMPOSE / NEW NOTE</span>
+        <div class="sec-r"><span class="sec-note">正文 2000 字以内 · 发布后同步前台第 03 页</span></div>
+      </div>
+
+      <form class="compose" id="composeForm" novalidate>
+        <span class="c-tab" id="composeTab">NEW NOTE / 新动态</span>
+
+        <div class="c-main">
+          <label class="sr-only" for="noteText">动态内容</label>
+          <textarea class="c-area" id="noteText" rows="4" maxlength="2000" spellcheck="false" placeholder="现在在做什么…"></textarea>
+
+          <div class="c-thumbs" id="thumbs" aria-label="从媒体库选择配图"></div>
+
+          <div class="c-media-row">
+            <input class="c-file" id="mediaFile" type="file" accept="image/*" hidden>
+            <button class="c-act" id="btnUpload" type="button">上传图片 <span aria-hidden="true">＋</span></button>
+            <span class="c-media-hint" id="mediaHint">jpg / png / webp / gif / avif，最大 8MB</span>
+          </div>
+
+          <div class="c-attach" id="attachBox">
+            <img id="attachImg" alt="已选配图">
+            <span class="an" id="attachName">未选图</span>
+            <button class="c-remove" id="btnRemoveImg" type="button">移除</button>
+          </div>
+
+          <div class="c-bar">
+            <button class="c-act" id="btnAddImg" type="button" aria-expanded="false" aria-controls="thumbs">添加图片 <span aria-hidden="true">＋</span></button>
+            <button class="c-act" id="btnClear" type="button">清空</button>
+            <button class="c-act" id="btnCancelEdit" type="button" hidden>取消编辑</button>
+            <span class="c-count"><span id="noteCount">0</span> / 2000</span>
+            <button class="btn btn--pink c-pub" id="btnPublish" type="submit">发布 <span class="ar" aria-hidden="true">→</span></button>
+          </div>
+        </div>
+
+        <aside class="c-side" aria-label="发布设置">
+          <div class="c-field">
+            <label class="c-k" for="noteCategory">分类 / CATEGORY</label>
+            <input class="c-input" id="noteCategory" name="category" type="text" maxlength="40" list="categoryList" placeholder="日常" autocomplete="off" value={defaultCategory}>
+            <datalist id="categoryList">
+              {categoryOptions.map((name) => <option value={name} />)}
+            </datalist>
+          </div>
+
+          <div class="c-field">
+            <label class="c-k" for="noteTag">标签 / TAG</label>
+            <input class="c-input" id="noteTag" name="tag" type="text" maxlength="40" placeholder="可留空" autocomplete="off">
+            <div class="c-tags" id="tagQuick">
+              {categoryOptions.map((name) => (
+                <button class="c-tag" type="button" data-tag={name} aria-pressed="false">{name}</button>
+              ))}
+            </div>
+          </div>
+
+          <div class="c-field">
+            <span class="c-k">可见性 / VISIBILITY</span>
+            <div class="c-vis" id="visPick">
+              <button class="c-tag" type="button" data-vis="public" aria-pressed="true">公开</button>
+              <button class="c-tag" type="button" data-vis="private" aria-pressed="false">仅自己</button>
+            </div>
+          </div>
+
+          <div class="c-field">
+            <span class="c-k">置顶 / PINNED</span>
+            <div class="c-vis">
+              <button class="c-tag" id="pinPick" type="button" aria-pressed="false">置顶这条</button>
+            </div>
+          </div>
+
+          <p class="c-hint">发布后出现在前台第 03 页；「仅自己」的动态不显示在前台列表，也不进 RSS。图片先上传到媒体库，再把 key 存进动态。</p>
+        </aside>
+      </form>
+    </section>
+
+    <!-- ---------- 02 列表 ---------- -->
+    <section class="sec" aria-labelledby="h-list">
+      <div class="sec-h">
+        <span class="sec-num">02</span>
+        <h2 id="h-list">列表</h2>
+        <span class="sec-en" id="notesEn">NOTES / —</span>
+        <div class="sec-r">
+          <span class="sec-note">共 <span id="noteTotalList">—</span> 条 <span class="sep">·</span> 本页 <span id="notePageCount">—</span> 条</span>
+          <span class="sec-note" id="listState" aria-live="polite">未连接</span>
+          <a class="arrow-link" href="/moments">前台四格 <span class="ar" aria-hidden="true">→</span></a>
+        </div>
+      </div>
+
+      <div class="list-tools">
+        <div class="ftabs" role="group" aria-label="筛选动态">
+          <button class="ftab is-on" type="button" data-filter="all" aria-pressed="true">全部</button>
+          <button class="ftab" type="button" data-filter="img" aria-pressed="false">带图</button>
+          {categoryOptions.map((name) => (
+            <button class="ftab" type="button" data-filter={name} aria-pressed="false">{name}</button>
+          ))}
+        </div>
+        <label class="list-search"><span>SEARCH</span><input id="noteSearch" type="search" placeholder="搜正文、分类或标签" autocomplete="off"><span class="sr-only">搜索动态</span></label>
+        <span class="list-count" id="shownNotes" aria-live="polite">显示 — 条 · 本页 — 条</span>
+      </div>
+
+      <div class="notes" id="noteList">
+        <div class="note-head" aria-hidden="true">
+          <span>时间</span><span>内容</span><span class="hd-thumb">图</span><span class="hd-tag">分类 · 标签</span><span class="hd-r">操作</span>
+        </div>
+        <!-- 列表行由 public/js/pages/admin-moments.js 按接口数据渲染 -->
+      </div>
+
+      <div class="empty" id="emptyNotes" hidden>
+        <div class="empty-c">
+          <b class="empty-t" id="emptyTitle">还没有动态</b>
+          <p class="empty-d" id="emptyText">在上面发第一条，或者填写管理令牌后刷新列表。</p>
+        </div>
+        <div class="empty-actions"><button class="nr-act" id="btnResetFilter" type="button">清除筛选</button></div>
+      </div>
+
+      <div class="pager">
+        <span class="pager-info">第 <b id="pgNow">—</b> / <b id="pgTotal">—</b> 页 · 每页 20 条</span>
+        <div class="pager-btns">
+          <button class="pager-btn" id="pgPrev" type="button" disabled>← 上一页</button>
+          <button class="pager-btn" id="pgNext" type="button" disabled>下一页 →</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+
+<!-- ---------- 管理令牌 ---------- -->
+<dialog class="dlg" id="tokenDlg" aria-labelledby="tokenTitle">
+  <div class="dlg-box">
+    <span class="dlg-tab">ADMIN TOKEN</span>
+    <div class="dlg-h"><span id="tokenTitle">管理令牌 / TOKEN</span><span>LOCAL ONLY</span></div>
+    <label class="sr-only" for="adminToken">管理令牌</label>
+    <input class="dlg-note token-input" id="adminToken" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" spellcheck="false">
+    <p class="dlg-c">令牌只存在本机浏览器 localStorage <b>myon-admin-token</b>，请求时放在 <b>x-admin-token</b> 头里；不会写进仓库或页面源码。</p>
+    <div class="dlg-f">
+      <span class="dlg-c" id="tokenState">未填写</span>
+      <div class="dlg-a">
+        <button class="p-btn" id="tokenClear" type="button">清除</button>
+        <button class="p-btn p-btn--pub" id="tokenSave" type="button">保存并刷新</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- ---------- 删除确认 ---------- -->
+<dialog class="dlg" id="confirmDlg" aria-labelledby="confirmTitle">
+  <div class="dlg-box">
+    <span class="dlg-tab">CONFIRM / 二次确认</span>
+    <div class="dlg-h"><span id="confirmTitle">删除这条动态？</span><span>DELETE</span></div>
+    <p class="dlg-c" id="confirmText">删除后前台立即消失，不能撤销。</p>
+    <p class="dlg-c">将要删除：<b id="confirmMeta">—</b></p>
+    <div class="dlg-f">
+      <span class="dlg-c" id="confirmState" aria-live="polite"></span>
+      <div class="dlg-a">
+        <button class="p-btn" id="confirmCancel" type="button">取消</button>
+        <button class="p-btn p-btn--pub" id="confirmOk" type="button">确认删除</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/pages/admin-moments.js"></script>
+</AdminLayout>

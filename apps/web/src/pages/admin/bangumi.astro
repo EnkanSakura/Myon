@@ -1,0 +1,140 @@
+---
+/**
+ * 后台追番：列表来自 D1（GET /api/v1/admin/bangumi），
+ * 进度 / 状态 / 评分回写 PATCH，删除走 DELETE，手动同步走 POST /sync。
+ * 接口需要 x-admin-token，令牌只存在浏览器 localStorage，
+ * 所以首屏数据由页面脚本带令牌请求，不在 SSR 里读取后台接口。
+ * 样式：public/css/pages/admin-bangumi.css；脚本：public/js/pages/admin-bangumi.js
+ */
+import { apiBasePath } from '@myon/shared';
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+const bangumiApi = `${apiBasePath}/admin/bangumi`;
+---
+
+<AdminLayout
+  title="追番 · Myon 制作进行"
+  crumb="追番"
+  active="bangumi"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-bangumi.css" />
+  </Fragment>
+
+<div class="page" data-api={bangumiApi}>
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <span class="chapter" aria-hidden="true">05</span>
+
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">CONSOLE · 05</span>
+          <span class="sticker sticker--paper">BANGUMI SYNC</span>
+        </div>
+        <h1>追番<span class="dot">。</span></h1>
+        <p class="pdate"><span id="pTotal">—</span> 部记录 <span class="sep">·</span> <span id="pWatching">—</span> 部在追 <span class="sep">·</span> 平均 <span id="pAvg">—</span> 分</p>
+        <p class="pnote"><span>数据存于 D1 · 前台 05 追番读同一份</span><span class="sep">·</span><b id="pageState">正在连接…</b></p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn btn--pink" type="button" id="syncMain">
+            <span id="syncMainLabel">同步 Bangumi</span> <span class="ar" aria-hidden="true">↻</span>
+          </button>
+          <button class="btn" type="button" id="exportBtn">导出记录 <span class="ar" aria-hidden="true">↓</span></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- 连接 / 授权提示 ---------- -->
+    <div class="notice notice--info" id="tbanner" role="status" aria-live="polite" hidden>
+      <span class="notice-k" id="tbannerK">INFO</span>
+      <div class="notice-c">
+        <b id="tbannerTitle"></b>
+        <p id="tbannerText"></p>
+      </div>
+      <a class="notice-a" id="tbannerLink" href="/admin/settings" hidden>去设置令牌</a>
+    </div>
+
+    <!-- ---------- 同步条 ---------- -->
+    <div class="syncbar" id="syncbar">
+      <span class="sb-sq" aria-hidden="true"></span>
+      <div class="sb-txt" role="status" aria-live="polite">
+        <span class="sb-k" id="syncMeta">BANGUMI API · 手动同步</span>
+        <span class="sb-v" id="syncState">等待连接 · 尚未同步</span>
+        <span class="sb-r" id="syncResult">同步会更新标题、状态、集数与评分；封面和下次放送保留人工维护的值。</span>
+      </div>
+      <button class="btn sb-btn" type="button" id="syncBtn"><span id="syncBtnLabel">立即同步</span> <span class="ar" aria-hidden="true">↻</span></button>
+    </div>
+
+    <!-- ---------- 统计 ---------- -->
+    <section class="metrics" aria-label="追番统计">
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>看过 / WATCHED</div>
+        <div class="m-v" id="mWatched">—</div>
+        <div class="m-f" id="mWatchedNote">来自 D1</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>在追 / WATCHING</div>
+        <div class="m-v" id="mWatching">—</div>
+        <div class="m-f" id="mWatchingNote">前台同源</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>想看 / WISH</div>
+        <div class="m-v" id="mWish">—</div>
+        <div class="m-f" id="mWishNote">待补清单</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>平均分 / AVG</div>
+        <div class="m-v" id="mAvg">—</div>
+        <div class="m-f" id="mAvgNote">暂无评分</div>
+      </div>
+    </section>
+
+    <!-- ---------- 01 追番记录 ---------- -->
+    <section class="sec" id="records" aria-labelledby="h-records">
+      <div class="sec-h">
+        <span class="sec-num">01</span>
+        <h2 id="h-records">追番记录</h2>
+        <span class="sec-en" id="secEn">ALL / —</span>
+        <div class="sec-r">
+          <span class="sec-note">最近更新 <b id="latestUpdated">—</b></span>
+          <span class="sec-note">写入 D1 · 前台立即同源</span>
+        </div>
+      </div>
+
+      <div class="watch-list" id="watchList" aria-live="polite" aria-busy="true">
+        <div class="empty">
+          <div class="empty-c"><p class="empty-d">正在读取 D1 …</p></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="page-note">
+      <span>追番记录存于 D1 · 前台 05 追番读同一份 · 同步失败会保留上一份</span>
+      <span>最近写入 <b id="footUpdated">—</b></span>
+    </p>
+
+  </div>
+
+
+<!-- ---------- 删除确认 ---------- -->
+<dialog class="dlg" id="cfmDlg" aria-labelledby="cfmTitle">
+  <div class="dlg-box">
+    <div class="dlg-h"><span id="cfmTitle">删除追番记录</span><span>DELETE / 不可撤销</span></div>
+    <p class="cfm-text" id="cfmText"></p>
+    <div class="dlg-f">
+      <span class="dlg-c">删除后前台 /bangumi 立即消失</span>
+      <div class="dlg-a">
+        <button class="p-btn" type="button" id="cfmCancel">取消</button>
+        <button class="p-btn p-btn--pub" type="button" id="cfmOk">删除</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/pages/admin-bangumi.js"></script>
+</AdminLayout>

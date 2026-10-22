@@ -1,0 +1,179 @@
+/* ==========================================================================
+   05 追番 —— 同人志的节目单。一页里排着这一季在追的三部。
+   页面特有样式，只作用于本页。
+   ========================================================================== */
+
+/* 页头：几何与统计条由 v2.css 统一提供；本页只保留导读宽度 */
+.room-head .sub{max-width:44ch}
+
+/* ---------- 同步条 ---------- */
+.syncbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:22px;
+  border:var(--border) solid var(--ink);background:var(--paper);box-shadow:var(--hard-sm);padding:11px 16px;position:relative}
+.syncbar::before{content:"";position:absolute;left:0;top:0;bottom:0;width:9px;background:var(--pink);border-right:3px solid var(--ink)}
+.syncbar > *{position:relative;z-index:1}
+.sync-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-left:12px}
+.sync-state .sq{width:13px;height:13px;background:var(--pink);border:2px solid var(--ink);flex:none}
+.sync-state b{font-weight:900;font-size:14px;letter-spacing:.02em;line-height:1.3}
+.sync-meta{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62)}
+.sync-right{display:flex;align-items:center;gap:14px;flex:none}
+.sync-api{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62);white-space:nowrap}
+.syncbar .btn{height:40px;font-size:13px;padding:0 16px;gap:8px}
+.syncbar.is-syncing .sq{animation:blink .9s steps(2,end) infinite}
+.syncbar.is-fresh .sync-state b{background:var(--pink);padding:0 5px;box-shadow:2px 2px 0 var(--shade)}
+@keyframes blink{50%{background:var(--paper)}}
+
+/* ---------- 区块头 ---------- */
+.sec{margin-top:42px}
+.sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
+  border-bottom:var(--border) solid var(--ink);padding-bottom:10px;margin-bottom:18px}
+.sec-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.sec-head h2{font-size:clamp(28px,3vw,38px);line-height:1.05;letter-spacing:-.02em}
+.sec-side{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end;padding-bottom:4px}
+.sec-side .mono{font-size:10px;letter-spacing:.1em}
+.hair{height:2px;background:var(--ink);border:0;margin:0}
+
+/* ---------- 01 在追：番组卡（沿用主页第 05 页） ---------- */
+.programs{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.program{border:var(--border) solid var(--ink);background:var(--paper);box-shadow:var(--hard);padding:16px 16px 14px;
+  position:relative;overflow:hidden;transition:transform .16s var(--ease),box-shadow .16s var(--ease)}
+.program:hover{transform:translate(-3px,-3px);box-shadow:8px 8px 0 var(--shade)}
+.program::before{content:"";position:absolute;right:-24px;top:-24px;width:110px;height:110px;
+  background:var(--pink);border:3px solid var(--ink);transform:rotate(18deg);opacity:.85}
+.program .ptop{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1}
+.program .pno{font-family:var(--disp);font-size:58px;line-height:.8;letter-spacing:-.04em}
+.program .ep{font-family:var(--mono);font-size:10px;letter-spacing:.12em;background:var(--paper);border:2px solid var(--ink);padding:2px 6px;white-space:nowrap}
+.program h3{margin:14px 0 4px;font-size:24px;line-height:1.32;font-weight:900;position:relative;z-index:1;max-width:11ch;letter-spacing:-.01em}
+.program .meta{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62);position:relative;z-index:1;line-height:1.8}
+.program .cover{margin-top:14px;position:relative;z-index:1;aspect-ratio:16/9;box-shadow:var(--hard-sm)}
+.program .cover img{width:100%;height:100%;object-fit:cover}
+.program .cover.is-empty{display:grid;place-items:center;background:var(--paper-3)}
+.program .cover.is-empty span{position:relative;z-index:1;font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-62)}
+.program .prog{display:flex;gap:3px;margin-top:16px;position:relative;z-index:1}
+.program .prog i{display:block;flex:1;min-width:0;height:10px;border:1px solid var(--ink);background:var(--paper)}
+.program .prog i.on{background:var(--pink)}
+.program .next{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.06em;color:var(--ink-62);margin-top:9px;position:relative;z-index:1}
+.program .next b{font-weight:500;color:var(--ink)}
+
+/* ---------- 02 本周时刻表 ---------- */
+.week-grid{display:grid;grid-template-columns:minmax(0,1fr) 286px;gap:22px;align-items:start}
+.schedule{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:var(--ink);
+  border:var(--border) solid var(--ink);box-shadow:var(--hard-sm)}
+.schedule .d{background:var(--paper);padding:11px 10px 12px;min-height:172px;display:flex;flex-direction:column;gap:10px;position:relative}
+.schedule .dh{display:flex;align-items:baseline;justify-content:space-between;gap:6px;border-bottom:2px solid var(--ink);padding-bottom:6px}
+.schedule .dh b{font-size:14px;font-weight:900;line-height:1}
+.schedule .dh span{font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--ink-62);white-space:nowrap}
+.schedule .show{display:block}
+.schedule .show + .show{margin-top:9px;padding-top:9px;border-top:2px solid var(--line)}
+.schedule .show .st{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62);line-height:1.6}
+.schedule .show .sn{display:block;font-size:13px;font-weight:900;line-height:1.45;margin-top:2px;letter-spacing:-.01em}
+.schedule .empty{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62);margin-top:2px}
+.schedule .d.is-today{background:var(--pink)}
+.schedule .d.is-today .dh{border-color:var(--ink)}
+.schedule .d.is-today .dh span{color:var(--on-pink)}
+.schedule .d.is-today .show .st,.schedule .d.is-today .empty{color:color-mix(in srgb, var(--on-pink) 78%, transparent)}
+.schedule .d.is-today::after{content:"TODAY";position:absolute;right:7px;bottom:7px;font-family:var(--mono);
+  font-size:10px;letter-spacing:.14em;border:2px solid var(--ink);background:var(--paper);padding:1px 4px 0;transform:rotate(-3deg)}
+.week-side{display:flex;flex-direction:column;gap:16px}
+.week-side .narration{transform:rotate(.5deg)}
+.week-side .sticker{align-self:flex-start;transform:rotate(-2deg)}
+.week-foot{display:flex;justify-content:space-between;gap:16px;margin-top:12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62);flex-wrap:wrap}
+
+/* ---------- 03 最近看过 / 04 分季存档 ---------- */
+.recent-wrap{display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:40px;align-items:start}
+.recent .rows .r{grid-template-columns:76px minmax(0,1fr) auto;align-items:center;padding:14px 4px;gap:16px}
+.recent .rows .r .no{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink-62)}
+.recent .rows .r .t{font-size:18px;font-weight:900;line-height:1.45}
+.recent .rows .r .t .ep{font-family:var(--mono);font-size:10px;font-weight:400;letter-spacing:.08em;color:var(--ink-62);margin-left:10px;white-space:nowrap}
+.recent .rows .r .m{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.recent .rate{font-family:var(--disp);font-size:18px;line-height:1}
+.recent .rows .r .sticker{font-size:10px;padding:3px 7px 2px}
+.recent .rows .r .sticker--paper{background:var(--paper-2)}
+
+.archive .archive-in{padding:20px 20px 22px}
+.archive h2{font-size:24px;line-height:1.2;margin-bottom:14px}
+.seasons{border-top:2px solid var(--ink)}
+.seasons .srow{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 4px;
+  border-bottom:2px solid var(--line-2);transition:background .14s var(--ease),padding .14s var(--ease)}
+.seasons .srow:hover{background:var(--pink-wash);padding-left:10px}
+.seasons .sname{font-size:15px;font-weight:900;letter-spacing:-.01em}
+.seasons .smeta{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--ink-62);white-space:nowrap}
+.seasons .srow[aria-current="true"]{background:var(--pink);box-shadow:inset 0 0 0 2px var(--shade);padding-left:10px;margin:3px 0}
+.seasons .srow[aria-current="true"] .sname,.seasons .srow[aria-current="true"] .smeta{color:var(--on-pink)}
+.archive .kai-note{margin-top:16px;font-family:var(--kai);font-size:15px;line-height:1.8;color:var(--ink-62)}
+.archive .sticker{margin-top:14px}
+
+/* ---------- 空态 ---------- */
+.empty-card{display:flex;align-items:center;gap:24px;padding:28px 26px 26px}
+.empty-card .zero{font-family:var(--disp);font-size:96px;line-height:.8;letter-spacing:-.04em;
+  color:var(--pink);-webkit-text-stroke:2px var(--ink);flex:none}
+.empty-card .empty-body{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
+.empty-card h3{font-size:24px;line-height:1.3}
+.empty-card p{font-size:13px;line-height:1.8;color:var(--ink-62)}
+.list-empty{margin:0;padding:22px 4px;border-top:var(--border) solid var(--ink);
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62)}
+
+.foot .colophon{color:color-mix(in srgb, var(--paper) 70%, transparent)}
+.foot p.foot-state{max-width:none}
+.mbr{display:none}
+
+/* ---------- 分页底：第 N 页 + 更多记录 ---------- */
+.list-foot{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:34px;
+  border-top:3px solid var(--ink);padding-top:16px}
+.list-foot .mono{font-size:10px;letter-spacing:.1em}
+.list-foot .btn{height:46px}
+.list-links{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.list-links .arrow-link{white-space:nowrap}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1100px){
+  .room-head{padding-top:calc(var(--topbar-h) + 26px);padding-bottom:26px}
+  .room-head .chapter{font-size:104px;opacity:.22}
+  .programs{gap:12px}
+  .program{padding:14px 13px 12px}
+  .program h3{font-size:21px}
+  .program .pno{font-size:48px}
+  .week-grid{grid-template-columns:1fr;gap:18px}
+  .week-side{flex-direction:row;align-items:flex-start;gap:14px}
+  .week-side .narration{flex:1}
+  .recent-wrap{grid-template-columns:minmax(0,1fr) 300px;gap:26px}
+}
+@media (max-width:760px){
+  .page-sticker{font-size:10px;letter-spacing:.06em;padding:4px 6px}
+  .topmeta{display:none}
+  .mbr{display:inline}
+  .room-head{padding-top:calc(var(--topbar-h) + 14px);padding-bottom:20px}
+  .room-head .chapter{font-size:84px;top:calc(var(--topbar-h) + 2px);opacity:.18}
+  .room-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .stat-box{min-width:0;padding:7px 9px 6px}
+  .stat-box .k{font-size:10px}
+  .stat-box .v{font-size:19px}
+  .syncbar{flex-wrap:wrap;gap:10px;padding:11px 13px;margin-top:18px}
+  .sync-state{width:100%;gap:9px;padding-left:10px}
+  .sync-meta{width:100%}
+  .sync-right{margin-left:auto;width:100%;justify-content:flex-end}
+  .sync-api{display:none}
+  .sec{margin-top:32px}
+  .sec-head{align-items:flex-start;flex-direction:column;gap:10px}
+  .sec-head h2{font-size:26px}
+  .sec-side{padding-bottom:0;justify-content:flex-start}
+  .programs{grid-template-columns:1fr;gap:14px}
+  .program h3{font-size:24px}
+  .program .pno{font-size:54px}
+  .week-grid{grid-template-columns:1fr}
+  .schedule{grid-template-columns:repeat(2,1fr)}
+  .schedule .d{min-height:132px}
+  .schedule .d:last-child{grid-column:1 / -1}
+  .week-side{flex-direction:column}
+  .recent-wrap{grid-template-columns:1fr;gap:28px}
+  .recent .rows .r{grid-template-columns:64px minmax(0,1fr);row-gap:4px;padding:12px 2px}
+  .recent .rows .r .m{grid-column:2;justify-content:flex-start}
+  .recent .rows .r .t{font-size:16px}
+  .recent .rows .r .t .ep{display:block;margin-left:0;margin-top:2px}
+  .archive .archive-in{padding:16px}
+  .archive h2{font-size:21px}
+  .empty-card{gap:16px;padding:22px 16px}
+  .empty-card .zero{font-size:64px}
+  .empty-card h3{font-size:20px}
+}

@@ -1,0 +1,238 @@
+---
+// 迁移自 design 分支 design/site/admin-tools.html
+// 样式：public/css/pages/admin-tools.css；脚本：public/js/pages/admin-tools.js
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout
+  title="工具 · Myon 制作进行"
+  crumb="工具"
+  active="tools"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/admin-tools.css" />
+  </Fragment>
+
+<div class="page">
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="phead">
+      <span class="chapter" aria-hidden="true">06</span>
+
+      <div class="ph-l">
+        <div class="kicker">
+          <span class="sticker">CONSOLE · 06</span>
+          <span class="sticker sticker--paper">TOOLS / DRAWER</span>
+        </div>
+        <h1>工具<span class="dot">。</span></h1>
+        <p class="pdate">8 个工具 <span class="sep">·</span> 本月 8,367 次调用 <span class="sep">·</span> 平均 40ms <span class="sep">·</span> 启用中 <span id="pEnabled">8</span> / 8</p>
+      </div>
+
+      <div class="ph-r">
+        <div class="acts">
+          <button class="btn btn--pink" type="button" id="btnNewTool">新增工具 <span class="ar" aria-hidden="true">＋</span></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- 统计 ---------- -->
+    <section class="metrics" aria-label="工具统计">
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>工具 / TOOLS</div>
+        <div class="m-v">8</div>
+        <div class="m-f">全部在站内运行 · 无需登录</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>本月调用 / CALLS</div>
+        <div class="m-v">8,367</div>
+        <div class="m-f"><span class="up">较上月 +1,240</span> <span class="msep">·</span>8 个工具合计</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>平均耗时 / AVG</div>
+        <div class="m-v">40<small class="m-u">ms</small></div>
+        <div class="m-f">浏览器内换算 · P95 92ms</div>
+      </div>
+      <div class="metric">
+        <div class="m-k"><i aria-hidden="true"></i>启用中 / ENABLED</div>
+        <div class="m-v"><span id="mEnabled">8</span><small class="m-u">/ 8</small></div>
+        <div class="m-f">停用 <span id="mDisabled">0</span> 个 <span class="msep">·</span>停用不减少调用统计</div>
+      </div>
+    </section>
+
+    <!-- ---------- 01 工具列表 ---------- -->
+    <section class="sec" id="tools" aria-labelledby="h-tools">
+      <div class="sec-h">
+        <span class="sec-num">01</span>
+        <h2 id="h-tools">工具列表</h2>
+        <span class="sec-en">TOOLS / 08</span>
+        <div class="sec-r">
+          <span class="sec-note">启用中 <b id="enabledCount">8</b> / 8</span>
+          <span class="sec-note">停用只影响前台入口 · 保留历史调用</span>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl tools-tbl">
+          <thead>
+            <tr>
+              <th scope="col" class="c-no">编号</th>
+              <th scope="col">名称 / 说明</th>
+              <th scope="col" class="c-calls">本月调用</th>
+              <th scope="col" class="c-avg">平均耗时</th>
+              <th scope="col" class="c-sw">状态</th>
+              <th scope="col" class="c-open">打开</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="trow" data-name="时间戳转换" data-on="true">
+              <td class="c-no">01</td>
+              <td class="c-t"><span class="t-name">时间戳转换</span><span class="t-desc">秒与日期互转，带时区</span></td>
+              <td class="c-calls">2,884</td>
+              <td class="c-avg">52 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 时间戳转换" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="图片压缩" data-on="true">
+              <td class="c-no">02</td>
+              <td class="c-t"><span class="t-name">图片压缩</span><span class="t-desc">输出 WebP / AVIF，直接存 R2</span></td>
+              <td class="c-calls">986</td>
+              <td class="c-avg">88 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 图片压缩" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="Markdown 预览" data-on="true">
+              <td class="c-no">03</td>
+              <td class="c-t"><span class="t-name">Markdown 预览</span><span class="t-desc">写动态和文章时用</span></td>
+              <td class="c-calls">1,302</td>
+              <td class="c-avg">31 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 Markdown 预览" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="配色生成" data-on="true">
+              <td class="c-no">04</td>
+              <td class="c-t"><span class="t-name">配色生成</span><span class="t-desc">从一张图取五色</span></td>
+              <td class="c-calls">418</td>
+              <td class="c-avg">44 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 配色生成" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="追番时刻表" data-on="true">
+              <td class="c-no">05</td>
+              <td class="c-t"><span class="t-name">追番时刻表</span><span class="t-desc">本周更新日历</span></td>
+              <td class="c-calls">764</td>
+              <td class="c-avg">38 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 追番时刻表" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="JSON 格式化" data-on="true">
+              <td class="c-no">06</td>
+              <td class="c-t"><span class="t-name">JSON 格式化</span><span class="t-desc">粘贴一段，理清缩进</span></td>
+              <td class="c-calls">1,688</td>
+              <td class="c-avg">29 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 JSON 格式化" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="旧域名跳转" data-on="true">
+              <td class="c-no">07</td>
+              <td class="c-t"><span class="t-name">旧域名跳转</span><span class="t-desc">旧链接 301 到新域名</span></td>
+              <td class="c-calls">92</td>
+              <td class="c-avg">18 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 旧域名跳转" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+            <tr class="trow" data-name="短链接" data-on="true">
+              <td class="c-no">08</td>
+              <td class="c-t"><span class="t-name">短链接</span><span class="t-desc">给自己的链接起个短名</span></td>
+              <td class="c-calls">233</td>
+              <td class="c-avg">20 ms</td>
+              <td class="c-sw">
+                <span class="switch-cell">
+                  <button class="switch" type="button" role="switch" aria-checked="true" aria-label="停用 短链接" data-on="true"><span class="track"><span class="knob"></span></span></button>
+                  <span class="switch-label">启用中</span>
+                </span>
+              </td>
+              <td class="c-open"><a class="arrow-link" href="/tools">打开 <span class="ar" aria-hidden="true">↗</span></a></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td class="c-no"></td>
+              <td class="c-t tf-note">8 个工具 · 本月合计</td>
+              <td class="c-calls">8,367</td>
+              <td class="c-avg">平均 40 ms</td>
+              <td colspan="2" class="tf-note">启用中 <b id="footEnabled">8</b> / 8</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <p class="page-note">
+      <span>页面由 Workers 送达，换算在浏览器完成，不写入 D1</span>
+      <span><b>8,367</b> 次调用只留计数 · 平均 <b>40 ms</b></span>
+    </p>
+
+  </div>
+
+
+<!-- ---------- 新增工具弹层 ---------- -->
+<dialog class="dlg" id="newDlg" aria-labelledby="newTitle">
+  <form class="dlg-box" method="dialog" id="newForm">
+    <span class="dlg-tab" aria-hidden="true">NEW TOOL</span>
+    <div class="dlg-h">
+      <span id="newTitle">新增工具 / 挂上台面</span>
+      <span>先登记 · 部署后上线</span>
+    </div>
+    <label class="p-k" for="newName">名称 / NAME</label>
+    <input class="p-in n-in" id="newName" name="name" maxlength="20" placeholder="例如：正则测试" autocomplete="off" required>
+    <label class="p-k" for="newDesc">一句说明 / DESC</label>
+    <input class="p-in n-in" id="newDesc" name="desc" maxlength="40" placeholder="一句话说清它做什么" autocomplete="off">
+    <div class="dlg-f">
+      <span class="dlg-c">创建后在 D1 里多一条 · 不影响启用数</span>
+      <div class="dlg-a">
+        <button class="p-btn" type="button" id="newCancel">取消</button>
+        <button class="p-btn p-btn--pub" type="submit">创建</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script is:inline src="/js/pages/admin-tools.js"></script>
+</AdminLayout>
