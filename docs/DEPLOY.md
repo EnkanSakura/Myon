@@ -93,6 +93,8 @@ pnpm exec wrangler r2 bucket create myon-media
 | `ADMIN_TOKEN` | 否 | GitHub Secret → Worker secret | 后台写接口的临时门禁；Deploy 时自动同步到 Worker，见 3.3 |
 | `ACCESS_TEAM_DOMAIN` | 否 | GitHub Secret → Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
 | `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
+| `CF_ACCESS_CLIENT_ID` | 否 | GitHub Secret | Cloudflare Access Service Token 的 Client ID；配了之后 smoke test 会带上 Access 头（与下一项成对） |
+| `CF_ACCESS_CLIENT_SECRET` | 否 | GitHub Secret | 与上一项成对配置；用于让 CI 的 smoke test 通过 Access 保护 |
 | `BANGUMI_ACCESS_TOKEN` | 否 | GitHub Secret → Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
 | `BANGUMI_USERNAME` | 否 | GitHub Secret → Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
 
@@ -108,7 +110,8 @@ pnpm exec wrangler r2 bucket create myon-media
 
 | 名称 | 必填 | 用途 |
 | --- | --- | --- |
-| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.studio`），Deploy 的 smoke test 会 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
+| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.studio`），Deploy 的 smoke test 默认 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
+| `SMOKE_URL` | 否 | smoke test 使用的地址（默认取 `PRODUCTION_URL`）。生产域名被 WAF / Bot Fight / 地区限制拦住 CI 时，可指向 `*.workers.dev` 等绕过边缘的地址，见第 9 节 |
 | `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.studio`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
 | `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
 
@@ -206,7 +209,7 @@ Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `wo
    写成一份临时 JSON（未配置的项跳过，值不会打印）；
 7. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
 8. 删除临时密钥文件；
-9. smoke：若配置了 `PRODUCTION_URL`，curl `$PRODUCTION_URL/api/health`。
+9. smoke：若配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），curl `/api/health`；遇到 Cloudflare 挑战/拦截时会打印响应头与排查提示。
 
 **操作**：把改动 push 到 `main`（或手动 Run workflow）→ 打开仓库 Actions → 选 `Deploy` →
 点开这次 run 看每个 step 日志。失败时先看红叉 step，常见原因见第 9 节。
@@ -241,6 +244,10 @@ Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `wo
 不带 JWT 直接 curl `/api/v1/admin/bangumi` 时，请求会先被 Access 在边缘拦截
 （通常是 302 跳登录页，非浏览器客户端也可能是 403），到不了 Worker；只有带合法
 Access JWT 的请求才会进入 Worker 的 `requireAdmin` 校验。
+
+如果 Deploy 的 smoke test 需要访问受 Access 保护的路径：在 Zero Trust → Access → Service Auth
+建一个 Service Token，把 Client ID / Client Secret 配到 Repository Secrets 的
+`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`，smoke 步骤会自动带上 Access 头。
 
 ---
 
@@ -280,6 +287,9 @@ curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/rss.xml
 curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/admin   # 开了 Access 时是 302 跳登录
 ```
 
+> CI 的 smoke test 若返回 403、但本机浏览器/`curl` 正常，通常是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP，
+> 不是 Worker 问题；按第 9 节处理。
+
 人工检查：
 
 - [ ] 首页、文章、动态、展柜、追番、工具六个前台页面可打开，样式正常、无 404 资源。
@@ -311,6 +321,7 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 | --- | --- |
 | Deploy 在 `Check required secrets` 失败 | GitHub Secrets 缺 `CLOUDFLARE_D1_DATABASE_ID`（错误信息会给出 `::error::` 提示） |
 | Deploy 在生成配置/构建后失败 | 看 step 日志；本地复现：`D1_DATABASE_ID=xxx pnpm wrangler:config && pnpm build`（脚本读的是 `D1_DATABASE_ID`，不是 GitHub Secret 名 `CLOUDFLARE_D1_DATABASE_ID`） |
+| Deploy 在 `Smoke test` 收到 403、但本机浏览器/`curl` 正常 | 大概率是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP（WAF 自定义规则 / Bot Fight Mode / Security Level / 地区·ASN 限制），不是 Worker 返回的 403。看 step 日志里的 `cf-ray`、`cf-mitigated` 与错误页：① 给 `/api/health` 加 WAF Skip 规则，或把 GitHub Actions IP 段（`https://api.github.com/meta` 的 `actions`）加入允许列表；② 站点在 Access 后面时，建一个 Access Service Token 并把 `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` 配到 Repository Secrets；③ 或把 Variable `SMOKE_URL` 指向绕过边缘的地址（如 `*.workers.dev`） |
 | `wrangler deploy` 鉴权失败（401/403） | 检查 `CLOUDFLARE_API_TOKEN` 权限与 `CLOUDFLARE_ACCOUNT_ID`；token 是否过期 |
 | D1 迁移报找不到数据库 | `database_name` 应为 `myon-blog`；确认 Secret 里的 database_id 与账号一致；本地可 `cd apps/web && pnpm exec wrangler d1 migrations list myon-blog --remote`（要在 `apps/web` 下执行，根目录会回退到全局 wrangler） |
 | 部署成功但 Cron 不触发 | 确认生成配置里有 `triggers.crons`（模板固定配置，别手改生成文件）；重新 deploy；Dashboard → Triggers 是否有记录；Cron 只在生产 Worker 上跑 |
