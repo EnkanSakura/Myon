@@ -55,9 +55,9 @@ pnpm exec wrangler d1 create myon-blog
 
 命令输出里会包含 `database_id`（形如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`），把它记下来，
 填到 GitHub Secret `CLOUDFLARE_D1_DATABASE_ID`。`database_name` 建议保持 `myon-blog`
-（Deploy workflow 的迁移命令按这个名字执行）。
+（Database Migrate workflow 的迁移命令按这个名字执行）。
 
-迁移只需要在 Deploy workflow 里跑（见第 5 节）；本地开发用（这两个命令读生成的
+迁移由 Database Migrate workflow 负责（见第 5 节）；本地开发用（这两个命令读生成的
 `apps/web/wrangler.jsonc`，需先按第 4 节执行 `pnpm wrangler:config`）：
 
 ```bash
@@ -82,8 +82,10 @@ pnpm exec wrangler kv namespace create myon-blog-settings
 ```
 
 命令输出里会包含 KV 的 `id`（32 位十六进制），把它填到 GitHub Secret
-`CLOUDFLARE_KV_SETTINGS_ID`。Deploy workflow 用同一个 id 生成 `SETTINGS` 绑定，
-并用它把旧 D1 `settings` 表的数据一次性导入 KV（见第 5 节）。
+`CLOUDFLARE_KV_SETTINGS_ID`。Deploy workflow 用同一个 id 生成 `SETTINGS` 绑定。
+
+> 从旧版本（设置还在 D1 `settings` 表）升级时，需要在 D1 迁移删除该表之前，把旧设置
+> 手动导入 KV；仓库不再内置导入脚本，做法见第 5.3 节。
 
 > 如果账号里已有可复用的 KV namespace，也可以直接用它的 id，不必新建；绑定名固定为 `SETTINGS`。
 > 本地开发用生成的 `wrangler.jsonc` 里的全 0 占位 id，Wrangler 会在本地模拟 KV，不碰线上。
@@ -129,9 +131,9 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 | 名称 | 必填 | 用途 |
 | --- | --- | --- |
-| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.studio`），Deploy 的 smoke test 默认 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
+| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.top`），Deploy 的 smoke test 默认 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
 | `SMOKE_URL` | 否 | smoke test 使用的地址（默认取 `PRODUCTION_URL`）。生产域名被 WAF / Bot Fight / 地区限制拦住 CI 时，可指向 `*.workers.dev` 等绕过边缘的地址，见第 9 节 |
-| `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.studio`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
+| `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.top`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
 | `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
 
 ### 3.3 Worker 的运行时密钥（Deploy workflow 自动同步）
@@ -183,7 +185,7 @@ pnpm wrangler:config
 
 ```bash
 D1_DATABASE_ID=xxxx-xxxx pnpm wrangler:config
-R2_BUCKET=myon-media SITE_URL=https://myon.studio ENVIRONMENT=development pnpm wrangler:config
+R2_BUCKET=myon-media SITE_URL=https://myon.top ENVIRONMENT=development pnpm wrangler:config
 ```
 
 脚本会：
@@ -213,32 +215,72 @@ pnpm dev
 
 ---
 
-## 5. 首次部署流程
+## 5. 部署流程（三个 workflow 串联）
 
-Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `workflow_dispatch` 时触发，
-使用 GitHub Environment `production`（可在仓库里配置审批人）。步骤：
+生产步骤拆成三个 workflow，push `main` 后自动串联：
+
+```text
+push main
+  └─ Database Migrate（D1 迁移，成功后触发下一步）
+       └─ Deploy（构建 + 上传 Worker）
+            └─ Smoke Test（等待 3 分钟 → curl /api/health）
+```
+
+| Workflow | 文件 | 做什么 | 触发 |
+| --- | --- | --- | --- |
+| Database Migrate | `.github/workflows/migrate.yml` | 应用 `packages/back/migrations/` 到生产 D1 | push `main` / 手动 |
+| Deploy | `.github/workflows/deploy.yml` | 生成配置、构建、同步 Worker secret、`wrangler deploy` | Database Migrate 成功后 / 手动 |
+| Smoke Test | `.github/workflows/smoke.yml` | 等待 3 分钟，再请求 `/api/health` | Deploy 成功后 / 手动 |
+
+`Database Migrate` 与 `Deploy` 使用 GitHub Environment `production`（可在仓库里配置审批人）；
+`Smoke Test` 只读健康探针，不额外审批。
+手动发布时按顺序 Run：先 `Database Migrate`，再 `Deploy`，最后 `Smoke Test`（或等前一个成功后自动触发）。
+
+### 5.1 Database Migrate
 
 1. `pnpm install --frozen-lockfile`；
-2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空，否则直接失败并提示去 Secrets 配置；
-3. `pnpm wrangler:config` 生成生产配置：
-   `D1_DATABASE_ID` / `KV_SETTINGS_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables（可选），`ENVIRONMENT=production`；
+2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空；
+3. `pnpm wrangler:config` 生成生产配置（`D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
+4. `wrangler d1 migrations apply myon-blog --remote`（按 migration 编号顺序应用 `packages/back/migrations/`，
+   0013/0014 会分别删除 `media` 与 `settings` 表）。
+
+### 5.2 Deploy
+
+1. `pnpm install --frozen-lockfile`；
+2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空；
+3. `pnpm wrangler:config`（同上，另外注入 `KV_SETTINGS_ID` 生成 `SETTINGS` 绑定）；
 4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
-5. `node packages/back/scripts/migrate-settings-to-kv.mjs`：**在删除 `settings` 表之前**把旧 D1 设置导入 KV。
-   幂等：KV 里已有 `site-settings:v1` 时跳过，不会覆盖后台已经保存的设置；表不存在（全新环境/已迁移）时跳过；
-6. `wrangler d1 migrations apply myon-blog --remote`（按键顺序应用 `packages/back/migrations/`，
-   0013/0014 会分别删除 `media` 与 `settings` 表）；
-7. 准备 Worker 运行时密钥：把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`
-   写成一份临时 JSON（未配置的项跳过，值不会打印）；
-8. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
-9. 删除临时密钥文件；
-10. smoke：若配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），curl `/api/health`；遇到 Cloudflare 挑战/拦截时会打印响应头与排查提示。
+5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*` 写成临时 JSON（未配置的项跳过，值不会打印）；
+6. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
+7. 删除临时密钥文件。
 
-**操作**：把改动 push 到 `main`（或手动 Run workflow）→ 打开仓库 Actions → 选 `Deploy` →
-点开这次 run 看每个 step 日志。失败时先看红叉 step，常见原因见第 9 节。
+### 5.3 旧站点设置迁移（仅从 D1 settings 版本升级时需要）
 
-生产不要跑 `db:seed:local`（seed 只用于本地演示）。如需初始化演示内容，在 `apps/web` 下用
-`pnpm exec wrangler d1 execute myon-blog --remote --file=...` 自行把控（需已 `wrangler login`
-或配置 `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`），正常生产直接由后台录入。
+仓库不再包含自动导入脚本，且 Database Migrate 会删除 `settings` 表。升级前在本地手动执行：
+
+```bash
+cd apps/web
+
+# 1. 导出旧设置（必须在 Database Migrate 执行前）
+pnpm exec wrangler d1 execute myon-blog --remote --json --command "SELECT key, value FROM settings" > /tmp/myon-settings.json
+
+# 2. 把 results[0].results 里的 key/value 整理成一份 JSON：
+#    { "site_name": "Myon", "theme_color": "#EC88C2", ... }
+#    保存为 /tmp/myon-settings-kv.json，然后写入 KV
+pnpm exec wrangler kv key put site-settings:v1 --path /tmp/myon-settings-kv.json --namespace-id <KV_SETTINGS_ID> --remote
+```
+
+全新环境不需要这一步：KV 为空时前台使用 `@myon/shared` 里的默认设置，之后在后台重新填写即可。
+若已经跑了删除 `settings` 表的 migration 且没有备份，只能从 D1 备份恢复或后台重新填写。
+
+### 5.4 Smoke Test
+
+Deploy 成功后触发；**先等待 3 分钟**让新 Worker 版本在边缘生效，再请求 `/api/health`。
+如果配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），会 curl 健康探针并打印结果；
+遇到 Cloudflare 挑战/拦截时会输出响应头与排查提示。未配置 URL 时该 workflow 直接跳过。
+
+**操作**：把改动 push 到 `main` → 打开仓库 Actions → 依次看 `Database Migrate`/`Deploy`/`Smoke Test` 的 run。
+失败时先看红叉 step，常见原因见第 9 节。
 
 ---
 
@@ -342,9 +384,9 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 
 | 现象 | 排查 |
 | --- | --- |
-| Deploy 在 `Check required secrets` 失败 | GitHub Secrets 缺 `CLOUDFLARE_D1_DATABASE_ID` 或 `CLOUDFLARE_KV_SETTINGS_ID`（错误信息会给出 `::error::` 提示） |
+| `Database Migrate` / `Deploy` 在 `Check required secrets` 失败 | 对应 workflow 缺 GitHub Secret：迁移需要 `CLOUDFLARE_D1_DATABASE_ID`，部署还需要 `CLOUDFLARE_KV_SETTINGS_ID`（错误信息会给出 `::error::` 提示） |
 | 设置页保存后刷新丢失，或一直显示默认值 | 检查 Worker 是否有 `SETTINGS` KV 绑定（生成配置里的 `kv_namespaces`）；本地可用 `wrangler kv key get site-settings:v1 --local --namespace-id <id>` 验证；生产检查 Secret `CLOUDFLARE_KV_SETTINGS_ID` |
-| 从旧版本升级后站点设置变回默认值 | 首次升级时必须先跑 `migrate-settings-to-kv.mjs`（Deploy workflow 已内置，位置在 D1 迁移之前）；若曾手动删表，只能从备份或后台重新填写 |
+| 从旧版本升级后站点设置变回默认值 | 升级前未把旧 D1 `settings` 导入 KV。仓库不再内置导入脚本，做法见第 5.3 节；若 `settings` 表已被 migration 删除，只能从 D1 备份恢复或后台重新填写 |
 | Deploy 在生成配置/构建后失败 | 看 step 日志；本地复现：`D1_DATABASE_ID=xxx pnpm wrangler:config && pnpm build`（脚本读的是 `D1_DATABASE_ID`，不是 GitHub Secret 名 `CLOUDFLARE_D1_DATABASE_ID`） |
 | Deploy 在 `Smoke test` 收到 403、但本机浏览器/`curl` 正常 | 大概率是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP（WAF 自定义规则 / Bot Fight Mode / Security Level / 地区·ASN 限制），不是 Worker 返回的 403。看 step 日志里的 `cf-ray`、`cf-mitigated` 与错误页：① 给 `/api/health` 加 WAF Skip 规则，或把 GitHub Actions IP 段（`https://api.github.com/meta` 的 `actions`）加入允许列表；② 站点在 Access 后面时，建一个 Access Service Token 并把 `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` 配到 Repository Secrets；③ 或把 Variable `SMOKE_URL` 指向绕过边缘的地址（如 `*.workers.dev`） |
 | `wrangler deploy` 鉴权失败（401/403） | 检查 `CLOUDFLARE_API_TOKEN` 权限与 `CLOUDFLARE_ACCOUNT_ID`；token 是否过期 |

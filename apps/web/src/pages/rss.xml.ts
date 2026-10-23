@@ -14,7 +14,7 @@ const escapeXml = (value: string) =>
 
 /** RSS 2.0：从进程内 API 取已发布文章，供页脚「RSS 订阅」使用。 */
 export const GET: APIRoute = async ({ site }) => {
-  const origin = site ?? new URL('https://myon.studio');
+  const origin = site ?? new URL('https://myon.top');
 
   let siteSettings: PublicSiteSettings | null = null;
   const siteRes = await app.request(

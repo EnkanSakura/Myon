@@ -6,7 +6,7 @@ interface __BaseEnv_Env {
 	MEDIA: R2Bucket;
 	DB: D1Database;
 	ASSETS: Fetcher;
-	SITE_URL: "https://myon.studio";
+	SITE_URL: "https://myon.top";
 	ENVIRONMENT: string;
 	ADMIN_TOKEN: string;
 	BANGUMI_ACCESS_TOKEN: string;

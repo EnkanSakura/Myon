@@ -1,7 +1,12 @@
 name: Deploy
 
+# 只负责部署：构建 + 上传 Worker。
+# D1 迁移在 Database Migrate workflow 里，健康检查在 Smoke Test workflow 里。
+# 触发链：push main → Database Migrate → Deploy → Smoke Test。
 on:
-  push:
+  workflow_run:
+    workflows: [Database Migrate]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -14,15 +19,18 @@ permissions:
 
 jobs:
   deploy:
-    name: Settings KV migrate · D1 migrate · Deploy Worker · Smoke
+    name: Deploy Worker
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -53,13 +61,6 @@ jobs:
         run: pnpm wrangler:config
       - name: Build
         run: pnpm build
-      - name: Migrate settings D1 → KV
-        env:
-          KV_SETTINGS_ID: ${{ secrets.CLOUDFLARE_KV_SETTINGS_ID }}
-        run: node packages/back/scripts/migrate-settings-to-kv.mjs
-      - name: Apply D1 migrations
-        working-directory: apps/web
-        run: pnpm exec wrangler d1 migrations apply myon-blog --remote
       - name: Prepare Worker secrets file
         env:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
@@ -101,54 +102,3 @@ jobs:
       - name: Remove Worker secrets file
         if: always()
         run: rm -f "$RUNNER_TEMP/worker-secrets.json"
-      - name: Smoke test
-        env:
-          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
-          SMOKE_URL: ${{ vars.SMOKE_URL }}
-          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-        run: |
-          set -euo pipefail
-
-          base="${SMOKE_URL:-${PRODUCTION_URL:-}}"
-          if [ -z "$base" ]; then
-            echo '· 未配置 PRODUCTION_URL / SMOKE_URL，跳过 smoke test'
-            exit 0
-          fi
-          url="${base%/}/api/health"
-          echo "health check → $url"
-
-          curl_args=(--silent --show-error --max-time 20 --retry 2 --retry-delay 2)
-          if [ -n "${CF_ACCESS_CLIENT_ID:-}" ] && [ -n "${CF_ACCESS_CLIENT_SECRET:-}" ]; then
-            curl_args+=(
-              -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID"
-              -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
-            )
-            echo '· 已带上 Cloudflare Access Service Token'
-          fi
-
-          headers_file="$(mktemp)"
-          body_file="$(mktemp)"
-          trap 'rm -f "$headers_file" "$body_file"' EXIT
-
-          code="$(curl "${curl_args[@]}" --dump-header "$headers_file" --output "$body_file" --write-out '%{http_code}' "$url" || true)"
-
-          if [ "$code" = "200" ]; then
-            echo '✓ /api/health 返回 200'
-            head -c 300 "$body_file"
-            echo
-            exit 0
-          fi
-
-          echo "✗ /api/health 返回 HTTP ${code:-curl 失败}"
-          echo '--- 响应头（节选）---'
-          grep -iE '^(server|cf-ray|cf-mitigated|cf-chl|location|content-type):' "$headers_file" || true
-          echo '--- 响应体（前 300 字节）---'
-          head -c 300 "$body_file" || true
-          echo
-          if grep -qiE 'cloudflare|just a moment|attention required|you have been blocked' "$headers_file" "$body_file"; then
-            echo '::error::/api/health 被 Cloudflare 边缘拦截，不是 Worker 返回的错误。常见原因：WAF 自定义规则、Bot Fight Mode、Security Level、地区/ASN 限制拦截了 GitHub Actions 出口 IP；处理方式见 docs/DEPLOY.md 第 9 节。'
-          else
-            echo '::error::/api/health 非 200，请检查 Worker 部署与 D1 绑定。'
-          fi
-          exit 1

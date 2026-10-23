@@ -101,7 +101,7 @@ export async function syncBangumi(env: AppBindings): Promise<SyncResult> {
         headers: {
           accept: 'application/json',
           authorization: `Bearer ${token}`,
-          'user-agent': 'myon-blog/1.0 (https://myon.studio)',
+          'user-agent': 'myon-blog/1.0 (https://myon.top)',
         },
         signal: controller.signal,
       });

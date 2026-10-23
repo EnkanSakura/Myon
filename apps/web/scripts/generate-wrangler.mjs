@@ -9,7 +9,7 @@
  *   D1_DATABASE_ID  Cloudflare D1 database_id（默认全 0 占位，仅本地/CI e2e 使用）
  *   R2_BUCKET       R2 bucket 名称（默认 myon-media）
  *   KV_SETTINGS_ID  站点设置用的 KV namespace id（默认全 0 占位，仅本地使用）
- *   SITE_URL        站点地址（默认 https://myon.studio）
+ *   SITE_URL        站点地址（默认 https://myon.top）
  *   ENVIRONMENT     运行环境标记（默认 development；生产 workflow 传 production）
  *
  * 模板里还有 `$schema`、`main`、Cron `triggers`、assets 等固定配置，
@@ -29,7 +29,7 @@ const DEFAULTS = {
   D1_DATABASE_ID: '00000000-0000-0000-0000-000000000000',
   R2_BUCKET: 'myon-media',
   KV_SETTINGS_ID: '00000000000000000000000000000000',
-  SITE_URL: 'https://myon.studio',
+  SITE_URL: 'https://myon.top',
   ENVIRONMENT: 'development',
 };
 

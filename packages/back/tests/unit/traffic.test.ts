@@ -7,7 +7,7 @@ import {
 } from '../../src/traffic';
 
 function page(path: string, init: RequestInit = {}) {
-  return new Request(`https://myon.studio${path}`, {
+  return new Request(`https://myon.top${path}`, {
     headers: { accept: 'text/html,application/xhtml+xml' },
     ...init,
   });
@@ -24,7 +24,7 @@ describe('shouldTrackRequest', () => {
     expect(shouldTrackRequest(page('/', { method: 'POST' }))).toBe(false);
     expect(
       shouldTrackRequest(
-        new Request('https://myon.studio/articles', {
+        new Request('https://myon.top/articles', {
           headers: { accept: 'application/json' },
         }),
       ),

@@ -38,7 +38,7 @@ const API_PORT = 443;
 const PAGE_SIZE = 50;
 const MAX_FETCH = 500;
 const DEFAULT_PROXY = 'http://127.0.0.1:7890';
-const USER_AGENT = 'myon-blog/1.0 (https://myon.studio)';
+const USER_AGENT = 'myon-blog/1.0 (https://myon.top)';
 const CONNECT_TIMEOUT_MS = 15000;
 const REQUEST_TIMEOUT_MS = 20000;
 
