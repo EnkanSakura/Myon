@@ -8,6 +8,7 @@
  * 可用环境变量覆盖模板占位符（未设置或为空时使用默认值）：
  *   D1_DATABASE_ID  Cloudflare D1 database_id（默认全 0 占位，仅本地/CI e2e 使用）
  *   R2_BUCKET       R2 bucket 名称（默认 myon-media）
+ *   KV_SETTINGS_ID  站点设置用的 KV namespace id（默认全 0 占位，仅本地使用）
  *   SITE_URL        站点地址（默认 https://myon.studio）
  *   ENVIRONMENT     运行环境标记（默认 development；生产 workflow 传 production）
  *
@@ -27,6 +28,7 @@ const OUTPUT_PATH = path.join(WEB_DIR, 'wrangler.jsonc');
 const DEFAULTS = {
   D1_DATABASE_ID: '00000000-0000-0000-0000-000000000000',
   R2_BUCKET: 'myon-media',
+  KV_SETTINGS_ID: '00000000000000000000000000000000',
   SITE_URL: 'https://myon.studio',
   ENVIRONMENT: 'development',
 };
@@ -86,7 +88,7 @@ function main() {
   }
 
   const config = parseJsonc(output);
-  for (const key of ['main', 'assets', 'triggers', 'd1_databases', 'r2_buckets', 'vars']) {
+  for (const key of ['main', 'assets', 'triggers', 'd1_databases', 'r2_buckets', 'kv_namespaces', 'vars']) {
     if (!(key in config)) {
       throw new Error(`生成的配置缺少必要字段：${key}`);
     }
@@ -97,17 +99,22 @@ function main() {
   if (!Array.isArray(config.triggers?.crons) || config.triggers.crons.length === 0) {
     throw new Error('生成的配置缺少 triggers.crons（Bangumi 每 6 小时同步会失效）');
   }
+  const settingsKv = config.kv_namespaces.find((entry) => entry?.binding === 'SETTINGS');
+  if (!settingsKv || typeof settingsKv.id !== 'string' || settingsKv.id === '') {
+    throw new Error('生成的配置缺少 SETTINGS KV 绑定（站点设置依赖它）');
+  }
 
   if (!output.endsWith('\n')) output += '\n';
   fs.writeFileSync(OUTPUT_PATH, output, 'utf8');
 
   const d1 = variables.D1_DATABASE_ID.value;
   const r2 = variables.R2_BUCKET.value;
+  const kv = variables.KV_SETTINGS_ID.value;
   const environment = variables.ENVIRONMENT.value;
   const siteUrl = variables.SITE_URL.value;
   const defaultNote = usedDefaults.length > 0 ? `（${usedDefaults.join('/')} 使用默认值）` : '';
   console.log(
-    `✓ 已生成 apps/web/wrangler.jsonc · D1 ${d1} · R2 ${r2} · ENV ${environment} · SITE_URL ${siteUrl}${defaultNote}`,
+    `✓ 已生成 apps/web/wrangler.jsonc · D1 ${d1} · R2 ${r2} · KV ${kv} · ENV ${environment} · SITE_URL ${siteUrl}${defaultNote}`,
   );
 }
 

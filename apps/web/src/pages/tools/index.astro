@@ -1,0 +1,128 @@
+---
+// 工具索引：列表来自 D1（GET /api/v1/tools，只含启用项）。
+// 每一项都是独立工具页 /tools/<slug>；搜索在浏览器里过滤当前列表。
+// 样式：public/css/pages/tools.css；脚本：public/js/pages/tools.js
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { ToolItem, ToolListResponse } from '@myon/shared';
+import SiteLayout from '../../layouts/SiteLayout.astro';
+
+const bindings = env as unknown as AppBindings;
+
+let items: ToolItem[] = [];
+try {
+  const toolsRes = await app.request('/api/v1/tools', {}, bindings);
+  if (toolsRes.ok) {
+    const body = (await toolsRes.json()) as ToolListResponse;
+    items = body.items ?? [];
+  } else {
+    console.error('tools 取数失败', toolsRes.status);
+  }
+} catch (error) {
+  // 取数失败也要有页面：空列表 + 空态，不白屏。
+  console.error('tools 索引取数异常', error);
+}
+
+const total = items.length;
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+---
+
+<SiteLayout
+  title="工具"
+  sticker="PAGE 06 / 07 · 工具"
+  active="tools"
+>
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/tools.css" />
+  </Fragment>
+
+  <main class="room">
+    <div class="wrap">
+
+      <header class="room-head">
+        <div>
+          <div class="room-kicker">
+            <span class="sticker">CH.06 部室</span>
+            <span class="sticker sticker--paper sticker--rot">{total} 件工具</span>
+          </div>
+          <h1>工具<span class="hl">。</span></h1>
+          <p class="sub">
+            {total} 个站内工具 · 页面由 Workers 送达，<br class="mbr">换算在浏览器完成，不写入 D1
+          </p>
+        </div>
+        <div class="room-stats">
+          <div class="stat-box is-pink"><span class="k">启用工具 / ENABLED</span><span class="v">{total}<small>件</small></span></div>
+          <div class="stat-box"><span class="k">运行 / RUN</span><span class="v v--word">浏览器内</span></div>
+          <div class="stat-box"><span class="k">换算 / COMPUTE</span><span class="v v--word">不写 D1</span></div>
+        </div>
+        <span class="chapter" aria-hidden="true">06</span>
+      </header>
+
+      <!-- 工具目录：每项跳到 /tools/<slug> -->
+      <section class="panel-box index tools-index" aria-labelledby="indexTitle">
+        <span class="panel-tab" id="indexTitle">INDEX</span>
+        <div class="index-in">
+          <div class="index-head">
+            <span class="idx-title">工具索引 · {total} 件</span>
+            <span class="mono"><b id="indexCount">{pad2(total)}</b> / {pad2(total)}</span>
+          </div>
+
+          {
+            total > 0 && (
+              <>
+                <div class="search">
+                  <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.1"/><path d="M15.2 15.2 20 20"/></svg>
+                  <input type="search" id="toolSearch" placeholder="搜索工具" aria-label="搜索工具" autocomplete="off" spellcheck="false" />
+                </div>
+
+                <div class="tool-list" id="toolList">
+                  {items.map((item, index) => (
+                    <a
+                      class="tool"
+                      href={`/tools/${item.slug}`}
+                      data-name={item.name}
+                      data-kw={item.keywords}
+                    >
+                      <span class="tno">{pad2(index + 1)}</span>
+                      <span class="tbody">
+                        <span class="tname">{item.name}</span>
+                        <span class="tdesc">{item.description || '暂无说明'}</span>
+                      </span>
+                      <span class="tkind" title={item.kind}>{item.kind || 'TOOL'}</span>
+                    </a>
+                  ))}
+                </div>
+
+                <div class="search-empty" id="searchEmpty" hidden>
+                  <p>没有找到「<span class="q" id="emptyQ"></span>」。</p>
+                  <button class="clear-btn" type="button" id="clearSearch">清除搜索 <span aria-hidden="true">×</span></button>
+                </div>
+              </>
+            )
+          }
+
+          {
+            total === 0 && (
+              <div class="index-empty">
+                <p>还没有启用中的工具。</p>
+                <p class="index-empty-note">在后台「工具」里登记并启用后，会出现在这份索引里。</p>
+                <a class="arrow-link" href="/admin/tools">去后台登记 <span class="ar" aria-hidden="true">→</span></a>
+              </div>
+            )
+          }
+
+          <p class="index-foot"><span>{total} 件启用</span><span>06 / 07</span></p>
+        </div>
+      </section>
+
+      <p class="tools-note"><i aria-hidden="true"></i>工具索引来自 D1 · 页面由 Workers 送达 · 换算在浏览器完成</p>
+
+    </div>
+  </main>
+
+  <script is:inline src="/js/pages/tools.js"></script>
+</SiteLayout>

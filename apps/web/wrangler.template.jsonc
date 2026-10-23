@@ -28,6 +28,12 @@
       "bucket_name": "__R2_BUCKET__"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "SETTINGS",
+      "id": "__KV_SETTINGS_ID__"
+    }
+  ],
   "vars": {
     "SITE_URL": "__SITE_URL__",
     "ENVIRONMENT": "__ENVIRONMENT__"

@@ -10,14 +10,16 @@ import { getDb } from '../db/client';
 import {
   bangumiShows,
   galleryItems,
-  media,
   moments,
   posts,
   siteContent,
+  tools,
 } from '../db/schema';
 import { MAX_ICONS, resolveIconSvgs } from '../icons';
 import { renderArticle, renderMarkdown } from '../markdown';
+import { readMediaCount } from '../media';
 import { readSiteSettings, sanitizeFooterHtml } from '../site';
+import { readTraffic } from '../traffic';
 import type { AppBindings } from '../types';
 import admin from './v1/admin';
 
@@ -129,7 +131,7 @@ v1.get('/about', async (c) => {
 
 /** 前台需要的站点配置：主题色与页脚文案，后台可改。 */
 v1.get('/site', async (c) => {
-  const settings = await readSiteSettings(c.env.DB);
+  const settings = await readSiteSettings(c.env.SETTINGS);
   const publicSettings = toPublicSiteSettings(settings);
   publicSettings.footerTech = sanitizeFooterHtml(publicSettings.footerTech);
   publicSettings.footerIcp = sanitizeFooterHtml(publicSettings.footerIcp);
@@ -150,6 +152,23 @@ v1.get('/icons', async (c) => {
 
   const icons = await resolveIconSvgs(names);
   return c.json({ icons }, 200, { 'Cache-Control': 'public, max-age=3600' });
+});
+
+/** 前台工具页：只返回启用中的工具，按后台排序。 */
+v1.get('/tools', async (c) => {
+  const db = getDb(c.env.DB);
+  const items = await db
+    .select()
+    .from(tools)
+    .where(eq(tools.enabled, true))
+    .orderBy(asc(tools.position), asc(tools.id));
+  return c.json({ items });
+});
+
+/** 后台总览用：最近 30 天访问量（只读、不缓存）。 */
+v1.get('/traffic', async (c) => {
+  const traffic = await readTraffic(c.env.DB);
+  return c.json(traffic, 200, { 'Cache-Control': 'no-store' });
 });
 
 v1.get('/moments', async (c) => {
@@ -277,9 +296,13 @@ v1.get('/stats', async (c) => {
     .where(eq(galleryItems.displayed, true))
     .groupBy(galleryItems.category)
     .orderBy(desc(sql`count(*)`));
-  const mediaAgg = await db
-    .select({ total: sql<number>`count(*)` })
-    .from(media);
+  const toolAgg = await db
+    .select({
+      total: sql<number>`count(*)`,
+      enabled: sql<number>`coalesce(sum(case when enabled = 1 then 1 else 0 end), 0)`,
+    })
+    .from(tools);
+  const mediaTotal = await readMediaCount(c.env);
 
   const lastPostAt = await db
     .select({ at: sql<string | null>`max(updated_at)` })
@@ -316,7 +339,11 @@ v1.get('/stats', async (c) => {
       total: bangumiAgg[0]?.total ?? 0,
       watching: bangumiAgg[0]?.watching ?? 0,
     },
-    media: { total: mediaAgg[0]?.total ?? 0 },
+    media: { total: mediaTotal },
+    tools: {
+      total: toolAgg[0]?.total ?? 0,
+      enabled: toolAgg[0]?.enabled ?? 0,
+    },
     categories: await readCategoryCounts(db),
   });
 });

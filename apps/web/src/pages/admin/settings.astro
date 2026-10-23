@@ -1,6 +1,7 @@
 ---
 // 迁移自 design 分支 design/site/admin-settings.html
 // 样式：public/css/pages/admin-settings.css；脚本：public/js/pages/admin-settings.js
+import { env } from 'cloudflare:workers';
 import {
   apiBasePath,
   defaultHomePageLabels,
@@ -15,10 +16,11 @@ const homeConfig = JSON.stringify({
   presets: homeStatPresets,
   pageLabels: defaultHomePageLabels,
 });
+const environment = String(env.ENVIRONMENT ?? 'development');
 ---
 
 <AdminLayout
-  title="设置 · Myon 制作进行"
+  title="设置"
   crumb="设置"
   active="settings"
 >
@@ -82,6 +84,10 @@ const homeConfig = JSON.stringify({
                 <input id="siteName" name="site_name" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
               </div>
               <div class="fld">
+                <label for="siteSubtitle">副标题 / SUBTITLE</label>
+                <input id="siteSubtitle" name="site_subtitle" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
+              </div>
+              <div class="fld">
                 <label for="siteAuthor">作者 / AUTHOR</label>
                 <input id="siteAuthor" name="site_author" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
               </div>
@@ -94,7 +100,7 @@ const homeConfig = JSON.stringify({
                 <input id="siteEmail" name="site_email" type="email" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
               </div>
             </div>
-            <p class="hint">站点名与作者会出现在页脚、RSS 与分享卡片上；描述用于 SEO 与分享摘要。</p>
+            <p class="hint">站点名与副标题会拼进每一页的 head-title（页面名 · 站点名 副标题），描述用于 head-description、SEO 与分享摘要。</p>
           </div>
         </section>
       </div>
@@ -215,7 +221,7 @@ const homeConfig = JSON.stringify({
               <div class="fields">
                 <div class="fld fld--wide">
                   <label for="homeCoverImage">图片路径 / PATH</label>
-                  <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" placeholder="/assets/cabinet.jpg" spellcheck="false" autocomplete="off" data-setting>
+                  <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" placeholder="/media/cabinet.jpg" spellcheck="false" autocomplete="off" data-setting>
                   <p class="fld-err" id="homeCoverImageErr" hidden></p>
                 </div>
                 <div class="fld">
@@ -293,7 +299,7 @@ const homeConfig = JSON.stringify({
                 <span class="track"><span class="knob"></span></span>
               </button>
             </div>
-            <p class="hint">开关写入 D1 的 settings 表，字段名 <b>comments_enabled</b>。</p>
+            <p class="hint">开关写入 Workers KV 的站点设置（键 <b>site-settings:v1</b>），字段名 <b>comments_enabled</b>。</p>
           </div>
         </section>
       </div>
@@ -407,7 +413,7 @@ const homeConfig = JSON.stringify({
             <span class="sec-num">08</span>
             <h2 id="sp-deploy">部署</h2>
             <span class="sp-en">DEPLOY</span>
-            <span class="sp-state" id="deployState">已上线</span>
+            <span class="sp-state" id="deployState">{environment === 'production' ? '运行中' : '开发环境'}</span>
           </div>
           <div class="sp-body">
             <div class="ro">
@@ -419,17 +425,18 @@ const homeConfig = JSON.stringify({
               <span class="ro-v">main</span>
             </div>
             <div class="ro">
-              <span class="ro-k">最新部署</span>
-              <span class="ro-v"><i class="sq" aria-hidden="true"></i><span id="latestDeploy">2a1f3c9</span><em id="latestDeployAgo">· 3 小时前</em></span>
+              <span class="ro-k">运行环境</span>
+              <span class="ro-v"><i class="sq" aria-hidden="true"></i><span id="latestDeploy">{environment}</span><em id="latestDeployAgo">· Worker</em></span>
             </div>
             <div class="ro">
-              <span class="ro-k">构建耗时</span>
-              <span class="ro-v">42s</span>
+              <span class="ro-k">部署方式</span>
+              <span class="ro-v">GitHub Actions</span>
             </div>
             <div class="ro-env">
               <div class="ro-env-k">环境变量 / READONLY</div>
-              <div class="env-row"><span>D1_BINDING</span><span>myon-db</span></div>
+              <div class="env-row"><span>D1_BINDING</span><span>DB</span></div>
               <div class="env-row"><span>R2_BUCKET</span><span>myon-media</span></div>
+              <div class="env-row"><span>KV_BINDING</span><span>SETTINGS</span></div>
               <div class="env-row"><span>ADMIN_TOKEN</span><span>••••••••</span></div>
             </div>
             <p class="hint">配置由 <b>wrangler.jsonc</b> 管理，后台只读；要改变量请重新部署。</p>
@@ -464,14 +471,14 @@ const homeConfig = JSON.stringify({
                 <b>重建站点</b>
                 <span>重新触发构建，预计 40 秒；构建期间前台继续使用旧版本。</span>
               </div>
-              <button class="danger-btn" id="btnRebuild" type="button" data-title="重建站点" data-desc="会重新触发一次构建，预计 40 秒。构建期间前台继续使用旧版本，完成后再切换。">重建站点</button>
+              <button class="danger-btn" id="btnRebuild" type="button" data-title="重建站点" data-desc="构建由 GitHub Actions 运行；这个按钮只给出提示，不会直接触发构建。">重建站点</button>
             </div>
           </div>
         </section>
       </div>
     </section>
 
-    <p class="page-note">设置写入 D1 的 settings 表 · 服务端需配置 ADMIN_TOKEN · 令牌只存在本机浏览器</p>
+    <p class="page-note">设置写入 Workers KV（SETTINGS）· 服务端需配置 ADMIN_TOKEN · 令牌只存在本机浏览器</p>
   </div>
 
 

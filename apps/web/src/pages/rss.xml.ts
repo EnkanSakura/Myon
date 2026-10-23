@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { PostListItem } from '@myon/shared';
+import type { PostListItem, PublicSiteSettings } from '@myon/shared';
 import type { APIRoute } from 'astro';
 
 const escapeXml = (value: string) =>
@@ -15,6 +15,17 @@ const escapeXml = (value: string) =>
 /** RSS 2.0：从进程内 API 取已发布文章，供页脚「RSS 订阅」使用。 */
 export const GET: APIRoute = async ({ site }) => {
   const origin = site ?? new URL('https://myon.studio');
+
+  let siteSettings: PublicSiteSettings | null = null;
+  const siteRes = await app.request(
+    '/api/v1/site',
+    {},
+    env as unknown as AppBindings,
+  );
+  if (siteRes.ok) {
+    const body = (await siteRes.json()) as { settings: PublicSiteSettings };
+    siteSettings = body.settings;
+  }
 
   let items: PostListItem[] = [];
   const res = await app.request(
@@ -49,10 +60,10 @@ export const GET: APIRoute = async ({ site }) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Myon · 同人志</title>
+    <title>${escapeXml([siteSettings?.name, siteSettings?.subtitle].filter(Boolean).join(' · ') || 'Myon')}</title>
     <link>${escapeXml(new URL('/', origin).toString())}</link>
     <atom:link href="${escapeXml(new URL('/rss.xml', origin).toString())}" rel="self" type="application/rss+xml" />
-    <description>写字、看番、存图、做点小工具。一个人的二次元生活志。</description>
+    <description>${escapeXml(siteSettings?.description ?? '')}</description>
     <language>zh-CN</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
 ${entries}

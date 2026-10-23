@@ -1,31 +1,35 @@
 #!/usr/bin/env node
 /**
- * 本地开发种子脚本：初始化本地 D1 时生成示例文章与随机占位图片。
+ * 本地开发种子脚本：初始化本地 D1 时生成示例文章，并把随机占位图上传到本地 R2。
+ *
+ * 图片只存在于 R2（仓库与 apps/web/public 下不再保存任何图片），页面统一通过
+ * `/media/<key>` 访问；D1 里也不再维护 media 表。
  *
  * 用法（在仓库根目录执行，`pnpm db:seed:local` 会调用本脚本）：
- *   pnpm db:seed:local                  # 生成缺失的占位图 + 示例文章，写入本地 D1
- *   pnpm db:seed:local --force          # 覆盖已有占位图（重新随机一次）
- *   pnpm db:seed:local --images-only    # 只生成占位图，不写 D1
- *   pnpm db:seed:local --dry-run        # 只打印计划，不写文件、不写 D1
+ *   pnpm db:seed:local                  # 上传缺失的占位图到本地 R2 + 示例文章写入本地 D1
+ *   pnpm db:seed:local --force          # 重新生成并覆盖本地 R2 里的占位图
+ *   pnpm db:seed:local --images-only    # 只上传占位图，不写 D1
+ *   pnpm db:seed:local --dry-run        # 只打印计划，不上传 R2、不写 D1
  *   pnpm db:seed:local --help
  *
- * 背景：`apps/web/public/assets/` 下的示例图片不入库（见 .gitignore）。本脚本会扫描
- * `seed.sql` 与页面里引用的 `/assets/...` 路径，为其中属于 `gallery/`、`moments/`
- * 和 `cabinet.jpg` 的示例图片生成随机占位图（纯 Node 手写基线 JPEG，无第三方依赖），
- * 保证新克隆的仓库跑 `pnpm db:migrate:local && pnpm db:seed:local` 后页面图片不 404。
+ * 占位图 key 从 `seed.sql` 与页面/脚本里对 `/media/...` 的引用扫描得到，只处理
+ * `gallery/`、`moments/` 前缀和 `cabinet.jpg`。图片会生成到系统临时目录
+ * （`node:os` 的 tmpdir()），用本地 wrangler 上传到 R2 后立即删除；纯 Node 手写
+ * 基线 JPEG，无第三方依赖。
  *
  * 只用于本地调试，不参与构建/部署。
  */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..');
 const WEB_DIR = path.join(REPO_ROOT, 'apps', 'web');
-const ASSETS_DIR = path.join(WEB_DIR, 'public', 'assets');
+const SHARED_SRC_DIR = path.join(REPO_ROOT, 'packages', 'shared', 'src');
 const SEED_SQL_PATH = path.join(SCRIPT_DIR, 'seed.sql');
 const TMP_SQL_PATH = path.join(SCRIPT_DIR, '.seed-local.tmp.sql');
 const WRANGLER_ENTRY = path.join(
@@ -37,6 +41,7 @@ const WRANGLER_ENTRY = path.join(
 );
 const WRANGLER_CONFIG = path.join(WEB_DIR, 'wrangler.jsonc');
 const D1_NAME = 'myon-blog';
+const DEFAULT_R2_BUCKET = 'myon-media';
 
 /** 示例图片的尺寸（4:3，页面里用 object-fit 裁切）。 */
 const IMAGE_WIDTH = 480;
@@ -46,7 +51,7 @@ const BLOCK_SIZE = 8;
 /** 每次 seed 生成的示例文章数量。 */
 const DEMO_POST_COUNT = 8;
 
-/** 只会为这些前缀下的示例图片生成占位图，避免覆盖页面真正依赖的图标/字体等静态资源。 */
+/** 只处理这些示例图片，避免把图标/字体等静态资源误传进 R2。 */
 const SAMPLE_PREFIXES = ['gallery/', 'moments/'];
 const SAMPLE_EXTRA_KEYS = ['cabinet.jpg'];
 const IMAGE_EXTENSION_RE = /\.(?:jpe?g|png|webp|gif|avif|svg)$/i;
@@ -76,20 +81,21 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`本地种子脚本（示例文章 + 随机占位图片）
+  console.log(`本地种子脚本（示例文章 + R2 占位图）
 
 用法：
-  pnpm db:seed:local                 生成缺失的占位图 + 示例文章，写入本地 D1
-  pnpm db:seed:local --force         覆盖已有占位图（重新随机一次）
-  pnpm db:seed:local --images-only   只生成占位图，不写 D1
-  pnpm db:seed:local --dry-run       只打印计划，不写文件、不写 D1
+  pnpm db:seed:local                 上传缺失的占位图到本地 R2，示例文章写入本地 D1
+  pnpm db:seed:local --force         重新生成并覆盖本地 R2 里的占位图
+  pnpm db:seed:local --images-only   只上传占位图，不写 D1
+  pnpm db:seed:local --dry-run       只打印计划，不上传 R2、不写 D1
   pnpm db:seed:local --help          显示本帮助
 
 说明：
-  1. 占位图写到 apps/web/public/assets/（这些文件已被 .gitignore 忽略）；
-  2. 示例文章写入本地 D1 的 posts 表（id 前缀 demo_p，可重复执行覆盖）；
-  3. 已存在的占位图默认跳过，加 --force 才会覆盖；
-  4. 需要先生成 apps/web/wrangler.jsonc（pnpm wrangler:config）并跑过本地迁移。`);
+  1. 占位图生成到系统临时目录，上传到本地 R2 后删除；仓库里不保存任何图片；
+  2. 扫描 seed.sql 与页面里的 /media/... 引用，只处理 gallery/、moments/ 和 cabinet.jpg；
+  3. 示例文章写入本地 D1 的 posts 表（id 前缀 demo_p，可重复执行覆盖）；
+  4. 已存在的 R2 对象默认跳过，加 --force 才会覆盖；
+  5. 需要先生成 apps/web/wrangler.jsonc（pnpm wrangler:config）并跑过本地迁移。`);
 }
 
 function hashString(input) {
@@ -99,6 +105,89 @@ function hashString(input) {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash >>> 0;
+}
+
+/** 去掉 ANSI 颜色码，便于把 wrangler 的报错汇总成一行。 */
+function stripAnsi(value) {
+  const escapeChar = String.fromCharCode(0x1b);
+  return value.replace(new RegExp(`${escapeChar}\\[[0-9;]*m`, 'g'), '');
+}
+
+/** 去掉 JSONC 注释；字符串里的 // 与 /* 保持原样。 */
+function stripJsonComments(input) {
+  let output = '';
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (inString) {
+      output += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+    if (char === '/' && input[index + 1] === '/') {
+      while (index < input.length && input[index] !== '\n') index += 1;
+      output += '\n';
+      continue;
+    }
+    if (char === '/' && input[index + 1] === '*') {
+      index += 2;
+      while (
+        index < input.length &&
+        !(input[index] === '*' && input[index + 1] === '/')
+      ) {
+        index += 1;
+      }
+      index += 1;
+      output += ' ';
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+/** 从 apps/web/wrangler.jsonc 读取 r2_buckets[0].bucket_name；读不到时回退默认值。 */
+function readR2BucketName() {
+  if (fs.existsSync(WRANGLER_CONFIG)) {
+    try {
+      const source = fs
+        .readFileSync(WRANGLER_CONFIG, 'utf8')
+        .replace(/^\uFEFF/, '');
+      const config = JSON.parse(stripJsonComments(source));
+      const bucketName = config?.r2_buckets?.[0]?.bucket_name;
+      if (typeof bucketName === 'string' && bucketName.trim() !== '') {
+        return bucketName.trim();
+      }
+    } catch {
+      // 解析失败时继续走回退值，真正的上传错误由 wrangler 给出。
+    }
+  }
+  console.warn(
+    `! 未从 apps/web/wrangler.jsonc 读到 r2_buckets[0].bucket_name，回退 ${DEFAULT_R2_BUCKET}`,
+  );
+  return DEFAULT_R2_BUCKET;
+}
+
+/** 本地 R2 / D1 操作都依赖 wrangler 与生成的配置。 */
+function ensureWrangler() {
+  if (!fs.existsSync(WRANGLER_CONFIG)) {
+    console.error(
+      '✗ 找不到 apps/web/wrangler.jsonc，请先在仓库根目录执行 pnpm wrangler:config',
+    );
+    process.exit(1);
+  }
+  if (!fs.existsSync(WRANGLER_ENTRY)) {
+    console.error('✗ 找不到本地安装的 wrangler，请先执行 pnpm install');
+    process.exit(1);
+  }
 }
 
 /** 可复现的伪随机数（同一个图片 key 每次生成的底图一致，便于比对）。 */
@@ -392,46 +481,6 @@ function generatePlaceholderJpeg(key) {
   return encodeJpeg(blocks, cols, rows);
 }
 
-/** 从 JPEG / PNG 文件头读尺寸；读不到时返回 null（媒体表里宽度高度允许为空）。 */
-function readImageDimensions(buffer) {
-  if (buffer.length >= 24 && buffer[0] === 0x89 && buffer[1] === 0x50) {
-    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-  }
-  if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-    let offset = 2;
-    while (offset + 9 < buffer.length) {
-      if (buffer[offset] !== 0xff) {
-        offset += 1;
-        continue;
-      }
-      const marker = buffer[offset + 1];
-      if (
-        marker === 0xd8 ||
-        marker === 0x01 ||
-        (marker >= 0xd0 && marker <= 0xd7)
-      ) {
-        offset += 2;
-        continue;
-      }
-      const segmentLength = buffer.readUInt16BE(offset + 2);
-      const isStartOfFrame =
-        marker >= 0xc0 &&
-        marker <= 0xcf &&
-        marker !== 0xc4 &&
-        marker !== 0xc8 &&
-        marker !== 0xcc;
-      if (isStartOfFrame && offset + 9 < buffer.length) {
-        return {
-          width: buffer.readUInt16BE(offset + 7),
-          height: buffer.readUInt16BE(offset + 5),
-        };
-      }
-      offset += 2 + segmentLength;
-    }
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // 收集需要占位的图片 key
 // ---------------------------------------------------------------------------
@@ -447,7 +496,7 @@ function walkFiles(directory, onFile) {
 
 function collectSampleImageKeys() {
   const keys = new Set();
-  const normalize = (raw) => raw.replace(/^\/+/, '').replace(/^assets\//, '');
+  const normalize = (raw) => raw.replace(/^\/+/, '').replace(/^media\//, '');
   const isSampleKey = (key) =>
     SAMPLE_EXTRA_KEYS.includes(key) ||
     SAMPLE_PREFIXES.some((prefix) => key.startsWith(prefix));
@@ -458,7 +507,7 @@ function collectSampleImageKeys() {
     keys.add(key);
   };
 
-  // 1) seed.sql 里引用的媒体 key（media_key / cover_key / home_cover_image 等）
+  // 1) seed.sql 里的图片路径字符串（media_key / cover_key 等列）
   const seedSql = fs.readFileSync(SEED_SQL_PATH, 'utf8');
   for (const match of seedSql.matchAll(
     /'([^']+\.(?:jpe?g|png|webp|gif|avif|svg))'/gi,
@@ -466,17 +515,18 @@ function collectSampleImageKeys() {
     addFromReference(match[1]);
   }
 
-  // 2) 页面 / 脚本里写死的 /assets/... 引用
+  // 2) 页面 / 脚本 / 共享设置里写死的 /media/... 引用
   const sourceDirectories = [
     path.join(WEB_DIR, 'src'),
     path.join(WEB_DIR, 'public', 'js'),
+    SHARED_SRC_DIR,
   ];
   for (const directory of sourceDirectories) {
     walkFiles(directory, (file) => {
       if (!/\.(?:astro|ts|js|mjs|css)$/i.test(file)) return;
       const text = fs.readFileSync(file, 'utf8');
       for (const match of text.matchAll(
-        /\/assets\/([A-Za-z0-9_./-]+\.(?:jpe?g|png|webp|gif|avif|svg))/gi,
+        /\/media\/([A-Za-z0-9_./-]+\.(?:jpe?g|png|webp|gif|avif|svg))/gi,
       )) {
         addFromReference(match[1]);
       }
@@ -621,32 +671,11 @@ function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-function buildDemoSql(images, posts) {
+function buildDemoSql(posts) {
   const lines = [
     '-- 以下内容由 packages/back/scripts/seed-local.mjs 生成，只写入本地 D1。',
-    "DELETE FROM media WHERE id LIKE 'seed_media_%';",
     "DELETE FROM posts WHERE id LIKE 'demo_p%';",
   ];
-
-  if (images.length > 0) {
-    const createdAt = new Date().toISOString();
-    const values = images.map((image, index) =>
-      [
-        sqlString(`seed_media_${String(index + 1).padStart(2, '0')}`),
-        sqlString(image.key),
-        sqlString(path.basename(image.key)),
-        sqlString(image.mime),
-        String(image.size),
-        image.width === null ? 'NULL' : String(image.width),
-        image.height === null ? 'NULL' : String(image.height),
-        sqlString(createdAt),
-      ].join(', '),
-    );
-    lines.push(
-      'INSERT OR REPLACE INTO media (id, key, filename, mime, size, width, height, created_at) VALUES',
-      `  (${values.join('),\n  (')});`,
-    );
-  }
 
   if (posts.length > 0) {
     const values = posts.map((post) =>
@@ -675,17 +704,6 @@ function buildDemoSql(images, posts) {
 }
 
 function runWranglerSeed() {
-  if (!fs.existsSync(WRANGLER_CONFIG)) {
-    console.error(
-      '✗ 找不到 apps/web/wrangler.jsonc，请先在仓库根目录执行 pnpm wrangler:config',
-    );
-    process.exit(1);
-  }
-  if (!fs.existsSync(WRANGLER_ENTRY)) {
-    console.error('✗ 找不到本地安装的 wrangler，请先执行 pnpm install');
-    process.exit(1);
-  }
-
   const result = spawnSync(
     process.execPath,
     [
@@ -714,6 +732,100 @@ function runWranglerSeed() {
 }
 
 // ---------------------------------------------------------------------------
+// 本地 R2 占位图
+// ---------------------------------------------------------------------------
+
+/** 汇总 wrangler 的报错输出，保留最后的有效行。 */
+function wranglerErrorText(result) {
+  const lines = stripAnsi(`${result.stderr ?? ''}\n${result.stdout ?? ''}`)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line !== '' &&
+        !line.startsWith('▲') &&
+        !line.startsWith('🪵') &&
+        !line.startsWith('Resource location') &&
+        !line.startsWith('Use --remote'),
+    );
+  return lines.slice(-3).join(' | ');
+}
+
+/** 本地 R2 里是否已有这个 key。缺失对象时 wrangler 退出码为 1。 */
+function r2ObjectExists(bucketName, key) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      WRANGLER_ENTRY,
+      'r2',
+      'object',
+      'get',
+      `${bucketName}/${key}`,
+      '--local',
+      '--pipe',
+    ],
+    {
+      cwd: WEB_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'pipe'],
+    },
+  );
+
+  if (result.error) {
+    throw new Error(`检查 R2 对象 ${key} 失败：${result.error.message}`);
+  }
+  if (result.status === 0) return true;
+
+  const detail = wranglerErrorText(result);
+  if (/does not exist|not found|NoSuchKey/i.test(detail)) return false;
+  throw new Error(
+    `检查 R2 对象 ${key} 失败：${detail || `wrangler 退出码 ${result.status}`}`,
+  );
+}
+
+/** 把占位 JPEG 写到系统临时目录，上传到本地 R2 后立刻删除临时文件。 */
+function uploadPlaceholder(bucketName, key, buffer) {
+  const tempDir = fs.mkdtempSync(path.join(tmpdir(), 'myon-seed-'));
+  try {
+    const tempFile = path.join(tempDir, 'placeholder.jpg');
+    fs.writeFileSync(tempFile, buffer);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        WRANGLER_ENTRY,
+        'r2',
+        'object',
+        'put',
+        `${bucketName}/${key}`,
+        '--file',
+        tempFile,
+        '--content-type',
+        'image/jpeg',
+        '--local',
+      ],
+      {
+        cwd: WEB_DIR,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    if (result.error) {
+      throw new Error(`上传 R2 对象 ${key} 失败：${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      const detail = wranglerErrorText(result);
+      throw new Error(
+        `上传 R2 对象 ${key} 失败：${detail || `wrangler 退出码 ${result.status}`}`,
+      );
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 
@@ -724,88 +836,55 @@ function main() {
     return;
   }
 
+  ensureWrangler();
+  const bucketName = readR2BucketName();
   const imageKeys = collectSampleImageKeys();
   if (imageKeys.length === 0) {
     console.warn('! 没有在 seed 数据或页面里找到需要占位的示例图片');
   }
 
-  const generated = [];
+  const uploaded = [];
   const skipped = [];
-  /** 本次 seed 后磁盘上实际存在的示例图片（用于写 media 表）。 */
-  const presentImages = [];
-  const imageMime = (key) =>
-    /\.png$/i.test(key)
-      ? 'image/png'
-      : /\.svg$/i.test(key)
-        ? 'image/svg+xml'
-        : /\.webp$/i.test(key)
-          ? 'image/webp'
-          : /\.gif$/i.test(key)
-            ? 'image/gif'
-            : 'image/jpeg';
 
   for (const key of imageKeys) {
-    const targetPath = path.join(ASSETS_DIR, key);
-    const exists = fs.existsSync(targetPath);
-    if (exists && !options.force) {
-      const buffer = fs.readFileSync(targetPath);
-      const dimensions = readImageDimensions(buffer);
-      presentImages.push({
-        key,
-        mime: imageMime(key),
-        size: buffer.length,
-        width: dimensions?.width ?? null,
-        height: dimensions?.height ?? null,
-      });
+    if (!options.force && r2ObjectExists(bucketName, key)) {
       skipped.push(key);
       continue;
     }
-    const buffer = generatePlaceholderJpeg(key);
-    if (!options.dryRun) {
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      fs.writeFileSync(targetPath, buffer);
-    }
-    const dimensions = readImageDimensions(buffer);
-    if (dimensions === null) {
-      throw new Error(`生成的 JPEG 无法解析尺寸：${key}`);
-    }
-    presentImages.push({
-      key,
-      mime: 'image/jpeg',
-      size: buffer.length,
-      width: dimensions.width,
-      height: dimensions.height,
-    });
-    generated.push({ key, buffer });
+    uploaded.push(key);
+    if (options.dryRun) continue;
+    console.log(`  ↑ ${key}`);
+    uploadPlaceholder(bucketName, key, generatePlaceholderJpeg(key));
   }
 
   const demoPosts = buildDemoPosts(imageKeys);
 
   if (options.dryRun) {
-    console.log('（dry-run，不写文件、不写 D1）');
+    console.log('（dry-run，不上传 R2、不写 D1）');
     console.log(
-      `占位图：将生成 ${generated.length} 个，跳过 ${skipped.length} 个已存在`,
+      `占位图：将上传 ${uploaded.length} 个，跳过 ${skipped.length} 个已存在（R2：${bucketName}）`,
     );
-    for (const image of generated) console.log(`  + ${image.key}`);
-    for (const key of skipped)
+    for (const key of uploaded) console.log(`  + ${key}`);
+    for (const key of skipped) {
       console.log(`  = ${key}（已存在，--force 可覆盖）`);
+    }
     console.log(`示例文章：将写入 ${demoPosts.length} 篇`);
     for (const post of demoPosts) console.log(`  + ${post.id}  ${post.title}`);
     return;
   }
 
-  if (generated.length > 0) {
+  if (uploaded.length > 0) {
     console.log(
-      `✓ 生成占位图 ${generated.length} 个 → apps/web/public/assets/`,
+      `✓ 占位图上传完成：${uploaded.length} 个 → 本地 R2（${bucketName}）`,
     );
   }
   if (skipped.length > 0) {
     console.log(
-      `· 跳过已存在的占位图 ${skipped.length} 个（加 --force 可覆盖重新随机）`,
+      `· 跳过已存在的占位图 ${skipped.length} 个（加 --force 可覆盖）`,
     );
   }
-  if (generated.length === 0 && skipped.length === 0 && imageKeys.length > 0) {
-    console.log('· 没有需要生成的占位图');
+  if (uploaded.length === 0 && skipped.length === 0) {
+    console.log('· 没有需要上传的占位图');
   }
 
   if (options.imagesOnly) {
@@ -814,7 +893,7 @@ function main() {
   }
 
   const seedSql = fs.readFileSync(SEED_SQL_PATH, 'utf8');
-  const demoSql = buildDemoSql(presentImages, demoPosts);
+  const demoSql = buildDemoSql(demoPosts);
   fs.writeFileSync(TMP_SQL_PATH, `${seedSql}\n\n${demoSql}`, 'utf8');
   console.log(
     `· 写入本地 D1（${D1_NAME}）：seed.sql + ${demoPosts.length} 篇示例文章`,

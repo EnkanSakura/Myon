@@ -18,6 +18,7 @@
   // 设置接口字段 → 页面输入框 id
   var FIELD_IDS = {
     site_name: "siteName",
+    site_subtitle: "siteSubtitle",
     site_description: "siteDescription",
     site_author: "siteAuthor",
     site_email: "siteEmail",
@@ -298,7 +299,7 @@
     return btn;
   }
 
-  /** 上移 / 下移一行；DOM 顺序就是保存进 D1 的数组顺序。 */
+  /** 上移 / 下移一行；DOM 顺序就是保存进 KV 的数组顺序。 */
   function moveRow(kind, row, direction) {
     var sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
     if (!sibling) return;
@@ -1003,12 +1004,12 @@
       }
       if (!result.body || !result.body.settings) throw new Error("接口响应缺少 settings 字段");
       applySettings(result.body.settings);
-      setStatus("最后保存 " + timeNow() + " · 已写入 D1", false);
+      setStatus("最后保存 " + timeNow() + " · 已写入 KV", false);
       hideBanner();
       var homeChanged = Object.keys(patch).some(function (key) {
         return key.indexOf("home_") === 0;
       });
-      toast(homeChanged ? "设置已保存 · 首页第一页已更新" : "设置已保存 · 已写入 D1");
+      toast(homeChanged ? "设置已保存 · 首页第一页已更新" : "设置已保存 · 已写入 KV");
     }).catch(function (err) {
       setStatus("保存失败 · 请重试", true);
       showBanner("error", "保存失败", err && err.message ? err.message : "网络或服务端异常，请稍后重试。");
@@ -1142,19 +1143,8 @@
     toast("已导出 myon-export.json");
   }
   function actionRebuild() {
-    if (deployState.dataset.busy === "1") return;
-    deployState.dataset.busy = "1";
-    deployState.textContent = "构建中…";
-    latestDeploy.textContent = "构建中…";
-    latestDeployAgo.textContent = "";
-    toast("已触发构建 · 预计 40 秒");
-    setTimeout(function () {
-      latestDeploy.textContent = "3b0d8f1";
-      latestDeployAgo.textContent = "· 刚刚";
-      deployState.textContent = "已上线";
-      delete deployState.dataset.busy;
-      toast("构建完成 · 3b0d8f1 已上线");
-    }, 1800);
+    // 构建由 GitHub Actions 运行，后台没有触发部署的权限；这里只给出提示，不伪造部署结果。
+    toast("构建由 GitHub Actions 运行 · 请到 Actions 手动触发");
   }
 
   $("btnPurge").addEventListener("click", function () {

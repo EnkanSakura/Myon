@@ -1,25 +1,5 @@
 -- 本地开发种子数据（由 pnpm db:seed:local 调用；示例图片与示例文章见 scripts/seed-local.mjs）
-INSERT OR REPLACE INTO settings (key, value) VALUES
-  ('site_name', 'Myon'),
-  ('site_description', '一个人的二次元生活志'),
-  ('site_author', 'Myon'),
-  ('site_email', 'hi@myon.studio'),
-  ('theme_color', '#EC88C2'),
-  ('footer_copyright', '© 2026 MYON'),
-  ('footer_tech', 'Astro · Cloudflare Workers · D1 · R2'),
-  ('footer_icp', '京ICP备 2026000000 号'),
-  ('footer_rss', '/rss.xml'),
-  ('footer_email', 'hi@myon.studio'),
-  ('default_theme', 'system'),
-  ('comments_enabled', 'true'),
-  ('home_title', '灯下的一格'),
-  ('home_lead', '写字、看番、存图、做点小工具。' || char(10) || '一个人的二次元生活志，自己画、自己印，一共七页。'),
-  ('home_page_labels', '["CH.01 封面","CH.02 目次","CH.03 四格","CH.04 收藏","CH.05 放送","CH.06 部室","CH.07 后记"]'),
-  ('home_stats', '[{"preset":"latest_update","accent":false},{"preset":"bangumi_watching","accent":true},{"preset":"gallery","accent":false}]'),
-  ('home_links', '[{"label":"写邮件","href":"mailto:hi@myon.studio"},{"label":"GitHub","href":"#"},{"label":"Bangumi","href":"#"},{"label":"RSS","href":"/articles"}]'),
-  ('home_cover_image', '/assets/cabinet.jpg'),
-  ('home_cover_badge', '全七页 / ALL 7'),
-  ('home_cover_note', 'LIGHT ON · 只开一盏灯');
+-- 站点设置存 Workers KV，不再写入 D1；本地未配置 KV 时使用 @myon/shared 里的默认值。
 
 INSERT OR REPLACE INTO site_content (key, markdown, updated_at) VALUES
   ('about', '# 关于 Myon
@@ -92,8 +72,38 @@ INSERT OR REPLACE INTO bangumi_shows (id, bangumi_id, title, status, total_eps, 
   ('bg_dandadan_s2', 463733, '胆大党 第二季', 'watching', 12, 3, 8, '2026-10-20T17:00:00.000Z', 'gallery/m7-laugh.jpg', '2026-10-20T19:02:00.000Z'),
   ('bg_mushishi', 1050, '虫师', 'watching', 26, 12, 9, NULL, 'gallery/k6-print.jpg', '2026-10-20T19:02:00.000Z');
 
-INSERT OR REPLACE INTO media (id, key, filename, mime, size, width, height, created_at) VALUES
-  ('md_001', 'cabinet.jpg', 'cabinet.jpg', 'image/jpeg', 412000, 1600, 1200, '2026-10-20T01:00:00.000Z'),
-  ('md_002', 'gallery/k7-demon.jpg', 'k7-demon.jpg', 'image/jpeg', 412000, 2497, 2039, '2026-10-20T01:00:00.000Z'),
-  ('md_003', 'gallery/k3-inro.jpg', 'k3-inro.jpg', 'image/jpeg', 388000, 1229, 1600, '2026-10-20T01:00:00.000Z'),
-  ('md_004', 'gallery/k1-fuji.jpg', 'k1-fuji.jpg', 'image/jpeg', 342000, 1600, 1096, '2026-10-20T01:00:00.000Z');
+INSERT OR REPLACE INTO tools
+  (id, slug, tool_key, name, description, kind, keywords, href, enabled, position, created_at, updated_at)
+VALUES
+  ('tool_ts', 'timestamp', 'ts', '时间戳转换',
+   '把 Unix 时间戳换成可读的日期时间，按所选时区算。输入即换算，结果点一下就能复制。',
+   'UNIX TIME · 浏览器内换算', '时间戳 unix timestamp 秒 毫秒 时区 日期', NULL, 1, 1,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_img', 'image', 'img', '图片压缩',
+   '选一张图，在浏览器里压成 WebP 或 AVIF；压缩结果直接写进 R2，原图不经过别人的服务器。',
+   'IMAGE · 浏览器内压缩', '图片 压缩 webp avif r2 图片压缩', NULL, 1, 2,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_md', 'markdown', 'md', 'Markdown 预览',
+   '左边写 Markdown，右边即时出预览。写动态和长文之前，先在这里过一眼。',
+   'MARKDOWN · 即时预览', 'markdown md 预览 写作 文章', NULL, 1, 3,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_color', 'color', 'color', '配色生成',
+   '从一个源色里取五色，深浅按固定比例递进。做封面、调 CSS 时用。',
+   'COLOR · 五格色板', '配色 颜色 color 调色 色板', NULL, 1, 4,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_bgm', 'schedule', 'bgm', '追番时刻表',
+   '本季每周的放送时间，按天排好。和 05 追番页共用同一份 Bangumi 缓存。',
+   'SCHEDULE · 本周放送', '追番 时刻表 新番 日历 bangumi', '/bangumi', 1, 5,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_json', 'json', 'json', 'JSON 格式化',
+   '粘贴一段 JSON，立刻拿到缩进后的版本。解析失败会把出错的行写出来。',
+   'JSON · 格式化', 'json 格式化 美化 校验 开发', NULL, 1, 6,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_redirect', 'redirect', 'redirect', '旧域名跳转',
+   '旧域名的链接 301 到新域名，路径和查询参数原样保留。',
+   'REDIRECT · 301', '域名 跳转 301 重定向 旧链接', NULL, 1, 7,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
+  ('tool_short', 'short', 'short', '短链接',
+   '把长链接压成一段短码，跳转记录存在 D1，同一条链接复用一个码。',
+   'SHORT URL · 短码', '短链接 短网址 short url 分享', NULL, 1, 8,
+   '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z');

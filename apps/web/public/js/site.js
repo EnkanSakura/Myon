@@ -72,6 +72,12 @@
     initTheme(); addToggle(); renderAbout();
   }
 
+  /* 媒体只从 R2 读取：对象缺失时不要显示破图图标，让相框保留纸面。 */
+  document.addEventListener('error', function (event) {
+    var target = event.target;
+    if (target && target.tagName === 'IMG') target.classList.add('is-missing');
+  }, true);
+
   window.MyonTheme = { set: setTheme, current: current };
   window.MyonAbout = { render: renderAbout };
 })();

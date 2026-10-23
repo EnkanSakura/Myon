@@ -1,13 +1,27 @@
 import { handle } from '@astrojs/cloudflare/handler';
 import { syncBangumi } from '@myon/back/bangumi';
+import { recordPageView, shouldTrackRequest } from '@myon/back/traffic';
 import type { AppBindings } from '@myon/back/types';
 
 /**
- * 自定义 Worker 入口：Astro 的默认入口只导出 fetch，这里补上 Cron 的 scheduled。
- * scheduled 只做一件事：每 6 小时同步一次 Bangumi 收藏（未配置令牌时直接跳过）。
+ * 自定义 Worker 入口：Astro 的默认入口只导出 fetch，这里补上 Cron 的 scheduled，
+ * 并在每次前台 HTML 请求时顺手记一次访问量（D1 page_views，后台总览用）。
  */
 export default {
-  fetch: handle,
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    if (shouldTrackRequest(request)) {
+      ctx.waitUntil(
+        recordPageView(env.DB, request).catch((error) => {
+          console.error('page view record failed', error);
+        }),
+      );
+    }
+    return handle(request, env, ctx);
+  },
   async scheduled(
     _controller: { cron?: string },
     env: Env,

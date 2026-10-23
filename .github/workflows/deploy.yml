@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   deploy:
-    name: D1 migrate · Deploy Worker · Smoke
+    name: Settings KV migrate · D1 migrate · Deploy Worker · Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: production
@@ -33,20 +33,30 @@ jobs:
       - name: Check required secrets
         env:
           D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          KV_SETTINGS_ID: ${{ secrets.CLOUDFLARE_KV_SETTINGS_ID }}
         run: |
           if [ -z "$D1_DATABASE_ID" ]; then
             echo "::error::缺少 GitHub Secret CLOUDFLARE_D1_DATABASE_ID（Cloudflare D1 的 database_id）。请到仓库 Settings → Secrets and variables → Actions → Secrets 配置后重新运行。"
             exit 1
           fi
+          if [ -z "$KV_SETTINGS_ID" ]; then
+            echo "::error::缺少 GitHub Secret CLOUDFLARE_KV_SETTINGS_ID（站点设置用的 KV namespace id）。见 docs/DEPLOY.md 第 2.3 节：pnpm exec wrangler kv namespace create myon-blog-settings，然后把 id 配成 Repository Secret。"
+            exit 1
+          fi
       - name: Generate wrangler config
         env:
           D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          KV_SETTINGS_ID: ${{ secrets.CLOUDFLARE_KV_SETTINGS_ID }}
           R2_BUCKET: ${{ vars.R2_BUCKET }}
           SITE_URL: ${{ vars.SITE_URL }}
           ENVIRONMENT: production
         run: pnpm wrangler:config
       - name: Build
         run: pnpm build
+      - name: Migrate settings D1 → KV
+        env:
+          KV_SETTINGS_ID: ${{ secrets.CLOUDFLARE_KV_SETTINGS_ID }}
+        run: node packages/back/scripts/migrate-settings-to-kv.mjs
       - name: Apply D1 migrations
         working-directory: apps/web
         run: pnpm exec wrangler d1 migrations apply myon-blog --remote

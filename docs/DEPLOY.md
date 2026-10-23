@@ -1,7 +1,10 @@
 # 部署指南 · Myon
 
 本仓库是单 Worker 部署：`@myon/web`（Astro）在构建时把 `@myon/back`（Hono）打进同一个 Worker，
-运行时绑定 D1（`DB`）、R2（`MEDIA`）、KV（`SESSION`）与静态资产（`ASSETS`）。
+运行时绑定 D1（`DB`，内容数据）、R2（`MEDIA`，图片与附件）、KV（`SETTINGS`，站点设置）与静态资产（`ASSETS`）。
+
+> 站点设置（主题色、页脚、首页文案等）存在 **Workers KV**，D1 里没有 `settings` 表；
+> 媒体库直接读 **R2 对象**，D1 里没有 `media` 表。仓库内不保存任何图片资源。
 
 部署配置由 `apps/web/wrangler.template.jsonc` + 环境变量生成，**`apps/web/wrangler.jsonc`
 是生成文件、不进仓库**。GitHub Actions 在 CI / Deploy 里统一跑 `pnpm wrangler:config` 生成它。
@@ -34,7 +37,7 @@ pnpm wrangler:config   # 生成 apps/web/wrangler.jsonc，详见第 4 节
 
 ---
 
-## 2. 创建 D1 与 R2
+## 2. 创建 D1、R2 与 KV
 
 先登录 Cloudflare（本地开发机）：
 
@@ -71,7 +74,21 @@ pnpm exec wrangler r2 bucket create myon-media
 
 如果用了别的 bucket 名称，把它填到 GitHub Variable `R2_BUCKET`（默认 `myon-media`）。
 
-> D1 与 R2 都只创建一次；以后换账号/换环境再重复本节。
+### 2.3 KV（站点设置）
+
+```bash
+cd apps/web
+pnpm exec wrangler kv namespace create myon-blog-settings
+```
+
+命令输出里会包含 KV 的 `id`（32 位十六进制），把它填到 GitHub Secret
+`CLOUDFLARE_KV_SETTINGS_ID`。Deploy workflow 用同一个 id 生成 `SETTINGS` 绑定，
+并用它把旧 D1 `settings` 表的数据一次性导入 KV（见第 5 节）。
+
+> 如果账号里已有可复用的 KV namespace，也可以直接用它的 id，不必新建；绑定名固定为 `SETTINGS`。
+> 本地开发用生成的 `wrangler.jsonc` 里的全 0 占位 id，Wrangler 会在本地模拟 KV，不碰线上。
+
+D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 ---
 
@@ -81,7 +98,7 @@ pnpm exec wrangler r2 bucket create myon-media
 
 ### 3.1 Secrets
 
-前 3 个是部署流程自己使用的 Secret；`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，
+前 4 个是部署流程自己使用的 Secret；`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，
 同样配在仓库 `Settings → Secrets and variables → Actions`。Deploy workflow 会在部署时用
 `wrangler deploy --secrets-file` 把它们一并同步到 Worker（见 3.3）；未配置的项自动跳过。
 
@@ -90,6 +107,7 @@ pnpm exec wrangler r2 bucket create myon-media
 | `CLOUDFLARE_API_TOKEN` | 是 | GitHub Secret | Actions 调 Cloudflare API：部署 Worker、跑 D1 迁移 |
 | `CLOUDFLARE_ACCOUNT_ID` | 是 | GitHub Secret | Cloudflare 账号 ID（Dashboard 右下角 / Workers 概览可见） |
 | `CLOUDFLARE_D1_DATABASE_ID` | 是 | GitHub Secret | 第 2.1 节拿到的 D1 database_id；Deploy 用它生成 wrangler 配置 |
+| `CLOUDFLARE_KV_SETTINGS_ID` | 是 | GitHub Secret | 第 2.3 节拿到的 KV namespace id；Deploy 用它生成 `SETTINGS` 绑定并迁移旧设置 |
 | `ADMIN_TOKEN` | 否 | GitHub Secret → Worker secret | 后台写接口的临时门禁；Deploy 时自动同步到 Worker，见 3.3 |
 | `ACCESS_TEAM_DOMAIN` | 否 | GitHub Secret → Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
 | `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
@@ -102,6 +120,7 @@ pnpm exec wrangler r2 bucket create myon-media
 
 - `Account → Workers Scripts → Edit`
 - `Account → D1 → Edit`
+- `Account → Workers KV Storage → Edit`（生成 KV 绑定 + 迁移旧设置）
 - `Account → R2 → Edit`（如需在部署流程里管理 bucket；仅发布 Worker 时非必需）
 
 可先选 Cloudflare 的 “Edit Cloudflare Workers” 模板，再额外勾选 D1。
@@ -170,8 +189,8 @@ R2_BUCKET=myon-media SITE_URL=https://myon.studio ENVIRONMENT=development pnpm w
 脚本会：
 
 1. 读取 `apps/web/wrangler.template.jsonc`；
-2. 替换 `__D1_DATABASE_ID__` / `__R2_BUCKET__` / `__SITE_URL__` / `__ENVIRONMENT__`；
-3. 校验生成结果（JSON 可解析、`main` 指向 `./src/worker.ts`、Cron 触发器存在）；
+2. 替换 `__D1_DATABASE_ID__` / `__R2_BUCKET__` / `__KV_SETTINGS_ID__` / `__SITE_URL__` / `__ENVIRONMENT__`；
+3. 校验生成结果（JSON 可解析、`main` 指向 `./src/worker.ts`、Cron 触发器与 `SETTINGS` KV 绑定存在）；
 4. 写到 `apps/web/wrangler.jsonc`，并打印一行摘要。
 
 生成后本地开发即可照常：
@@ -190,7 +209,7 @@ pnpm dev
 - 改绑定/变量请改 **`wrangler.template.jsonc`**，不要改生成文件。
 - 绑定变化后如类型不匹配，运行 `pnpm types` 重新生成 `apps/web/worker-configuration.d.ts`
   （该文件入库，变更时随代码提交）。
-- 本地生成的配置里 D1 `database_id` 默认是全 0 占位，仅用于本地/CI e2e，指向本地 D1 模拟数据。
+- 本地生成的配置里 D1 `database_id` 与 KV `id` 默认是全 0 占位，仅用于本地/CI e2e，指向本地模拟数据。
 
 ---
 
@@ -200,16 +219,19 @@ Deploy workflow（`.github/workflows/deploy.yml`）在 push `main` 或手动 `wo
 使用 GitHub Environment `production`（可在仓库里配置审批人）。步骤：
 
 1. `pnpm install --frozen-lockfile`；
-2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空，否则直接失败并提示去 Secrets 配置；
+2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空，否则直接失败并提示去 Secrets 配置；
 3. `pnpm wrangler:config` 生成生产配置：
-   `D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables（可选），`ENVIRONMENT=production`；
+   `D1_DATABASE_ID` / `KV_SETTINGS_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables（可选），`ENVIRONMENT=production`；
 4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
-5. `wrangler d1 migrations apply myon-blog --remote`（按键顺序应用 `packages/back/migrations/`）；
-6. 准备 Worker 运行时密钥：把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`
+5. `node packages/back/scripts/migrate-settings-to-kv.mjs`：**在删除 `settings` 表之前**把旧 D1 设置导入 KV。
+   幂等：KV 里已有 `site-settings:v1` 时跳过，不会覆盖后台已经保存的设置；表不存在（全新环境/已迁移）时跳过；
+6. `wrangler d1 migrations apply myon-blog --remote`（按键顺序应用 `packages/back/migrations/`，
+   0013/0014 会分别删除 `media` 与 `settings` 表）；
+7. 准备 Worker 运行时密钥：把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`
    写成一份临时 JSON（未配置的项跳过，值不会打印）；
-7. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
-8. 删除临时密钥文件；
-9. smoke：若配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），curl `/api/health`；遇到 Cloudflare 挑战/拦截时会打印响应头与排查提示。
+8. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
+9. 删除临时密钥文件；
+10. smoke：若配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），curl `/api/health`；遇到 Cloudflare 挑战/拦截时会打印响应头与排查提示。
 
 **操作**：把改动 push 到 `main`（或手动 Run workflow）→ 打开仓库 Actions → 选 `Deploy` →
 点开这次 run 看每个 step 日志。失败时先看红叉 step，常见原因见第 9 节。
@@ -292,9 +314,10 @@ curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/admin   # 开了 Acc
 
 人工检查：
 
-- [ ] 首页、文章、动态、展柜、追番、工具六个前台页面可打开，样式正常、无 404 资源。
-- [ ] 后台 `/admin` 可打开（Access 模式下能登录）；设置页能保存并刷新仍是新值。
-- [ ] 上传一张图片后前台能看到（`/media/<key>` 可访问）。
+- [ ] 首页、文章、动态、展柜、追番、工具六个前台页面可打开，样式正常；图片 404 说明 R2 里还没有对应对象（后台媒体库上传）。
+- [ ] `/tools` 索引与 `/tools/<slug>` 工具页可打开，链接与后台工具列表一致。
+- [ ] 后台 `/admin` 可打开（Access 模式下能登录）；设置页能保存并刷新仍是新值（说明 KV 绑定与写入正常）。
+- [ ] 上传一张图片后前台能看到（`/media/<key>` 只从 R2 读，仓库里没有回退图片）。
 - [ ] `/rss.xml` 内容里的站点地址正确（域名来自 `apps/web/astro.config.mjs` 的 `site`，不对就改它并重新构建部署）。
 - [ ] Bangumi 手动同步按钮返回结果合理（未配置令牌会提示「未配置 BANGUMI_ACCESS_TOKEN，已跳过」）。
 - [ ] Cloudflare Dashboard → Worker → Triggers 能看到 6 小时 Cron。
@@ -319,7 +342,9 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 
 | 现象 | 排查 |
 | --- | --- |
-| Deploy 在 `Check required secrets` 失败 | GitHub Secrets 缺 `CLOUDFLARE_D1_DATABASE_ID`（错误信息会给出 `::error::` 提示） |
+| Deploy 在 `Check required secrets` 失败 | GitHub Secrets 缺 `CLOUDFLARE_D1_DATABASE_ID` 或 `CLOUDFLARE_KV_SETTINGS_ID`（错误信息会给出 `::error::` 提示） |
+| 设置页保存后刷新丢失，或一直显示默认值 | 检查 Worker 是否有 `SETTINGS` KV 绑定（生成配置里的 `kv_namespaces`）；本地可用 `wrangler kv key get site-settings:v1 --local --namespace-id <id>` 验证；生产检查 Secret `CLOUDFLARE_KV_SETTINGS_ID` |
+| 从旧版本升级后站点设置变回默认值 | 首次升级时必须先跑 `migrate-settings-to-kv.mjs`（Deploy workflow 已内置，位置在 D1 迁移之前）；若曾手动删表，只能从备份或后台重新填写 |
 | Deploy 在生成配置/构建后失败 | 看 step 日志；本地复现：`D1_DATABASE_ID=xxx pnpm wrangler:config && pnpm build`（脚本读的是 `D1_DATABASE_ID`，不是 GitHub Secret 名 `CLOUDFLARE_D1_DATABASE_ID`） |
 | Deploy 在 `Smoke test` 收到 403、但本机浏览器/`curl` 正常 | 大概率是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP（WAF 自定义规则 / Bot Fight Mode / Security Level / 地区·ASN 限制），不是 Worker 返回的 403。看 step 日志里的 `cf-ray`、`cf-mitigated` 与错误页：① 给 `/api/health` 加 WAF Skip 规则，或把 GitHub Actions IP 段（`https://api.github.com/meta` 的 `actions`）加入允许列表；② 站点在 Access 后面时，建一个 Access Service Token 并把 `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` 配到 Repository Secrets；③ 或把 Variable `SMOKE_URL` 指向绕过边缘的地址（如 `*.workers.dev`） |
 | `wrangler deploy` 鉴权失败（401/403） | 检查 `CLOUDFLARE_API_TOKEN` 权限与 `CLOUDFLARE_ACCOUNT_ID`；token 是否过期 |
@@ -328,8 +353,8 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 | 后台接口 401 | Access 模式：`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` 必须成对且 AUD 来自 API 应用；令牌模式：`x-admin-token` 与 Worker 的 `ADMIN_TOKEN` 一致 |
 | 后台接口 503 | Worker 既没配 Access 也没配 `ADMIN_TOKEN`：把 `ADMIN_TOKEN` 配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
 | Bangumi 同步提示 `not_configured` | Worker secrets 缺 `BANGUMI_ACCESS_TOKEN`/`BANGUMI_USERNAME`：配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
-| 图片 404 / 上传后看不到 | 检查 `R2_BUCKET` 变量与真实 bucket 名一致；`GET /media/<key>` 会先查 R2、再回退 `public/assets` |
-| RSS/绝对链接域名不对 | 改 `apps/web/astro.config.mjs` 的 `site` 后重新构建部署；Worker 变量 `SITE_URL` 目前代码里没有读取 |
+| 图片 404 / 上传后看不到 | 媒体只从 R2 读：检查 `R2_BUCKET` 变量与真实 bucket 名一致、对象 key 是否正确；仓库里没有 `public/assets` 图片回退。管理后台 `/admin/media` 只列出 R2 对象 |
+| RSS/绝对链接域名不对 | 改 `apps/web/astro.config.mjs` 的 `site` 后重新构建部署；RSS 标题/描述取自 KV 里的站点设置 |
 | 本地 `wrangler` 命令报配置缺失 | 先 `pnpm wrangler:config`；`wrangler.jsonc` 是生成文件，不入库 |
 | wrangler 版本不一致/命令找不到 | 用仓库脚本（`pnpm ...`）而不是全局 `npx wrangler`；先 `pnpm install`，版本由 `pnpm-lock.yaml` 固定 |
 | 生成配置文件出现在 `git status` | 不应提交。仓库根 `.gitignore` 已忽略 `apps/web/wrangler.jsonc`；若该文件被历史提交跟踪，用 `git rm --cached apps/web/wrangler.jsonc` 停止跟踪 |

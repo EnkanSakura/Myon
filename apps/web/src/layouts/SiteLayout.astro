@@ -3,23 +3,31 @@
  * 主站内页壳：head（字体 / 主题 / v2.css）+ 顶栏 + 浮动底栏 + 共用脚本。
  * 首页是七页翻页结构，单独写在 `pages/index.astro`，不走这个壳。
  *
+ * head-title 统一由页面名 + 站点名/副标题拼成（见 @myon/shared 的 formatPageTitle），
+ * head-description 统一取站点描述；页面不再各写一份。
+ *
  * 页面特有样式放 `public/css/pages/<name>.css`，通过 `head` slot 在 v2.css
  * 之后引入，保证覆盖顺序；页面脚本同理放 `public/js/pages/<name>.js`。
  */
-import { defaultSiteSettings, toPublicSiteSettings } from '@myon/shared';
+import {
+  defaultSiteSettings,
+  formatPageTitle,
+  toPublicSiteSettings,
+} from '@myon/shared';
 import SiteBar from '../components/SiteBar.astro';
 import ThemeTokens from '../components/ThemeTokens.astro';
 
 interface Props {
+  /** 页面名，例如「工具」「首页」；完整标题由布局拼。 */
   title: string;
-  description: string;
   sticker: string;
   active?: 'articles' | 'moments' | 'gallery' | 'bangumi' | 'tools' | null;
 }
 
-const { title, description, sticker, active = null } = Astro.props;
+const { title, sticker, active = null } = Astro.props;
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
+const pageTitle = formatPageTitle(title, site);
 
 const nav = [
   { id: 'articles', href: '/articles', label: '文章' },
@@ -35,10 +43,10 @@ const nav = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
+    <title>{pageTitle}</title>
+    <meta name="description" content={site.description} />
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <link rel="alternate" type="application/rss+xml" title="Myon · RSS" href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title={`${site.name} · RSS`} href="/rss.xml" />
     <script is:inline>
       try {
         var t = localStorage.getItem('myon-theme');
@@ -53,8 +61,8 @@ const nav = [
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Myon 首页">
-        <b>MYON</b><span>同人志 / 2026</span>
+      <a class="brand" href="/" aria-label={`${site.name} 首页`}>
+        <b>{site.name.toUpperCase()}</b><span>{site.subtitle} / {new Date().getFullYear()}</span>
       </a>
       <nav class="nav" aria-label="主导航">
         {

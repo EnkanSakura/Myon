@@ -64,18 +64,32 @@ export const bangumiShows = sqliteTable('bangumi_shows', {
   updatedAt: text('updated_at').notNull(),
 });
 
-export const media = sqliteTable('media', {
+/** 站内工具：前台 /tools 与后台 /admin/tools 共用。 */
+export const tools = sqliteTable('tools', {
   id: text('id').primaryKey(),
-  key: text('key').notNull().unique(),
-  filename: text('filename').notNull(),
-  mime: text('mime').notNull(),
-  size: integer('size').notNull().default(0),
-  width: integer('width'),
-  height: integer('height'),
+  /** 前台工具页地址：/tools/<slug>。 */
+  slug: text('slug').notNull().unique(),
+  /** 内置工作台 key（ts/img/md/...）；自定义链接工具为 NULL。 */
+  toolKey: text('tool_key'),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  kind: text('kind').notNull().default(''),
+  keywords: text('keywords').notNull().default(''),
+  /** 自定义工具的目标地址；内置工具为 NULL。 */
+  href: text('href'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  position: integer('position').notNull().default(0),
   createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
 });
 
-export const settings = sqliteTable('settings', {
-  key: text('key').primaryKey(),
-  value: text('value').notNull(),
+/** 页面访问明细：Worker 入口按天写入，后台总览聚合最近 30 天。 */
+export const pageViews = sqliteTable('page_views', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** YYYY-MM-DD（Asia/Shanghai，UTC+8）。 */
+  day: text('day').notNull(),
+  /** 当天有效的访客指纹（IP + UA 的 SHA-256 截断），只用于去重 UV。 */
+  visitor: text('visitor').notNull(),
+  path: text('path').notNull().default(''),
+  createdAt: text('created_at').notNull(),
 });

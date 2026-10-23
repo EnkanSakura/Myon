@@ -51,8 +51,7 @@ const charCount = post
 ---
 
 <SiteLayout
-  title={post ? `${post.title} · Myon 同人志` : '文章不存在 · Myon 同人志'}
-  description={post?.excerpt ?? '这篇文章不存在或还没发布。'}
+  title={post ? post.title : '文章不存在'}
   active="articles"
   sticker="PAGE 02 / 07 · 文章"
 >

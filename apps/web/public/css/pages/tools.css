@@ -1,39 +1,39 @@
 /* ==========================================================================
-   06 工具 —— 部室抽屉。左边八个抽屉，右边是拉开的那一格。
-   页面特有样式，只作用于本页。
+   06 工具 —— /tools 索引与 /tools/<slug> 单工具页共用。
+   索引是部室抽屉的目录；单页是拉开的那一格（工作台 / 规格说明）。
+   页面特有样式，只作用于这两页。
    ========================================================================== */
 
 /* 页头：几何与统计条由 v2.css 统一提供；本页只保留导读宽度 */
 .room-head .sub{max-width:700px}
 .stat-box .v--word{font-family:var(--sans);font-size:16px;font-weight:900;letter-spacing:.02em;line-height:1.35;display:block;padding:2px 0}
 
-/* ---------- 两栏 ---------- */
-.tools-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:34px;align-items:start;margin-top:22px}
-
-/* ---------- 左：工具索引 ---------- */
-.index .index-in{padding:26px 14px 14px}
-.index-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+/* ---------- 索引：目录 ---------- */
+.tools-index{margin-top:22px}
+.index .index-in{padding:26px 22px 14px}
+.index-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .index-head .idx-title{font-size:13px;font-weight:900;letter-spacing:.02em}
 .index-head .mono{font-size:10px;letter-spacing:.1em;color:var(--ink-62)}
 .index-head .mono b{font-family:var(--disp);font-size:12px;letter-spacing:0;color:var(--ink)}
-.search{position:relative}
+.search{position:relative;max-width:420px}
 .search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-62);pointer-events:none}
 .search input{width:100%;height:40px;padding:0 12px 0 38px;font-size:14px;font-weight:700;letter-spacing:.02em}
 .search input::-webkit-search-cancel-button{-webkit-appearance:none}
-.tool-list{margin-top:12px;border-top:2px solid var(--ink)}
+.tool-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:34px;margin-top:12px;border-top:2px solid var(--ink)}
 .tool{position:relative;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;
-  width:100%;height:44px;padding:0 7px;border-bottom:2px solid var(--line-2);text-align:left;
+  width:100%;height:56px;padding:0 7px;border-bottom:2px solid var(--line-2);text-align:left;
+  background:none;color:inherit;font:inherit;text-decoration:none;cursor:pointer;
   transition:background .14s var(--ease),padding .14s var(--ease)}
 .tool:hover{background:var(--pink-wash);padding-left:11px}
 .tool:focus-visible{outline:3px solid var(--pink-deep);outline-offset:-3px}
 .tool .tno{font-family:var(--disp);font-size:12px;line-height:1;color:var(--ink-62)}
+.tool .tbody{min-width:0}
 .tool .tname{display:block;font-size:14px;font-weight:900;line-height:1.2;letter-spacing:-.01em}
 .tool .tdesc{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.01em;color:var(--ink-62);margin-top:1px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tool .tcount{font-family:var(--disp);font-size:12px;line-height:1;color:var(--ink-62)}
-.tool[aria-current="true"]{background:var(--pink);box-shadow:inset 0 0 0 2px var(--shade);padding-left:9px}
-.tool[aria-current="true"] .tno,.tool[aria-current="true"] .tcount{color:var(--on-pink)}
-.tool[aria-current="true"] .tdesc{color:color-mix(in srgb, var(--on-pink) 80%, transparent)}
+.tool .tkind{justify-self:end;max-width:200px;font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--ink-62);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool:hover .tkind{color:var(--ink-80)}
 .tool[hidden]{display:none}
 .index-foot{display:flex;justify-content:space-between;gap:10px;margin-top:10px;
   font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62)}
@@ -44,16 +44,31 @@
 .clear-btn{margin-top:9px;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;
   letter-spacing:.12em;font-weight:500;border-bottom:2px solid var(--ink);padding-bottom:2px}
 .clear-btn:hover{color:var(--pink-deep);border-color:var(--pink-deep)}
+.index-empty{margin-top:12px;border:2px solid var(--ink);background:var(--paper-2);padding:12px 12px 13px}
+.index-empty p{font-size:13px;font-weight:700;line-height:1.6;color:var(--ink-80)}
+.index-empty .index-empty-note{margin-top:4px;font-family:var(--mono);font-size:10px;font-weight:400;
+  letter-spacing:.02em;line-height:1.7;color:var(--ink-62)}
+.index-empty .arrow-link{margin-top:12px}
 
-/* ---------- 右：工作台 ---------- */
+/* ---------- 单工具页 ---------- */
+.tool-back{flex:none}
+.tool-head .room-kicker{flex-wrap:wrap;row-gap:8px}
+.tool-head .sticker{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tool-bench{margin-top:22px}
 .bench .bench-in{padding:24px 24px 18px}
-.bench-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
-.bench-head .bk{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62);display:block;margin-bottom:7px}
-.bench-head h2{font-size:clamp(28px,3vw,38px);line-height:1.1;letter-spacing:-.02em}
-.bench-stamp{flex:none;transform:rotate(2deg)}
-.bench-stamp .sticker{font-size:10px;padding:4px 8px 3px}
-.bench-desc{margin-top:10px;font-size:14px;line-height:1.8;color:var(--ink-62);max-width:640px}
+.bench-cap{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding-bottom:10px;border-bottom:2px solid var(--ink)}
+.bench-cap .bk{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62)}
+.bench-cap .mono{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--ink-62);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bench-body{margin-top:18px}
+.bench-empty{max-width:640px;border:2px solid var(--ink);background:var(--paper-2);box-shadow:var(--hard-sm);padding:22px 20px 20px}
+.bench-empty .sticker{font-size:10px;padding:4px 8px 3px}
+.bench-empty h1{margin-top:14px;font-size:clamp(30px,4vw,44px);line-height:1.15}
+.bench-empty h2,.bench-empty h3{margin-top:14px;font-size:22px;line-height:1.35}
+.bench-empty p{margin-top:9px;font-size:14px;line-height:1.8;color:var(--ink-62);max-width:56ch}
+.bench-empty .arrow-link{margin-top:14px}
+.tools-missing{margin-top:22px}
 
 /* 表单 */
 .form-row{display:grid;grid-template-columns:minmax(0,1fr) 164px 164px;gap:14px;align-items:end}
@@ -83,7 +98,7 @@
 .res-time.is-empty{color:var(--ink-62)}
 .res-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;
   font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink-62)}
-.res-foot .sep{color:var(--ink-25)}
+.res-foot .sep{color:var(--ink-62)}
 
 /* 动作 */
 .bench-actions{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
@@ -94,7 +109,6 @@
   padding:4px 10px 3px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink)}
 
 /* 其余七格：抽屉规格页 */
-.altpanel[hidden],.panel-ts[hidden]{display:none}
 .spec{border-top:3px solid var(--ink)}
 .spec .sr{display:grid;grid-template-columns:132px minmax(0,1fr);gap:16px;align-items:baseline;
   padding:11px 2px;border-bottom:2px solid var(--line-2)}
@@ -108,22 +122,20 @@
 .tools-note{margin-top:16px;padding-top:12px;border-top:2px solid var(--ink);
   font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ink-62);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tools-note i{display:block;width:22px;height:3px;background:var(--pink);border:1px solid var(--ink);flex:none}
-.foot .colophon{color:color-mix(in srgb, var(--paper) 70%, transparent)}
-.foot p.foot-state{max-width:none}
 .mbr{display:none}
 
 /* ---------- 响应式 ---------- */
 @media (max-width:1100px){
   .room-head{padding-top:calc(var(--topbar-h) + 22px);padding-bottom:20px}
   .room-head .chapter{font-size:104px;opacity:.22}
-  .tools-layout{grid-template-columns:286px minmax(0,1fr);gap:24px}
-  .form-row{grid-template-columns:minmax(0,1fr) 148px 148px;gap:12px}
+  .index .index-in{padding:24px 18px 12px}
+  .tool-list{column-gap:24px}
+  .tool .tkind{max-width:170px}
   .bench .bench-in{padding:20px 20px 18px}
+  .form-row{grid-template-columns:minmax(0,1fr) 148px 148px;gap:12px}
   .res-time{font-size:clamp(20px,2.9vw,34px)}
 }
 @media (max-width:760px){
-  .page-sticker{font-size:10px;letter-spacing:.06em;padding:4px 6px}
-  .topmeta{display:none}
   .mbr{display:inline}
   .room-head{padding-top:calc(var(--topbar-h) + 14px);padding-bottom:18px}
   .room-head .chapter{font-size:84px;top:calc(var(--topbar-h) + 2px);opacity:.18}
@@ -131,12 +143,19 @@
   .stat-box{min-width:0;padding:7px 9px 6px}
   .stat-box .k{font-size:10px}
   .stat-box .v{font-size:19px}
-  .tools-layout{grid-template-columns:1fr;gap:22px;margin-top:18px}
+  .tools-index,.tool-bench,.tools-missing{margin-top:18px}
   .index .index-in{padding:22px 12px 12px}
-  .tool{height:50px}
+  .search{max-width:none}
+  .tool-list{grid-template-columns:1fr;column-gap:0}
+  .tool{grid-template-columns:28px minmax(0,1fr);grid-template-areas:"no body" ". kind";
+    align-items:start;height:auto;padding:10px 7px}
+  .tool:hover{padding-left:11px}
+  .tool .tno{grid-area:no;margin-top:2px}
+  .tool .tbody{grid-area:body}
+  .tool .tkind{grid-area:kind;justify-self:start;max-width:100%;margin-top:3px}
   .bench .bench-in{padding:22px 14px 16px}
-  .bench-stamp{display:none}
-  .bench-desc{font-size:14px}
+  .bench-empty{padding:18px 14px 16px}
+  .bench-empty h2,.bench-empty h3{font-size:20px}
   .form-row{grid-template-columns:1fr;gap:12px}
   .field .input{height:48px;font-size:17px}
   .seg,.selwrap select{height:48px}

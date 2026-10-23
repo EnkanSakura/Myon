@@ -220,7 +220,7 @@ test.describe('后台媒体上传', () => {
       expect(await removed.json()).toEqual({ ok: true });
       deleted = true;
 
-      // R2 里的对象随记录一起删掉，出口应回到 404
+      // 删除只作用于 R2 对象，出口应回到 404
       const gone = await request.get(`/media/${key}`);
       expect(gone.status()).toBe(404);
     } finally {
@@ -245,6 +245,87 @@ test.describe('后台 Bangumi 同步', () => {
       if (body.reason !== undefined) expect(body.reason).toBe('not_configured');
     } else {
       expect(body.reason).toBeTruthy();
+    }
+  });
+});
+
+test.describe('后台工具 CRUD', () => {
+  test('新增工具 → 列表可见 → 启停 → 删除', async ({ request }) => {
+    const name = `E2E 临时工具 ${uniqueSuffix()}`;
+    const slug = `e2e-tool-${Date.now().toString(36)}`;
+    let id: string | undefined;
+    let deleted = false;
+
+    try {
+      const created = await request.post('/api/v1/admin/tools', {
+        headers: ADMIN_HEADERS,
+        data: {
+          slug,
+          name,
+          description: '由 e2e 创建，用例结束会删除。',
+          position: 999,
+        },
+      });
+      expect(created.status()).toBe(201);
+      const createdBody = (await created.json()) as {
+        item: {
+          id: string;
+          slug: string;
+          name: string;
+          enabled: boolean;
+          toolKey: string | null;
+        };
+      };
+      id = createdBody.item.id;
+      expect(createdBody.item.slug).toBe(slug);
+      expect(createdBody.item.name).toBe(name);
+      expect(createdBody.item.enabled).toBe(true);
+      expect(createdBody.item.toolKey).toBeNull();
+
+      const listed = await request.get('/api/v1/admin/tools', {
+        headers: ADMIN_HEADERS,
+      });
+      expect(listed.status()).toBe(200);
+      const listedBody = (await listed.json()) as {
+        items: { id: string }[];
+        total: number;
+      };
+      expect(listedBody.items.some((item) => item.id === id)).toBe(true);
+
+      const patched = await request.patch(`/api/v1/admin/tools/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { enabled: false, name: `${name}（改）` },
+      });
+      expect(patched.status()).toBe(200);
+      const patchedBody = (await patched.json()) as {
+        item: { name: string; enabled: boolean };
+      };
+      expect(patchedBody.item.enabled).toBe(false);
+      expect(patchedBody.item.name).toContain('（改）');
+
+      // 停用后不应出现在前台工具列表
+      const publicRes = await request.get('/api/v1/tools');
+      expect(publicRes.status()).toBe(200);
+      const publicBody = (await publicRes.json()) as {
+        items: { id: string }[];
+      };
+      expect(publicBody.items.some((item) => item.id === id)).toBe(false);
+
+      const removed = await request.delete(`/api/v1/admin/tools/${id}`, {
+        headers: ADMIN_HEADERS,
+      });
+      expect(removed.status()).toBe(200);
+      expect(await removed.json()).toEqual({ ok: true });
+      deleted = true;
+
+      const after = await request.get('/api/v1/admin/tools', {
+        headers: ADMIN_HEADERS,
+      });
+      const afterBody = (await after.json()) as { items: { id: string }[] };
+      expect(afterBody.items.some((item) => item.id === id)).toBe(false);
+    } finally {
+      if (id && !deleted)
+        await deleteQuietly(request, `/api/v1/admin/tools/${id}`);
     }
   });
 });

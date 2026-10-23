@@ -34,7 +34,6 @@
   var weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
   function showTip(hit) {
-    var i = parseInt(hit.dataset.i, 10);
     var x = parseFloat(hit.dataset.x);
     var y = parseFloat(hit.dataset.y);
     hGuide.setAttribute("x1", x);
@@ -44,7 +43,10 @@
     hDot.setAttribute("cy", y);
     hDot.setAttribute("opacity", "1");
 
-    tipDate.textContent = hit.dataset.d + " · " + weekdays[i % 7];
+    // 星期由服务端按真实日期算好写在 data-w（0 = 周一），不要按序号取模。
+    var w = parseInt(hit.dataset.w, 10);
+    tipDate.textContent =
+      hit.dataset.d + " · " + (weekdays[w] || weekdays[0]);
     tipPv.textContent = Number(hit.dataset.pv).toLocaleString("en-US");
     tipUv.textContent = Number(hit.dataset.uv).toLocaleString("en-US");
     tip.hidden = false;

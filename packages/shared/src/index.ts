@@ -5,6 +5,7 @@ import { z } from 'zod';
 export * from './admin';
 export * from './icons';
 export * from './settings';
+export * from './tools';
 
 export const postStatusSchema = z.enum(['draft', 'published', 'archived']);
 export type PostStatus = z.infer<typeof postStatusSchema>;
@@ -105,7 +106,10 @@ export interface SiteStats {
   moments: { total: number };
   gallery: { total: number; displayed: number; categories: CategoryCount[] };
   bangumi: { total: number; watching: number };
+  /** 媒体库文件数（实时统计 R2 对象）。 */
   media: { total: number };
+  /** 站内工具数量：后台侧栏计数用。 */
+  tools: { total: number; enabled: number };
   categories: CategoriesResponse;
 }
 

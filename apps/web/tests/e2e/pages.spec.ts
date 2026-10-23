@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-// 七个前台房间 + 九个后台页面的路由覆盖。
+// 前台房间、工具页与九个后台页面的路由覆盖。
 const routes = [
   { path: '/', heading: '灯下的一格' },
   { path: '/articles', heading: '文章' },
@@ -8,6 +8,7 @@ const routes = [
   { path: '/gallery', heading: '展柜' },
   { path: '/bangumi', heading: '追番' },
   { path: '/tools', heading: '工具' },
+  { path: '/tools/timestamp', heading: '时间戳转换' },
   { path: '/admin', heading: '总览' },
   { path: '/admin/articles', heading: '文章' },
   { path: '/admin/moments', heading: '动态' },

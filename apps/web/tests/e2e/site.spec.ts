@@ -77,4 +77,37 @@ test.describe('站点配置与订阅', () => {
     expect(body.settings.themeColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
     expect(body.settings.footerRss).toBeTruthy();
   });
+
+  test('head-title 与 head-description 来自站点设置', async ({
+    page,
+    request,
+  }) => {
+    const res = await request.get('/api/v1/site');
+    expect(res.status()).toBe(200);
+    const { settings } = (await res.json()) as {
+      settings: {
+        name: string;
+        subtitle: string;
+        description: string;
+      };
+    };
+    const expectedTitle = [settings.name, settings.subtitle]
+      .filter(Boolean)
+      .join(' ');
+
+    await page.goto('/articles');
+    await expect(page).toHaveTitle('文章 · ' + expectedTitle);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+      'content',
+      settings.description,
+    );
+
+    // 首页也是同一套规则
+    await page.goto('/');
+    await expect(page).toHaveTitle('首页 · ' + expectedTitle);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+      'content',
+      settings.description,
+    );
+  });
 });

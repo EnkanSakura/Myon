@@ -6,7 +6,8 @@
     ".": "./src/app.ts",
     "./types": "./src/types.ts",
     "./bangumi": "./src/bangumi.ts",
-    "./media": "./src/media.ts"
+    "./media": "./src/media.ts",
+    "./traffic": "./src/traffic.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

@@ -475,7 +475,7 @@
         empty.hidden = false;
         emptyReset.hidden = false;
         emptyReset.textContent = "重新读取";
-        emptyText.textContent = "读取失败：" + (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与本地 D1 是否在运行。";
+        emptyText.textContent = "读取失败：" + (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与 R2 绑定是否正常。";
         toast("读取失败 · 请稍后重试");
       });
   }
@@ -485,7 +485,7 @@
     if (!items.length) return;
     state.pendingDelete = items.slice();
     delDlgText.textContent = items.length === 1
-      ? "删除 " + (items[0].filename || items[0].key) + "？R2 对象和 D1 记录会一起删除，引用它的图片会失效。"
+      ? "删除 " + (items[0].filename || items[0].key) + "？R2 对象会被删除，引用它的图片会失效。"
       : "删除选中的 " + items.length + " 个文件？R2 对象和 D1 记录会一起删除。";
     if (typeof delDlg.showModal === "function") delDlg.showModal();
   }

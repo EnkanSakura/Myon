@@ -1,0 +1,242 @@
+---
+// 单个工具页：/tools/<slug>。工具列表与索引同源（GET /api/v1/tools，只含启用项）。
+// 内置工具渲染对应工作台；自定义链接工具在服务端 302 到后台登记的 href。
+// 样式：public/css/pages/tools.css；脚本：public/js/pages/tool.js（只负责时间戳换算）
+import { env } from 'cloudflare:workers';
+import app from '@myon/back';
+import type { AppBindings } from '@myon/back/types';
+import type { BuiltinToolKey, ToolItem, ToolListResponse } from '@myon/shared';
+import SiteLayout from '../../layouts/SiteLayout.astro';
+
+const { slug = '' } = Astro.params;
+const bindings = env as unknown as AppBindings;
+
+let items: ToolItem[] = [];
+try {
+  const toolsRes = await app.request('/api/v1/tools', {}, bindings);
+  if (toolsRes.ok) {
+    const body = (await toolsRes.json()) as ToolListResponse;
+    items = body.items ?? [];
+  } else {
+    console.error('tool 取数失败', toolsRes.status);
+  }
+} catch (error) {
+  // 取数失败也按“找不到”处理：给出空态，不白屏。
+  console.error('tool 页面取数异常', error);
+}
+
+const item = items.find((tool) => tool.slug === slug) ?? null;
+if (!item) Astro.response.status = 404;
+// 自定义链接工具没有工作台：直接跳到维护者登记的地址。
+if (item && item.toolKey === null && item.href) {
+  return Astro.redirect(item.href, 302);
+}
+
+const index = item ? items.findIndex((tool) => tool.id === item.id) : -1;
+const no = index >= 0 ? String(index + 1).padStart(2, '0') : '—';
+const total = items.length;
+
+/** 内置工具页的“规格说明”，沿用旧 /tools 右侧抽屉的文案。 */
+interface ToolSpec {
+  rows: { key: string; value: string }[];
+  note?: string;
+  drawer: string;
+  link?: { href: string; label: string };
+}
+
+const specs: Partial<Record<BuiltinToolKey, ToolSpec>> = {
+  img: {
+    rows: [
+      { key: '输入 / IN', value: '一张图片（本机文件）' },
+      { key: '输出 / OUT', value: 'WebP 或 AVIF · 尺寸按原图压' },
+      { key: '去向 / PLACE', value: '直接写进 R2 · 原图不上传' },
+    ],
+    note: '「压完直接进 R2，中间不经过别人的服务器。」',
+    drawer: 'DRAWER 02',
+  },
+  md: {
+    rows: [
+      { key: '输入 / IN', value: '一段 Markdown 文本' },
+      { key: '输出 / OUT', value: '即时预览 · 标题 / 列表 / 引用 / 代码' },
+      { key: '运行 / RUN', value: '浏览器内 · 不联网' },
+    ],
+    note: '「写动态之前，先在这里过一眼错字。」',
+    drawer: 'DRAWER 03',
+  },
+  color: {
+    rows: [
+      { key: '输入 / IN', value: '一个源色 · HEX 六位' },
+      { key: '输出 / OUT', value: '五格色板 · 深浅按比例递进' },
+      { key: '运行 / RUN', value: '浏览器内 · 不联网' },
+    ],
+    note: '「从一张图里取五色，是它最初的用法。」',
+    drawer: 'DRAWER 04',
+  },
+  bgm: {
+    rows: [
+      { key: '输入 / IN', value: '本季放送表 · 来自 Bangumi' },
+      { key: '输出 / OUT', value: '七天时刻表 · 今天粉色' },
+      { key: '缓存 / CACHE', value: 'D1 里一份 · 每 6 小时同步' },
+    ],
+    drawer: 'DRAWER 05',
+    link: { href: '/bangumi', label: '去 05 追番看完整时刻表' },
+  },
+  json: {
+    rows: [
+      { key: '输入 / IN', value: '一段 JSON 文本' },
+      { key: '输出 / OUT', value: '两格缩进 · 键序不变' },
+      { key: '运行 / RUN', value: '浏览器内 · 不上传' },
+    ],
+    note: '「先备份，再按格式化。」',
+    drawer: 'DRAWER 06',
+  },
+  redirect: {
+    rows: [
+      { key: '输入 / IN', value: '旧域名地址 · 任意深链' },
+      { key: '输出 / OUT', value: '301 到 myon.studio 的对应路径' },
+      { key: '规则 / RULE', value: '保留路径与查询参数' },
+    ],
+    note: '「旧链接别断，访客会记得。」',
+    drawer: 'DRAWER 07',
+  },
+  short: {
+    rows: [
+      { key: '输入 / IN', value: '一条长链接' },
+      { key: '输出 / OUT', value: '四字短码 · myon.studio/s/····' },
+      { key: '记录 / LOG', value: '跳转存在 D1 · 同链复用一码' },
+    ],
+    note: '「分享之前先缩一下，看着清爽。」',
+    drawer: 'DRAWER 08',
+  },
+};
+
+const spec = item?.toolKey ? (specs[item.toolKey] ?? null) : null;
+const pageTitle = item ? item.name : '工具不存在';
+---
+
+<SiteLayout title={pageTitle} sticker="PAGE 06 / 07 · 工具" active="tools">
+  <Fragment slot="head">
+    <link rel="stylesheet" href="/css/pages/tools.css" />
+  </Fragment>
+
+  <main class="room">
+    <div class="wrap">
+
+      {
+        item ? (
+          <>
+            <header class="room-head tool-head">
+              <div>
+                <div class="room-kicker">
+                  <a class="arrow-link tool-back" href="/tools">← 返回工具索引</a>
+                  <span class="sticker sticker--paper" title={item.kind}>{item.kind || 'TOOL'}</span>
+                </div>
+                <h1>{item.name}<span class="hl">。</span></h1>
+                <p class="sub">{item.description || '这个工具还没有写说明。'}</p>
+              </div>
+              <div class="room-stats">
+                <div class="stat-box is-pink"><span class="k">编号 / NO</span><span class="v">{no}</span></div>
+                <div class="stat-box"><span class="k">工具总数 / TOOLS</span><span class="v">{total}<small>件</small></span></div>
+              </div>
+              <span class="chapter" aria-hidden="true">06</span>
+            </header>
+
+            <section class="panel-box bench tool-bench" aria-label={`${item.name} 工作台`}>
+              <span class="panel-tab">TOOL {no}</span>
+              <div class="bench-in">
+                <div class="bench-cap">
+                  <span class="bk">{item.toolKey === 'ts' ? 'WORKBENCH / 工作台' : 'SPEC / 规格说明'}</span>
+                  <span class="mono">/tools/{item.slug}</span>
+                </div>
+
+                <div class="bench-body">
+                  {item.toolKey === 'ts' ? (
+                    <div class="panel-ts" id="panel-ts">
+                      <div class="form-row">
+                        <label class="field">
+                          <span class="flabel">时间戳 / TIMESTAMP</span>
+                          <input class="input" id="tsInput" type="text" inputmode="numeric" value="1790856000" autocomplete="off" spellcheck="false" aria-label="Unix 时间戳" />
+                        </label>
+                        <div class="field">
+                          <span class="flabel" id="unitLabel">单位 / UNIT</span>
+                          <div class="seg" role="group" aria-labelledby="unitLabel">
+                            <button class="seg-btn is-on" type="button" data-unit="s" aria-pressed="true">秒</button>
+                            <button class="seg-btn" type="button" data-unit="ms" aria-pressed="false">毫秒</button>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label class="flabel" for="tzSel">时区 / ZONE</label>
+                          <div class="selwrap">
+                            <select id="tzSel">
+                              <option value="8" selected>UTC+8</option>
+                              <option value="0">UTC+0</option>
+                              <option value="9">UTC+9</option>
+                              <option value="-5">UTC−5</option>
+                            </select>
+                            <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="result">
+                        <div class="res-cap"><span class="sticker">RESULT</span><span class="mono" id="resZone">本地时间 UTC+8</span></div>
+                        <div class="res-time" id="resTime">2026-10-01 20:00:00</div>
+                        <div class="res-foot"><span id="resWeek">星期四</span><span class="sep" aria-hidden="true">/</span><span id="resEpoch">Unix 1790856000</span></div>
+                      </div>
+
+                      <div class="bench-actions">
+                        <button class="btn btn--pink" type="button" id="copyBtn">复制结果 <span class="ar" aria-hidden="true">↗</span></button>
+                        <button class="btn" type="button" id="shuffleBtn">换一个 <span class="ar" aria-hidden="true">↻</span></button>
+                      </div>
+                      <div class="copy-note" id="copyNote" role="status" aria-live="polite"></div>
+                    </div>
+                  ) : spec ? (
+                    <>
+                      <div class="spec">
+                        {spec.rows.map((row) => (
+                          <div class="sr"><span class="sk">{row.key}</span><span class="sv">{row.value}</span></div>
+                        ))}
+                      </div>
+                      <div class="alt-foot">
+                        {spec.link ? (
+                          <a class="arrow-link" href={spec.link.href}>{spec.link.label} <span class="ar" aria-hidden="true">→</span></a>
+                        ) : (
+                          <p class="kai-note">{spec.note}</p>
+                        )}
+                        <span class="sticker sticker--paper">{spec.drawer}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div class="bench-empty">
+                      <span class="sticker sticker--paper">NO LINK / 未配置</span>
+                      <h2>这个工具还没有打开地址<span class="hl">。</span></h2>
+                      <p>在后台「工具」里填上链接后，打开这个地址会直接跳转过去。</p>
+                      <a class="arrow-link" href="/admin/tools">去后台补上 <span class="ar" aria-hidden="true">→</span></a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <p class="tools-note"><i aria-hidden="true"></i>页面由 Workers 送达 · 换算在浏览器完成</p>
+          </>
+        ) : (
+          <section class="panel-box bench tools-missing" aria-label="工具不存在">
+            <span class="panel-tab">404 / TOOL</span>
+            <div class="bench-in">
+              <div class="bench-empty">
+                <span class="sticker sticker--paper">NO DRAWER / 空台</span>
+                <h1>工具不存在<span class="hl">。</span></h1>
+                <p>这个地址没有对应的工具；可能已经删掉、改了 slug，或者还没有启用。</p>
+                <a class="arrow-link" href="/tools">返回工具索引 <span class="ar" aria-hidden="true">→</span></a>
+              </div>
+            </div>
+          </section>
+        )
+      }
+
+    </div>
+  </main>
+
+  <script is:inline src="/js/pages/tool.js"></script>
+</SiteLayout>

@@ -14,5 +14,8 @@ export default defineConfig({
   adapter: cloudflare({
     // 构建期处理图片，避免依赖 Cloudflare Images 绑定
     imageService: 'compile',
+    // 站点设置与 Astro 的 session 共用同一个 KV 命名空间（绑定名 SETTINGS），
+    // 否则适配器会自动注入一个没有 id 的 SESSION 绑定，生产部署会失败。
+    sessionKVBindingName: 'SETTINGS',
   }),
 });

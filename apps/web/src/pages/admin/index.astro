@@ -1,32 +1,228 @@
 ---
-// 迁移自 design 分支 design/site/admin.html
-// 样式：public(无)；脚本：public/js/pages/admin.js
+// 后台总览：内容指标与访问曲线来自 /api/v1/stats、/api/v1/traffic（进程内取数）。
+// 样式：public/css/admin.css；脚本：public/js/pages/admin.js
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { SiteStats } from '@myon/shared';
+import type { SiteStats, TrafficDay, TrafficSummary } from '@myon/shared';
+import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 
-// 总览只做统计：内容数量走 /api/v1/stats。
-const statsRes = await app.request(
-  '/api/v1/stats',
-  {},
-  env as unknown as AppBindings,
-);
-const stats: SiteStats | null = statsRes.ok
-  ? ((await statsRes.json()) as SiteStats)
-  : null;
+const bindings = env as unknown as AppBindings;
 
+/** 单个接口失败不该带崩整页：返回 null，渲染时降级成 0 值 / —。 */
+async function readApi<T>(path: string): Promise<T | null> {
+  try {
+    const response = await app.request(path, {}, bindings);
+    if (!response.ok) {
+      console.error(`读取 ${path} 失败：HTTP ${response.status}`);
+      return null;
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error(`读取 ${path} 失败`, error);
+    return null;
+  }
+}
+
+const [stats, traffic] = await Promise.all([
+  readApi<SiteStats>(`${apiBasePath}/stats`),
+  readApi<TrafficSummary>(`${apiBasePath}/traffic`),
+]);
+
+/* ---------------- 内容计数 ---------------- */
 const posts = stats?.posts ?? { published: 0, draft: 0, words: 0 };
 const moments = stats?.moments ?? { total: 0 };
 const gallery = stats?.gallery ?? { total: 0, displayed: 0, categories: [] };
 const bangumi = stats?.bangumi ?? { total: 0, watching: 0 };
-const media = stats?.media ?? { total: 0 };
 const categories = stats?.categories ?? { posts: [], moments: [] };
+
+/* ---------------- 日期：Asia/Shanghai = UTC+8，无夏令时 ---------------- */
+const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const SHANGHAI_OFFSET = 8 * 60 * 60 * 1000;
+
+/** 把 UTC 时刻换算成北京时间的年月日时分与周几（0 = 周日）。 */
+function shanghaiParts(date: Date) {
+  const shifted = new Date(date.getTime() + SHANGHAI_OFFSET);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    weekday: shifted.getUTCDay(),
+  };
+}
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/** 2026-10-20T01:12:00.000Z → 2026.10.20 09:12；取不到就显示 —。 */
+function formatStamp(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const parts = shanghaiParts(date);
+  return `${parts.year}.${pad2(parts.month)}.${pad2(parts.day)} ${pad2(parts.hour)}:${pad2(parts.minute)}`;
+}
+
+const pageToday = shanghaiParts(new Date());
+const headerDate = `${pageToday.year} 年 ${pageToday.month} 月 ${pageToday.day} 日`;
+const headerWeekday = weekdays[(pageToday.weekday + 6) % 7];
+const lastUpdatedText = formatStamp(stats?.lastUpdated);
+
+/* ---------------- 访问曲线 ---------------- */
+const PLOT = { left: 54, right: 1106, top: 12, bottom: 190 };
+const PLOT_HEIGHT = PLOT.bottom - PLOT.top;
+
+const num = (value: number) => value.toLocaleString('en-US');
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+/** 接口取不到时的兜底：30 个全 0 的天，保证曲线结构完整。 */
+function emptyTraffic(): TrafficSummary {
+  const end = new Date();
+  const fallbackDays: TrafficDay[] = [];
+  for (let index = 29; index >= 0; index -= 1) {
+    const date = new Date(end.getTime() - index * 86_400_000);
+    fallbackDays.push({ date: date.toISOString().slice(0, 10), pv: 0, uv: 0 });
+  }
+  return {
+    days: fallbackDays,
+    totals: { pv: 0, uv: 0 },
+    today: fallbackDays[fallbackDays.length - 1],
+  };
+}
+
+const fallbackTraffic = emptyTraffic();
+const track = traffic && traffic.days.length > 0 ? traffic : fallbackTraffic;
+const days = track.days;
+const totals = track.totals;
+const todayDay = days[days.length - 1];
+
+const dayCount = days.length;
+const stepX = (PLOT.right - PLOT.left) / Math.max(1, dayCount - 1);
+const hitWidth = round1(stepX);
+
+/** 纵轴刻度取 1 / 2 / 5 × 10^k，四个区间，标签一律是整数。 */
+function niceStep(value: number): number {
+  if (!(value > 0)) return 1;
+  const base = 10 ** Math.floor(Math.log10(value));
+  const unit = value / base;
+  for (const candidate of [1, 2, 2.5, 5, 10]) {
+    if (unit <= candidate) {
+      const step = round1(candidate * base);
+      return step >= 1 && Number.isInteger(step)
+        ? step
+        : Math.max(1, Math.ceil(step));
+    }
+  }
+  return Math.ceil(value);
+}
+
+const peakPv = days.reduce((max, day) => Math.max(max, day.pv), 0);
+// 全 0 时给一条 0–20 的空坐标，曲线贴着基线，不会算出 NaN。
+const stepY = peakPv > 0 ? niceStep(peakPv / 4) : 5;
+const yMax = stepY * 4;
+const toY = (value: number) =>
+  round1(
+    PLOT.bottom - (Math.min(Math.max(value, 0), yMax) / yMax) * PLOT_HEIGHT,
+  );
+
+/** YYYY-MM-DD → 0 = 周一 … 6 = 周日（tooltip 用 data-w 取）。 */
+function weekdayOf(date: string): number {
+  const time = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(time)) return 0;
+  return (new Date(time).getUTCDay() + 6) % 7;
+}
+
+const points = days.map((day, index) => {
+  const x = round1(PLOT.left + index * stepX);
+  return {
+    date: day.date,
+    x,
+    pv: day.pv,
+    uv: day.uv,
+    pvY: toY(day.pv),
+    uvY: toY(day.uv),
+    weekday: weekdayOf(day.date),
+    label: day.date.slice(5).replace('-', '.'),
+    hitX: round1(x - stepX / 2),
+  };
+});
+const lastPoint = points[points.length - 1];
+
+const linePath = (key: 'pvY' | 'uvY') =>
+  points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point[key]}`)
+    .join(' ');
+
+const pvPath = linePath('pvY');
+const uvPath = linePath('uvY');
+const washPath = `M${PLOT.left},${PLOT.bottom} ${points
+  .map((point) => `L${point.x},${point.pvY}`)
+  .join(' ')} L${lastPoint.x},${PLOT.bottom} Z`;
+
+// 网格 + 纵轴：4 段等分，最后一条是基线
+const gridLines = [0, 1, 2, 3, 4].map((index) => ({
+  y: round1(PLOT.top + (PLOT_HEIGHT / 4) * index),
+  label: num(yMax - stepY * index),
+  base: index === 4,
+}));
+
+// 横轴 5 个标签：首日、三等分点、今日
+const xLabelIndexes = [
+  ...new Set([
+    0,
+    Math.floor((dayCount - 1) / 4),
+    Math.floor((dayCount - 1) / 2),
+    Math.floor(((dayCount - 1) * 3) / 4),
+    dayCount - 1,
+  ]),
+];
+const xLabels = xLabelIndexes.map((index, order) => ({
+  x: points[index].x,
+  text: points[index].label,
+  anchor:
+    order === 0
+      ? 'start'
+      : order === xLabelIndexes.length - 1
+        ? 'end'
+        : 'middle',
+  today: order === xLabelIndexes.length - 1,
+}));
+
+// 今日贴纸：默认贴在点的上方，顶部放不下时改到下方
+const CARD_W = 112;
+const CARD_H = 46;
+const CARD_X = PLOT.right - 118;
+const cardY =
+  lastPoint.pvY - CARD_H - 10 >= PLOT.top
+    ? lastPoint.pvY - CARD_H - 10
+    : lastPoint.pvY + 10;
+
+const peakIndex = days.reduce(
+  (best, day, index) => (day.pv > days[best].pv ? index : best),
+  0,
+);
+const peakDay = days[peakIndex];
+const peakText =
+  peakPv > 0
+    ? `峰值 ${num(peakPv)} · ${peakDay.date.slice(5).replace('-', '.')} · ${
+        weekdays[weekdayOf(peakDay.date)]
+      }`
+    : '峰值 0 · 暂无访问';
+
+const compactMd = (date: string) =>
+  `${Number(date.slice(5, 7))}.${date.slice(8, 10)}`;
+const monthDay = (date: string) =>
+  `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日`;
+
+const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，PV 合计 ${num(
+  totals.pv,
+)}，UV 合计 ${num(totals.uv)}；今日进行中，累计 ${num(todayDay.pv)} PV。`;
 ---
 
 <AdminLayout
-  title="总览 · Myon 制作进行"
+  title="总览"
   crumb="总览"
   active="overview"
 >
@@ -42,7 +238,7 @@ const categories = stats?.categories ?? { posts: [], moments: [] };
           <span class="sticker sticker--paper">本日进行</span>
         </div>
         <h1>总览<span class="dot">。</span></h1>
-        <p class="pdate">2026 年 10 月 20 日 <span class="sep">·</span> 周二 <span class="sep">·</span> 最后更新 01:12</p>
+        <p class="pdate">{headerDate} <span class="sep">·</span> {headerWeekday} <span class="sep">·</span> 最后更新 {lastUpdatedText}</p>
       </div>
 
       <div class="ph-r">
@@ -97,16 +293,16 @@ const categories = stats?.categories ?? { posts: [], moments: [] };
         <h2 id="h-traffic">访问</h2>
         <span class="sec-en">TRAFFIC / 30D</span>
         <div class="sec-r">
-          <span class="legend"><i class="pv" aria-hidden="true"></i><span class="l-k">PV</span><b class="l-v">24,318</b></span>
-          <span class="legend"><i class="uv" aria-hidden="true"></i><span class="l-k">UV</span><b class="l-v">9,204</b></span>
-          <span class="sec-note">近 30 天 · 示例数据，接 Cloudflare Analytics 后替换</span>
+          <span class="legend"><i class="pv" aria-hidden="true"></i><span class="l-k">PV</span><b class="l-v">{num(totals.pv)}</b></span>
+          <span class="legend"><i class="uv" aria-hidden="true"></i><span class="l-k">UV</span><b class="l-v">{num(totals.uv)}</b></span>
+          <span class="sec-note">近 {dayCount} 天 · 只统计前台页面打开</span>
         </div>
       </div>
 
       <div class="chart-panel" id="chart">
         <svg class="chart-svg" viewBox="0 0 1120 236" role="img" aria-labelledby="chartTitle chartDesc">
-          <title id="chartTitle">近 30 天访问曲线</title>
-          <desc id="chartDesc">9 月 21 日至 10 月 20 日，PV 合计 24,318，UV 合计 9,204；今日进行中，累计 268 PV。</desc>
+          <title id="chartTitle">近 {dayCount} 天访问曲线</title>
+          <desc id="chartDesc">{chartDesc}</desc>
           <defs>
             <pattern id="tone" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(20)">
               <circle class="tone-dot" cx="1.8" cy="1.8" r="1" fill-opacity=".42"></circle>
@@ -114,103 +310,56 @@ const categories = stats?.categories ?? { posts: [], moments: [] };
           </defs>
 
           <g aria-hidden="true">
-            <line class="gl" x1="54" y1="12" x2="1106" y2="12"></line>
-            <line class="gl" x1="54" y1="56.5" x2="1106" y2="56.5"></line>
-            <line class="gl" x1="54" y1="101" x2="1106" y2="101"></line>
-            <line class="gl" x1="54" y1="145.5" x2="1106" y2="145.5"></line>
-            <line class="gl gl--base" x1="54" y1="190" x2="1106" y2="190"></line>
-            <text class="ylab" x="42" y="12" dy=".32em" text-anchor="end">1,000</text>
-            <text class="ylab" x="42" y="56.5" dy=".32em" text-anchor="end">750</text>
-            <text class="ylab" x="42" y="101" dy=".32em" text-anchor="end">500</text>
-            <text class="ylab" x="42" y="145.5" dy=".32em" text-anchor="end">250</text>
-            <text class="ylab" x="42" y="190" dy=".32em" text-anchor="end">0</text>
+            {gridLines.map((line) => (
+              <line class:list={['gl', { 'gl--base': line.base }]} x1={PLOT.left} y1={line.y} x2={PLOT.right} y2={line.y}></line>
+            ))}
+            {gridLines.map((line) => (
+              <text class="ylab" x="42" y={line.y} dy=".32em" text-anchor="end">{line.label}</text>
+            ))}
 
-            <path class="wash" d="M54.0,190 L54.0,50.4 L90.3,39.1 L126.6,64.3 L162.8,77.9 L199.1,30.9 L235.4,19.1 L271.7,24.8 L307.9,57.2 L344.2,46.9 L380.5,72.5 L416.8,91.4 L453.0,33.4 L489.3,15.0 L525.6,22.9 L561.9,53.3 L598.1,37.5 L634.4,59.7 L670.7,75.0 L707.0,27.3 L743.2,12.9 L779.5,17.9 L815.8,45.8 L852.1,33.7 L888.3,55.8 L924.6,67.2 L960.9,23.4 L997.2,12.5 L1033.4,20.2 L1069.7,41.2 L1106.0,142.3 L1106.0,190 Z"></path>
-            <path class="area" d="M54.0,190 L54.0,50.4 L90.3,39.1 L126.6,64.3 L162.8,77.9 L199.1,30.9 L235.4,19.1 L271.7,24.8 L307.9,57.2 L344.2,46.9 L380.5,72.5 L416.8,91.4 L453.0,33.4 L489.3,15.0 L525.6,22.9 L561.9,53.3 L598.1,37.5 L634.4,59.7 L670.7,75.0 L707.0,27.3 L743.2,12.9 L779.5,17.9 L815.8,45.8 L852.1,33.7 L888.3,55.8 L924.6,67.2 L960.9,23.4 L997.2,12.5 L1033.4,20.2 L1069.7,41.2 L1106.0,142.3 L1106.0,190 Z"></path>
-            <path class="uvline" d="M54.0,137.0 L90.3,134.1 L126.6,141.1 L162.8,149.6 L199.1,129.5 L235.4,121.6 L271.7,122.4 L307.9,140.9 L344.2,138.6 L380.5,145.3 L416.8,150.5 L453.0,132.0 L489.3,121.8 L525.6,126.5 L561.9,140.9 L598.1,133.6 L634.4,139.3 L670.7,144.1 L707.0,128.2 L743.2,124.5 L779.5,122.9 L815.8,135.2 L852.1,133.8 L888.3,138.9 L924.6,140.9 L960.9,128.4 L997.2,122.5 L1033.4,123.8 L1069.7,136.4 L1106.0,177.7"></path>
-            <path class="pvline" d="M54.0,50.4 L90.3,39.1 L126.6,64.3 L162.8,77.9 L199.1,30.9 L235.4,19.1 L271.7,24.8 L307.9,57.2 L344.2,46.9 L380.5,72.5 L416.8,91.4 L453.0,33.4 L489.3,15.0 L525.6,22.9 L561.9,53.3 L598.1,37.5 L634.4,59.7 L670.7,75.0 L707.0,27.3 L743.2,12.9 L779.5,17.9 L815.8,45.8 L852.1,33.7 L888.3,55.8 L924.6,67.2 L960.9,23.4 L997.2,12.5 L1033.4,20.2 L1069.7,41.2 L1106.0,142.3"></path>
+            <path class="wash" d={washPath}></path>
+            <path class="area" d={washPath}></path>
+            <path class="uvline" d={uvPath}></path>
+            <path class="pvline" d={pvPath}></path>
 
-            <line class="today-guide" x1="1106" y1="142.3" x2="1106" y2="190"></line>
-            <circle class="today-halo" cx="1106" cy="142.3" r="9"></circle>
-            <circle class="today-dot" cx="1106" cy="142.3" r="4"></circle>
+            <line class="today-guide" x1={PLOT.right} y1={lastPoint.pvY} x2={PLOT.right} y2={PLOT.bottom}></line>
+            <circle class="today-halo" cx={lastPoint.x} cy={lastPoint.pvY} r="9"></circle>
+            <circle class="today-dot" cx={lastPoint.x} cy={lastPoint.pvY} r="4"></circle>
 
-            <rect class="co-shadow" x="992" y="88" width="112" height="46"></rect>
-            <rect class="co-card" x="988" y="84" width="112" height="46"></rect>
-            <text class="co-k" x="998" y="102">今日进行中</text>
-            <text class="co-v" x="998" y="121">268 PV</text>
-            <path class="co-lead" d="M1100,114 L1104,138"></path>
+            <rect class="co-shadow" x={CARD_X + 4} y={cardY + 4} width={CARD_W} height={CARD_H}></rect>
+            <rect class="co-card" x={CARD_X} y={cardY} width={CARD_W} height={CARD_H}></rect>
+            <text class="co-k" x={CARD_X + 10} y={cardY + 18}>今日进行中</text>
+            <text class="co-v" x={CARD_X + 10} y={cardY + 37}>{`${num(todayDay.pv)} PV`}</text>
+            <path class="co-lead" d={`M${CARD_X + CARD_W},${round1(cardY + CARD_H * 0.65)} L${round1(PLOT.right - 2)},${round1(lastPoint.pvY - 3)}`}></path>
 
             <g>
-              <line class="tk" x1="54.0" y1="190" x2="54.0" y2="195"></line>
-              <line class="tk" x1="90.3" y1="190" x2="90.3" y2="194"></line>
-              <line class="tk" x1="126.6" y1="190" x2="126.6" y2="194"></line>
-              <line class="tk" x1="162.8" y1="190" x2="162.8" y2="194"></line>
-              <line class="tk" x1="199.1" y1="190" x2="199.1" y2="194"></line>
-              <line class="tk" x1="235.4" y1="190" x2="235.4" y2="194"></line>
-              <line class="tk" x1="271.7" y1="190" x2="271.7" y2="194"></line>
-              <line class="tk" x1="307.9" y1="190" x2="307.9" y2="194"></line>
-              <line class="tk" x1="344.2" y1="190" x2="344.2" y2="194"></line>
-              <line class="tk" x1="380.5" y1="190" x2="380.5" y2="194"></line>
-              <line class="tk" x1="416.8" y1="190" x2="416.8" y2="194"></line>
-              <line class="tk" x1="453.0" y1="190" x2="453.0" y2="194"></line>
-              <line class="tk" x1="489.3" y1="190" x2="489.3" y2="194"></line>
-              <line class="tk" x1="525.6" y1="190" x2="525.6" y2="194"></line>
-              <line class="tk" x1="561.9" y1="190" x2="561.9" y2="194"></line>
-              <line class="tk" x1="598.1" y1="190" x2="598.1" y2="194"></line>
-              <line class="tk" x1="634.4" y1="190" x2="634.4" y2="194"></line>
-              <line class="tk" x1="670.7" y1="190" x2="670.7" y2="194"></line>
-              <line class="tk" x1="707.0" y1="190" x2="707.0" y2="194"></line>
-              <line class="tk" x1="743.2" y1="190" x2="743.2" y2="194"></line>
-              <line class="tk" x1="779.5" y1="190" x2="779.5" y2="194"></line>
-              <line class="tk" x1="815.8" y1="190" x2="815.8" y2="194"></line>
-              <line class="tk" x1="852.1" y1="190" x2="852.1" y2="194"></line>
-              <line class="tk" x1="888.3" y1="190" x2="888.3" y2="194"></line>
-              <line class="tk" x1="924.6" y1="190" x2="924.6" y2="194"></line>
-              <line class="tk" x1="960.9" y1="190" x2="960.9" y2="194"></line>
-              <line class="tk" x1="997.2" y1="190" x2="997.2" y2="194"></line>
-              <line class="tk" x1="1033.4" y1="190" x2="1033.4" y2="194"></line>
-              <line class="tk" x1="1069.7" y1="190" x2="1069.7" y2="194"></line>
-              <line class="tk" x1="1106.0" y1="190" x2="1106.0" y2="195"></line>
+              {points.map((point, index) => (
+                <line class="tk" x1={point.x} y1={PLOT.bottom} x2={point.x} y2={index === 0 || index === dayCount - 1 ? 195 : 194}></line>
+              ))}
             </g>
 
-            <text class="xlab" x="54" y="222" text-anchor="start">09.21</text>
-            <text class="xlab" x="307.9" y="222" text-anchor="middle">09.28</text>
-            <text class="xlab" x="561.9" y="222" text-anchor="middle">10.05</text>
-            <text class="xlab" x="815.8" y="222" text-anchor="middle">10.12</text>
-            <text class="xlab is-today" x="1106" y="222" text-anchor="end">10.20</text>
+            {xLabels.map((label) => (
+              <text class:list={['xlab', { 'is-today': label.today }]} x={label.x} y="222" text-anchor={label.anchor}>{label.text}</text>
+            ))}
           </g>
 
           <g class="hits">
-            <rect class="hit" x="35.9" y="12" width="36.3" height="178" data-i="0" data-d="09.21" data-pv="784" data-uv="298" data-x="54.0" data-y="50.4"></rect>
-            <rect class="hit" x="72.1" y="12" width="36.3" height="178" data-i="1" data-d="09.22" data-pv="848" data-uv="314" data-x="90.3" data-y="39.1"></rect>
-            <rect class="hit" x="108.4" y="12" width="36.3" height="178" data-i="2" data-d="09.23" data-pv="706" data-uv="275" data-x="126.6" data-y="64.3"></rect>
-            <rect class="hit" x="144.7" y="12" width="36.3" height="178" data-i="3" data-d="09.24" data-pv="630" data-uv="227" data-x="162.8" data-y="77.9"></rect>
-            <rect class="hit" x="181.0" y="12" width="36.3" height="178" data-i="4" data-d="09.25" data-pv="894" data-uv="340" data-x="199.1" data-y="30.9"></rect>
-            <rect class="hit" x="217.2" y="12" width="36.3" height="178" data-i="5" data-d="09.26" data-pv="960" data-uv="384" data-x="235.4" data-y="19.1"></rect>
-            <rect class="hit" x="253.5" y="12" width="36.3" height="178" data-i="6" data-d="09.27" data-pv="928" data-uv="380" data-x="271.7" data-y="24.8"></rect>
-            <rect class="hit" x="289.8" y="12" width="36.3" height="178" data-i="7" data-d="09.28" data-pv="746" data-uv="276" data-x="307.9" data-y="57.2"></rect>
-            <rect class="hit" x="326.1" y="12" width="36.3" height="178" data-i="8" data-d="09.29" data-pv="804" data-uv="289" data-x="344.2" data-y="46.9"></rect>
-            <rect class="hit" x="362.3" y="12" width="36.3" height="178" data-i="9" data-d="09.30" data-pv="660" data-uv="251" data-x="380.5" data-y="72.5"></rect>
-            <rect class="hit" x="398.6" y="12" width="36.3" height="178" data-i="10" data-d="10.01" data-pv="554" data-uv="222" data-x="416.8" data-y="91.4"></rect>
-            <rect class="hit" x="434.9" y="12" width="36.3" height="178" data-i="11" data-d="10.02" data-pv="880" data-uv="326" data-x="453.0" data-y="33.4"></rect>
-            <rect class="hit" x="471.2" y="12" width="36.3" height="178" data-i="12" data-d="10.03" data-pv="983" data-uv="383" data-x="489.3" data-y="15.0"></rect>
-            <rect class="hit" x="507.4" y="12" width="36.3" height="178" data-i="13" data-d="10.04" data-pv="939" data-uv="357" data-x="525.6" data-y="22.9"></rect>
-            <rect class="hit" x="543.7" y="12" width="36.3" height="178" data-i="14" data-d="10.05" data-pv="768" data-uv="276" data-x="561.9" data-y="53.3"></rect>
-            <rect class="hit" x="580.0" y="12" width="36.3" height="178" data-i="15" data-d="10.06" data-pv="857" data-uv="317" data-x="598.1" data-y="37.5"></rect>
-            <rect class="hit" x="616.3" y="12" width="36.3" height="178" data-i="16" data-d="10.07" data-pv="732" data-uv="285" data-x="634.4" data-y="59.7"></rect>
-            <rect class="hit" x="652.5" y="12" width="36.3" height="178" data-i="17" data-d="10.08" data-pv="646" data-uv="258" data-x="670.7" data-y="75.0"></rect>
-            <rect class="hit" x="688.8" y="12" width="36.3" height="178" data-i="18" data-d="10.09" data-pv="914" data-uv="347" data-x="707.0" data-y="27.3"></rect>
-            <rect class="hit" x="725.1" y="12" width="36.3" height="178" data-i="19" data-d="10.10" data-pv="995" data-uv="368" data-x="743.2" data-y="12.9"></rect>
-            <rect class="hit" x="761.4" y="12" width="36.3" height="178" data-i="20" data-d="10.11" data-pv="967" data-uv="377" data-x="779.5" data-y="17.9"></rect>
-            <rect class="hit" x="797.7" y="12" width="36.3" height="178" data-i="21" data-d="10.12" data-pv="810" data-uv="308" data-x="815.8" data-y="45.8"></rect>
-            <rect class="hit" x="833.9" y="12" width="36.3" height="178" data-i="22" data-d="10.13" data-pv="878" data-uv="316" data-x="852.1" data-y="33.7"></rect>
-            <rect class="hit" x="870.2" y="12" width="36.3" height="178" data-i="23" data-d="10.14" data-pv="754" data-uv="287" data-x="888.3" data-y="55.8"></rect>
-            <rect class="hit" x="906.5" y="12" width="36.3" height="178" data-i="24" data-d="10.15" data-pv="690" data-uv="276" data-x="924.6" data-y="67.2"></rect>
-            <rect class="hit" x="942.8" y="12" width="36.3" height="178" data-i="25" data-d="10.16" data-pv="936" data-uv="346" data-x="960.9" data-y="23.4"></rect>
-            <rect class="hit" x="979.0" y="12" width="36.3" height="178" data-i="26" data-d="10.17" data-pv="997" data-uv="379" data-x="997.2" data-y="12.5"></rect>
-            <rect class="hit" x="1015.3" y="12" width="36.3" height="178" data-i="27" data-d="10.18" data-pv="954" data-uv="372" data-x="1033.4" data-y="20.2"></rect>
-            <rect class="hit" x="1051.6" y="12" width="36.3" height="178" data-i="28" data-d="10.19" data-pv="836" data-uv="301" data-x="1069.7" data-y="41.2"></rect>
-            <rect class="hit" x="1087.9" y="12" width="36.3" height="178" data-i="29" data-d="10.20" data-pv="268" data-uv="69" data-x="1106.0" data-y="142.3"></rect>
+            {points.map((point, index) => (
+              <rect
+                class="hit"
+                x={point.hitX}
+                y={PLOT.top}
+                width={hitWidth}
+                height={PLOT_HEIGHT}
+                data-i={index}
+                data-d={point.label}
+                data-pv={point.pv}
+                data-uv={point.uv}
+                data-x={point.x}
+                data-y={point.pvY}
+                data-w={point.weekday}
+              ></rect>
+            ))}
           </g>
 
           <line id="hGuide" class="hguide" x1="0" y1="12" x2="0" y2="190" opacity="0"></line>
@@ -218,65 +367,15 @@ const categories = stats?.categories ?? { posts: [], moments: [] };
         </svg>
 
         <div class="tip" id="tip" hidden>
-          <div class="tip-k" id="tipDate">10.17 · 周六</div>
-          <div class="tip-v"><span class="tk-l">PV</span><b id="tipPv">997</b><span class="tk-s">/</span><span class="tk-l">UV</span><b id="tipUv">379</b></div>
+          <div class="tip-k" id="tipDate">—</div>
+          <div class="tip-v"><span class="tk-l">PV</span><b id="tipPv">—</b><span class="tk-s">/</span><span class="tk-l">UV</span><b id="tipUv">—</b></div>
         </div>
       </div>
 
       <div class="chart-mark">
-        <span>9.21 – 10.20 / 30 天</span>
-        <span>峰值 997 · 10.17 · 周六</span>
-        <span>今日 268 PV / 进行中</span>
-      </div>
-    </section>
-
-    <!-- ---------- 02 资源 ---------- -->
-    <section class="sec" id="resources" aria-labelledby="h-resources">
-      <div class="sec-h">
-        <span class="sec-num">02</span>
-        <h2 id="h-resources">资源</h2>
-        <span class="sec-en">RESOURCES</span>
-        <div class="sec-r">
-          <span class="sec-note">Cloudflare 免费额度 · 存储与请求为占位数据</span>
-        </div>
-      </div>
-
-      <div class="meters">
-        <div class="meter">
-          <div class="meter-top">
-            <div>
-              <div class="meter-k"><i aria-hidden="true"></i>D1 · 数据库</div>
-              <b class="meter-n">文章 / 评论 / 追番</b>
-            </div>
-            <span class="meter-p">0.4<small>%</small></span>
-          </div>
-          <div class="scale"><span class="fill" style="width:0.37%"></span></div>
-          <div class="meter-f"><span><b>38 MB</b> / 10 GB</span><span>余 9.96 GB</span></div>
-        </div>
-
-        <div class="meter">
-          <div class="meter-top">
-            <div>
-              <div class="meter-k"><i aria-hidden="true"></i>R2 · 对象存储</div>
-              <b class="meter-n">图片与附件 · {media.total} 个</b>
-            </div>
-            <span class="meter-p">32<small>%</small></span>
-          </div>
-          <div class="scale"><span class="fill" style="width:32%"></span></div>
-          <div class="meter-f"><span><b>3.2 GB</b> / 10 GB</span><span>余 6.8 GB</span></div>
-        </div>
-
-        <div class="meter">
-          <div class="meter-top">
-            <div>
-              <div class="meter-k"><i aria-hidden="true"></i>WORKERS · 请求</div>
-              <b class="meter-n">接口与缓存 · 本月</b>
-            </div>
-            <span class="meter-p">80<small>%</small></span>
-          </div>
-          <div class="scale"><span class="fill" style="width:80%"></span></div>
-          <div class="meter-f"><span><b>2.4M</b> 请求 / 月</span><span>日额度 100k</span></div>
-        </div>
+        <span>{compactMd(days[0].date)} – {compactMd(lastPoint.date)} / {dayCount} 天</span>
+        <span>{peakText}</span>
+        <span>今日 {num(todayDay.pv)} PV · {num(todayDay.uv)} UV</span>
       </div>
     </section>
 

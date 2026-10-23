@@ -8,10 +8,17 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
 import type { SiteStats } from '@myon/shared';
-import { defaultThemeColor } from '@myon/shared';
+import {
+  apiBasePath,
+  defaultSiteSettings,
+  defaultThemeColor,
+  formatPageTitle,
+  toPublicSiteSettings,
+} from '@myon/shared';
 import ThemeTokens from '../components/ThemeTokens.astro';
 
 interface Props {
+  /** 页面名，例如「总览」；完整标题由布局拼成 `页面名 · 站点名 副标题`。 */
   title: string;
   crumb: string;
   active:
@@ -28,25 +35,41 @@ interface Props {
 
 const { title, crumb, active } = Astro.props;
 
-// 主题色由后台配置；后台本身固定深墨底，只吃强调色。
-const themeColor = Astro.locals.site?.themeColor ?? defaultThemeColor;
+const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
+const pageTitle = formatPageTitle(title, site);
 
-// 侧栏计数用真实数据；取不到就退回设计稿数字，避免出现 0 的误导。
-const statsRes = await app.request(
-  '/api/v1/stats',
-  {},
-  env as unknown as AppBindings,
-);
-const stats: SiteStats | null = statsRes.ok
-  ? ((await statsRes.json()) as SiteStats)
-  : null;
+// 主题色由后台配置；后台本身固定深墨底，只吃强调色。
+const themeColor = site.themeColor || defaultThemeColor;
+
+// 侧栏计数用真实数据：内容与媒体数量都来自 /api/v1/stats。
+// 取不到时显示 0，不要回退设计稿数字。
+const bindings = env as unknown as AppBindings;
+
+/** 单个接口失败不该带崩整页：返回 null，计数降级成 0。 */
+async function readApi<T>(path: string): Promise<T | null> {
+  try {
+    const response = await app.request(path, {}, bindings);
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error(`读取 ${path} 失败`, error);
+    return null;
+  }
+}
+
+const stats = await readApi<SiteStats>(`${apiBasePath}/stats`);
+
 const counts = {
-  articles: stats?.posts.published ?? 42,
-  moments: stats?.moments.total ?? 186,
-  gallery: stats?.gallery.total ?? 57,
-  bangumi: stats?.bangumi.total ?? 312,
-  media: stats?.media.total ?? 638,
+  articles: stats?.posts.published ?? 0,
+  moments: stats?.moments.total ?? 0,
+  gallery: stats?.gallery.total ?? 0,
+  bangumi: stats?.bangumi.total ?? 0,
+  media: stats?.media.total ?? 0,
+  tools: stats?.tools.total ?? 0,
 };
+
+// 顶栏不再挂假的部署哈希，改成当前运行环境标记。
+const environment = String(env.ENVIRONMENT ?? 'unknown').toUpperCase();
 
 const groups = [
   {
@@ -83,7 +106,12 @@ const groups = [
         count: String(counts.bangumi),
         countId: 'railBangumi',
       },
-      { id: 'tools', href: '/admin/tools', label: '工具', count: '8' },
+      {
+        id: 'tools',
+        href: '/admin/tools',
+        label: '工具',
+        count: String(counts.tools),
+      },
     ],
   },
   {
@@ -99,8 +127,6 @@ const groups = [
         countId: 'mediaCount',
         innerId: 'railMedia',
       },
-      { id: 'd1', href: '/admin#resources', label: 'D1', count: '38M' },
-      { id: 'r2', href: '/admin#resources', label: 'R2', count: '3.2G' },
     ],
   },
 ] as const;
@@ -116,7 +142,8 @@ const tail = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
+    <title>{pageTitle}</title>
+    <meta name="description" content={site.description} />
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/css/v2.css" />
@@ -187,7 +214,7 @@ const tail = [
         <div class="top-r">
           <a class="t-preview" href="/">预览前台 <span class="ar" aria-hidden="true">↗</span></a>
           <span class="t-div" aria-hidden="true"></span>
-          <span class="deploy">最近部署 <b>2a1f3c9</b> · 3 小时前</span>
+          <span class="deploy">运行环境 <b>{environment}</b></span>
           <span class="avatar" role="img" aria-label="登录账号 MY">MY</span>
         </div>
       </header>

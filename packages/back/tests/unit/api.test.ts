@@ -19,12 +19,54 @@ function createEnv(environment = 'test', adminToken?: string) {
     return stmt;
   };
 
+  // 够用的 KV 桩：站点设置就是一份 JSON。
+  const kvData = new Map<string, string>();
+  const settings = {
+    get: async (key: string, type?: string) => {
+      const raw = kvData.get(key);
+      if (raw === undefined) return null;
+      return type === 'json' ? JSON.parse(raw) : raw;
+    },
+    put: async (key: string, value: string) => {
+      kvData.set(key, value);
+    },
+    delete: async (key: string) => {
+      kvData.delete(key);
+    },
+  };
+
+  // 够用的 R2 桩：媒体库列表直接遍历对象。
+  const objects = new Map<
+    string,
+    { key: string; size: number; customMetadata?: Record<string, string> }
+  >();
+  const media = {
+    put: async (
+      key: string,
+      _value: unknown,
+      options?: { customMetadata?: Record<string, string> },
+    ) => {
+      objects.set(key, {
+        key,
+        size: 1,
+        customMetadata: options?.customMetadata,
+      });
+      return { key };
+    },
+    delete: async (key: string) => {
+      objects.delete(key);
+    },
+    head: async (key: string) => objects.get(key) ?? null,
+    list: async () => ({
+      objects: [...objects.values()],
+      truncated: false,
+    }),
+  };
+
   return {
     DB: { prepare: (sql: string) => statement(sql) },
-    MEDIA: {
-      put: async (key: string) => ({ key }),
-      delete: async () => undefined,
-    },
+    MEDIA: media,
+    SETTINGS: settings,
     ENVIRONMENT: environment,
     ADMIN_TOKEN: adminToken,
   } as unknown as AppBindings;
@@ -97,6 +139,9 @@ describe('GET /api/v1/site', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { settings: Record<string, string> };
     expect(body.settings.themeColor).toBe('#EC88C2');
+    expect(body.settings.name).toBe('Myon');
+    expect(body.settings.subtitle).toBe('同人志');
+    expect(body.settings.description).toBe('一个人的二次元生活志');
     expect(body.settings.footerRss).toBe('/rss.xml');
     expect(body.settings.footerIcp).toContain('ICP备');
   });
@@ -172,6 +217,7 @@ describe('content categories', () => {
       gallery: { total: 0, displayed: 0, categories: [] },
       bangumi: { total: 0, watching: 0 },
       media: { total: 0 },
+      tools: { total: 0, enabled: 0 },
       categories: { posts: [], moments: [] },
     });
   });
@@ -234,11 +280,25 @@ describe('admin settings API', () => {
           'x-admin-token': 'secret-token',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ theme_color: '#3366FF' }),
+        body: JSON.stringify({
+          theme_color: '#3366FF',
+          site_subtitle: '测试副标题',
+        }),
       },
       adminEnv,
     );
     expect(res.status).toBe(200);
+
+    const readBack = await app.request(
+      '/api/v1/admin/settings',
+      { headers: { 'x-admin-token': 'secret-token' } },
+      adminEnv,
+    );
+    const settings = (await readBack.json()) as {
+      settings: Record<string, string>;
+    };
+    expect(settings.settings.theme_color).toBe('#3366FF');
+    expect(settings.settings.site_subtitle).toBe('测试副标题');
   });
 });
 
@@ -344,6 +404,114 @@ describe('admin content write API', () => {
       synced: 0,
       reason: 'not_configured',
     });
+  });
+});
+
+describe('tools and traffic API', () => {
+  const auth = { 'x-admin-token': 'secret-token' };
+  const json = { ...auth, 'content-type': 'application/json' };
+
+  it('returns empty tools and a zero-filled 30 day traffic window', async () => {
+    const toolsRes = await app.request('/api/v1/tools', {}, env);
+    expect(toolsRes.status).toBe(200);
+    expect(await toolsRes.json()).toEqual({ items: [] });
+
+    const trafficRes = await app.request('/api/v1/traffic', {}, env);
+    expect(trafficRes.status).toBe(200);
+    const traffic = (await trafficRes.json()) as {
+      days: { date: string; pv: number; uv: number }[];
+      totals: { pv: number; uv: number };
+      today: { date: string; pv: number; uv: number };
+    };
+    expect(traffic.days).toHaveLength(30);
+    expect(traffic.totals).toEqual({ pv: 0, uv: 0 });
+    expect(traffic.days[traffic.days.length - 1]).toEqual(traffic.today);
+  });
+
+  it('guards the admin tools API and validates payloads', async () => {
+    const unauth = await app.request('/api/v1/admin/tools', {}, adminEnv);
+    expect(unauth.status).toBe(401);
+
+    const invalid = await app.request(
+      '/api/v1/admin/tools',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ name: '', href: 'javascript:alert(1)' }),
+      },
+      adminEnv,
+    );
+    expect(invalid.status).toBe(400);
+    const body = (await invalid.json()) as {
+      error: string;
+      issues: unknown[];
+    };
+    expect(body.error).toBe('validation_failed');
+    expect(body.issues.length).toBeGreaterThan(0);
+  });
+
+  it('creates a tool with defaults', async () => {
+    const res = await app.request(
+      '/api/v1/admin/tools',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          slug: 'test-tool',
+          name: '测试工具',
+          description: '一句说明',
+        }),
+      },
+      adminEnv,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      item: {
+        id: string;
+        name: string;
+        enabled: boolean;
+        position: number;
+        slug: string;
+        toolKey: string | null;
+        href: string | null;
+      };
+    };
+    expect(body.item.id).toMatch(/^tool_/);
+    expect(body.item.slug).toBe('test-tool');
+    expect(body.item.name).toBe('测试工具');
+    expect(body.item.enabled).toBe(true);
+    expect(body.item.position).toBe(0);
+    expect(body.item.toolKey).toBeNull();
+    expect(body.item.href).toBeNull();
+  });
+
+  it('rejects an invalid tool slug before writing', async () => {
+    const res = await app.request(
+      '/api/v1/admin/tools',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ slug: 'Bad Slug', name: '测试工具' }),
+      },
+      adminEnv,
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'validation_failed',
+    );
+  });
+
+  it('returns 404 when patching a missing tool', async () => {
+    const res = await app.request(
+      '/api/v1/admin/tools/missing',
+      {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ name: '改个名' }),
+      },
+      adminEnv,
+    );
+    expect(res.status).toBe(404);
   });
 });
 

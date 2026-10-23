@@ -1,11 +1,9 @@
-import type { D1Database, Fetcher, R2Bucket } from '@cloudflare/workers-types';
-
 /** Worker 原生绑定；web 的 wrangler 生成的 Env 在运行时与它结构一致。 */
 export interface AppBindings {
   DB: D1Database;
   MEDIA: R2Bucket;
-  /** 静态资产；媒体路由用它回退到随仓库发布的图片。 */
-  ASSETS?: Fetcher;
+  /** 站点设置（Workers KV）；键名与默认值见 @myon/shared 的 siteSettingKeys。 */
+  SETTINGS: KVNamespace;
   SITE_URL: string;
   ENVIRONMENT: string;
   /** 后台写接口的临时令牌；未配置时后台接口返回 503。 */

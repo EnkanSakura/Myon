@@ -9,14 +9,22 @@ import {
   postInputSchema,
   postPatchSchema,
   siteSettingsPatchSchema,
+  toolInputSchema,
+  toolPatchSchema,
 } from '@myon/shared';
-import { desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { requireAdmin } from '../../auth';
 import { syncBangumi } from '../../bangumi';
 import { getDb } from '../../db/client';
-import { bangumiShows, galleryItems, moments, posts } from '../../db/schema';
+import {
+  bangumiShows,
+  galleryItems,
+  moments,
+  posts,
+  tools,
+} from '../../db/schema';
 import { deleteMedia, listMedia, MediaError, storeMedia } from '../../media';
 import { readSiteSettings, writeSiteSettings } from '../../site';
 import type { AppBindings } from '../../types';
@@ -62,7 +70,7 @@ function estimateReadingMinutes(markdown: string): number {
 // ---------------------------------------------------------------------------
 
 admin.get('/settings', async (c) => {
-  const settings = await readSiteSettings(c.env.DB);
+  const settings = await readSiteSettings(c.env.SETTINGS);
   return c.json({ settings });
 });
 
@@ -73,7 +81,7 @@ admin.put('/settings', async (c) => {
   const parsed = siteSettingsPatchSchema.safeParse(payload);
   if (!parsed.success) return validationError(c, parsed.error);
 
-  const settings = await writeSiteSettings(c.env.DB, parsed.data);
+  const settings = await writeSiteSettings(c.env.SETTINGS, parsed.data);
   return c.json({ settings });
 });
 
@@ -425,6 +433,91 @@ admin.delete('/bangumi/:id', async (c) => {
 admin.post('/bangumi/sync', async (c) => {
   const result = await syncBangumi(c.env);
   return c.json(result, result.ok ? 200 : 502);
+});
+
+// ---------------------------------------------------------------------------
+// 工具
+// ---------------------------------------------------------------------------
+
+admin.get('/tools', async (c) => {
+  const db = getDb(c.env.DB);
+  const items = await db
+    .select()
+    .from(tools)
+    .orderBy(asc(tools.position), asc(tools.id));
+  return c.json({ items, total: items.length });
+});
+
+admin.post('/tools', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = toolInputSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+  const input = parsed.data;
+
+  const now = new Date().toISOString();
+  const item = {
+    id: `tool_${crypto.randomUUID()}`,
+    slug: input.slug,
+    toolKey: input.toolKey ?? null,
+    name: input.name,
+    description: input.description,
+    kind: input.kind,
+    keywords: input.keywords,
+    href: input.href ?? null,
+    enabled: input.enabled,
+    position: input.position,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const db = getDb(c.env.DB);
+  const taken = await db
+    .select({ id: tools.id })
+    .from(tools)
+    .where(eq(tools.slug, input.slug))
+    .get();
+  if (taken) return c.json({ error: 'slug_taken' }, 409);
+
+  await db.insert(tools).values(item);
+  return c.json({ item }, 201);
+});
+
+admin.patch('/tools/:id', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = toolPatchSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+
+  const id = c.req.param('id');
+  const db = getDb(c.env.DB);
+  const current = await db.select().from(tools).where(eq(tools.id, id)).get();
+  if (!current) return c.json({ error: 'not_found' }, 404);
+  if (Object.keys(parsed.data).length === 0) return c.json({ item: current });
+
+  if (parsed.data.slug && parsed.data.slug !== current.slug) {
+    const taken = await db
+      .select({ id: tools.id })
+      .from(tools)
+      .where(eq(tools.slug, parsed.data.slug))
+      .get();
+    if (taken) return c.json({ error: 'slug_taken' }, 409);
+  }
+
+  const updatedAt = new Date().toISOString();
+  await db
+    .update(tools)
+    .set({ ...parsed.data, updatedAt })
+    .where(eq(tools.id, id));
+  return c.json({ item: { ...current, ...parsed.data, updatedAt } });
+});
+
+admin.delete('/tools/:id', async (c) => {
+  const db = getDb(c.env.DB);
+  await db.delete(tools).where(eq(tools.id, c.req.param('id')));
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

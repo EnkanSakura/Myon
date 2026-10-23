@@ -5,6 +5,7 @@ import { iconifyNamePattern, isIconifyIconName } from './icons';
 
 export const siteSettingKeys = [
   'site_name',
+  'site_subtitle',
   'site_description',
   'site_author',
   'site_email',
@@ -28,6 +29,9 @@ export const siteSettingKeys = [
 
 export type SiteSettingKey = (typeof siteSettingKeys)[number];
 export type SiteSettings = { [K in SiteSettingKey]: string };
+
+/** 站点设置在 Workers KV 里的键：值是一份 { key: value } JSON。 */
+export const siteSettingsKvKey = 'site-settings:v1';
 
 /** 默认主题色。改它等于改设计基线，一般只在后台覆盖。 */
 export const defaultThemeColor = '#EC88C2';
@@ -101,6 +105,7 @@ export const defaultHomeLinks: HomeLink[] = [
 
 export const defaultSiteSettings: SiteSettings = {
   site_name: 'Myon',
+  site_subtitle: '同人志',
   site_description: '一个人的二次元生活志',
   site_author: 'Myon',
   site_email: 'hi@myon.studio',
@@ -118,7 +123,7 @@ export const defaultSiteSettings: SiteSettings = {
   home_page_labels: JSON.stringify(defaultHomePageLabels),
   home_stats: JSON.stringify(defaultHomeStats),
   home_links: JSON.stringify(defaultHomeLinks),
-  home_cover_image: '/assets/cabinet.jpg',
+  home_cover_image: '/media/cabinet.jpg',
   home_cover_badge: '全七页 / ALL 7',
   home_cover_note: 'LIGHT ON · 只开一盏灯',
 };
@@ -175,6 +180,7 @@ const jsonArrayText = <T extends z.ZodTypeAny>(item: T, maxItems: number) =>
 export const siteSettingsPatchSchema = z
   .object({
     site_name: text(60),
+    site_subtitle: text(60),
     site_description: text(200),
     site_author: text(60),
     site_email: text(120),
@@ -211,6 +217,18 @@ export const siteSettingsPatchSchema = z
 
 export type SiteSettingsPatch = z.infer<typeof siteSettingsPatchSchema>;
 
+/**
+ * 页面 head-title 的统一格式：`页面名 · 站点名 副标题`。
+ * 例：首页 · Myon 同人志。
+ */
+export function formatPageTitle(
+  page: string,
+  site: Pick<PublicSiteSettings, 'name' | 'subtitle'>,
+): string {
+  const tail = [site.name, site.subtitle].filter(Boolean).join(' ');
+  return tail ? `${page} · ${tail}` : page;
+}
+
 /** 首页封面配置（后台可改，未配置时用默认值）。 */
 export interface HomeCoverSettings {
   title: string;
@@ -222,8 +240,14 @@ export interface HomeCoverSettings {
   cover: { image: string; badge: string; note: string };
 }
 
-/** 前台真正需要的那一小部分：主题色 + 页脚 + 首页封面。 */
+/** 前台真正需要的那一小部分：站点信息 + 主题色 + 页脚 + 首页封面。 */
 export interface PublicSiteSettings {
+  /** 站点名，例如 Myon。 */
+  name: string;
+  /** 站点副标题（后台可改），例如 同人志。 */
+  subtitle: string;
+  /** 站点描述，用于 head-description / SEO。 */
+  description: string;
   themeColor: string;
   footerCopyright: string;
   footerTech: string;
@@ -305,6 +329,9 @@ export function toPublicSiteSettings(
   settings: SiteSettings,
 ): PublicSiteSettings {
   return {
+    name: settings.site_name,
+    subtitle: settings.site_subtitle,
+    description: settings.site_description,
     themeColor: settings.theme_color,
     footerCopyright: settings.footer_copyright,
     footerTech: settings.footer_tech,
@@ -324,7 +351,8 @@ export function toPublicSiteSettings(
         parseJsonArray(settings.home_links, defaultHomeLinks),
       ),
       cover: {
-        image: settings.home_cover_image,
+        // 兼容旧设置里的 /assets/<key>：图片现在只从 R2 出。
+        image: settings.home_cover_image.replace(/^\/assets\//, '/media/'),
         badge: settings.home_cover_badge,
         note: settings.home_cover_note,
       },
