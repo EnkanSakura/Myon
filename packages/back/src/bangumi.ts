@@ -18,6 +18,14 @@ export interface BangumiCollectionEntry {
     eps?: number;
     /** 册数，书籍才有。 */
     volumes?: number;
+    /** Bangumi 封面；large 是原图，medium/common 是缩略图。 */
+    images?: {
+      large?: string;
+      medium?: string;
+      common?: string;
+      small?: string;
+      grid?: string;
+    };
   };
   /** 1 想看 · 2 看过 · 3 在看 · 4 搁置 · 5 抛弃 */
   type?: number;
@@ -66,6 +74,8 @@ export interface BangumiUpsertRow {
   watchedEps: number;
   score: number | null;
   comment: string | null;
+  /** Bangumi 原图 URL；没有封面时为空。 */
+  coverSource: string | null;
   updatedAt: string;
 }
 
@@ -116,6 +126,11 @@ export function mapBangumiCollections(
         typeof entry.comment === 'string' && entry.comment.trim() !== ''
           ? entry.comment.trim().slice(0, 500)
           : null,
+      coverSource:
+        subject.images?.large ||
+        subject.images?.medium ||
+        subject.images?.common ||
+        null,
       updatedAt: entry.updated_at || new Date().toISOString(),
     });
   }
@@ -204,8 +219,8 @@ async function fetchCollections(
   return { ok: true, entries };
 }
 
-/** D1 单条 SQL 最多 100 个绑定参数；一行 9 列，按 10 行一批写入。 */
-const INSERT_CHUNK = 10;
+/** 一行 11 列，按 8 行一批写入，确保不超过 D1 的 100 个绑定参数。 */
+const INSERT_CHUNK = 8;
 
 async function upsertBangumiRows(
   env: AppBindings,
@@ -228,6 +243,7 @@ async function upsertBangumiRows(
           watchedEps: sql`excluded.watched_eps`,
           score: sql`excluded.score`,
           comment: sql`excluded.comment`,
+          coverSource: sql`excluded.cover_source`,
           updatedAt: sql`excluded.updated_at`,
         },
       });
@@ -236,7 +252,7 @@ async function upsertBangumiRows(
 
 /**
  * 一次请求拉取全部收藏（超过 100 条才分页），按响应里的 subject_type 分类后写入 D1。
- * 只更新标题、状态、集数、评分与简评；cover 与 nextAirAt 保留人工维护的值。
+ * 只保存元数据与封面源 URL；封面本身由站内 `/api/v1/bangumi/cover` 代理 + 边缘缓存提供。
  */
 export async function syncBangumi(env: AppBindings): Promise<SyncResult> {
   const token = env.BANGUMI_ACCESS_TOKEN;

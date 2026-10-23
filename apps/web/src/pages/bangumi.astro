@@ -8,6 +8,7 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
 import {
+  apiBasePath,
   type BangumiShow,
   type BangumiStatus,
   type BangumiSubjectType,
@@ -304,13 +305,22 @@ const statusBuckets = (
   }))
   .filter((bucket) => bucket.count > 0);
 
+/** 封面走站内代理 + 边缘缓存；没有源图时退回已有 R2/手填封面。 */
+const coverUrlFor = (show: BangumiShow): string | null => {
+  const source = show.coverSource?.trim();
+  if (source) {
+    return `${apiBasePath}/bangumi/cover?src=${encodeURIComponent(source)}`;
+  }
+  return mediaUrl(show.coverKey);
+};
+
 const records = items.map((show) => ({
   show,
   type: bangumiSubjectTypeLabels[show.subjectType],
   status: STATUS_LABEL[show.status],
   progress: progressOf(show),
   next: nextAirFor(show, today),
-  cover: mediaUrl(show.coverKey),
+  cover: coverUrlFor(show),
   updated: formatDate(show.updatedAt),
   rating: typeof show.score === 'number' ? show.score.toFixed(0) : '未评分',
   comment: show.comment?.trim() ?? '',
@@ -404,7 +414,7 @@ const links = [
                   <article class="record">
                     <span class="record-cover">
                       {record.cover ? (
-                        <img src={record.cover} alt="" loading="lazy" />
+                        <img src={record.cover} alt="" loading="lazy" data-cover />
                       ) : (
                         <span class="record-nofig">NO IMAGE</span>
                       )}
@@ -457,7 +467,7 @@ const links = [
                 <article class="record">
                   <span class="record-cover">
                     {record.cover ? (
-                      <img src={record.cover} alt="" loading="lazy" />
+                      <img src={record.cover} alt="" loading="lazy" data-cover />
                     ) : (
                       <span class="record-nofig">NO IMAGE</span>
                     )}
@@ -553,4 +563,5 @@ const links = [
       )}
     </div>
   </main>
+  <script is:inline src="/js/pages/bangumi-cover.js"></script>
 </SiteLayout>

@@ -428,6 +428,11 @@ function mapCollections(entries) {
         typeof entry.comment === 'string' && entry.comment.trim() !== ''
           ? entry.comment.trim().slice(0, 500)
           : null,
+      coverSource:
+        subject.images?.large ||
+        subject.images?.medium ||
+        subject.images?.common ||
+        null,
       updatedAt: entry.updated_at || new Date().toISOString(),
     });
   }
@@ -460,6 +465,7 @@ function buildSql(rows) {
         ? 'NULL'
         : sqlNumber(row.score),
       row.comment ? sqlString(row.comment) : 'NULL',
+      row.coverSource ? sqlString(row.coverSource) : 'NULL',
       'NULL',
       'NULL',
       sqlString(row.updatedAt),
@@ -468,9 +474,9 @@ function buildSql(rows) {
   });
 
   return [
-    'INSERT INTO bangumi_shows (id, subject_type, bangumi_id, title, status, total_eps, watched_eps, score, comment, next_air_at, cover_key, updated_at) VALUES',
+    'INSERT INTO bangumi_shows (id, subject_type, bangumi_id, title, status, total_eps, watched_eps, score, comment, cover_source, next_air_at, cover_key, updated_at) VALUES',
     `  ${tuples.join(',\n  ')}`,
-    'ON CONFLICT(id) DO UPDATE SET subject_type = excluded.subject_type, title = excluded.title, status = excluded.status, total_eps = excluded.total_eps, watched_eps = excluded.watched_eps, score = excluded.score, comment = excluded.comment, updated_at = excluded.updated_at;',
+    'ON CONFLICT(id) DO UPDATE SET subject_type = excluded.subject_type, title = excluded.title, status = excluded.status, total_eps = excluded.total_eps, watched_eps = excluded.watched_eps, score = excluded.score, comment = excluded.comment, cover_source = excluded.cover_source, updated_at = excluded.updated_at;',
     '',
   ].join('\n');
 }
@@ -553,6 +559,7 @@ function runSelfTest() {
       watchedEps: 50,
       score: 8,
       comment: null,
+      coverSource: null,
       updatedAt: '2026-01-02T03:04:05.000Z',
     },
     'name_cn 优先 / 在看 / 评分取整前',

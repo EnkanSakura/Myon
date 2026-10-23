@@ -20,6 +20,12 @@ import {
   tools,
 } from '../db/schema';
 import { MAX_ICONS, resolveIconSvgs } from '../icons';
+import {
+  BANGUMI_COVER_CACHE_SECONDS,
+  isBangumiCoverContentType,
+  MAX_BANGUMI_COVER_BYTES,
+  normalizeBangumiCoverUrl,
+} from '../image';
 import { renderArticle, renderMarkdown } from '../markdown';
 import { readMediaCount } from '../media';
 import { readSiteSettings, sanitizeFooterHtml } from '../site';
@@ -240,6 +246,90 @@ v1.get('/gallery', async (c) => {
     limit,
     offset,
   });
+});
+
+/**
+ * Bangumi 封面代理：浏览器只访问本站，不直接连 lain.bgm.tv。
+ * 命中 Cloudflare 边缘缓存时直接返回；未命中才回源，回源后缓存一年。
+ */
+v1.get('/bangumi/cover', async (c) => {
+  const target = normalizeBangumiCoverUrl(c.req.query('src'));
+  if (!target) {
+    return c.json({ error: 'invalid_cover_url' }, 400);
+  }
+
+  const cache =
+    typeof caches !== 'undefined'
+      ? ((caches as unknown as { default?: Cache }).default ?? null)
+      : null;
+  const cacheKey = new Request(c.req.url, { method: 'GET' });
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) return hit;
+    } catch (error) {
+      console.error('[bangumi-cover] cache read failed', error);
+    }
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const upstream = await fetch(target, {
+      headers: {
+        accept: 'image/avif,image/webp,image/png,image/jpeg,image/*',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        referer: 'https://bgm.tv/',
+      },
+      signal: controller.signal,
+    });
+    if (!upstream.ok) {
+      return c.json({ error: `cover_upstream_${upstream.status}` }, 502);
+    }
+
+    const declaredLength = Number(upstream.headers.get('content-length') ?? 0);
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > MAX_BANGUMI_COVER_BYTES
+    ) {
+      return c.json({ error: 'cover_too_large' }, 413);
+    }
+
+    const contentType = upstream.headers.get('content-type');
+    if (!isBangumiCoverContentType(contentType)) {
+      return c.json({ error: 'invalid_cover_content_type' }, 502);
+    }
+
+    const body = await upstream.arrayBuffer();
+    if (body.byteLength > MAX_BANGUMI_COVER_BYTES) {
+      return c.json({ error: 'cover_too_large' }, 413);
+    }
+
+    const response = new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': contentType || 'image/jpeg',
+        'cache-control': `public, max-age=${BANGUMI_COVER_CACHE_SECONDS}, immutable`,
+        'access-control-allow-origin': '*',
+      },
+    });
+
+    if (cache) {
+      try {
+        await cache.put(cacheKey, response.clone());
+      } catch (error) {
+        // 缓存写入失败不影响本次返回，下次请求会重新回源。
+        console.error('[bangumi-cover] cache write failed', error);
+      }
+    }
+    return response;
+  } catch (error) {
+    console.error('[bangumi-cover] upstream fetch failed', target, error);
+    return c.json({ error: 'cover_fetch_failed' }, 502);
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 v1.get('/bangumi', async (c) => {

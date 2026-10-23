@@ -75,12 +75,19 @@ describe('mapBangumiCollections', () => {
     }
   });
 
-  it('keeps my comment and rating', () => {
+  it('keeps my comment, rating and cover source', () => {
     const rows = mapBangumiCollections([
       {
         subject_id: 11,
         subject_type: 2,
-        subject: { name: '动画', eps: 12 },
+        subject: {
+          name: '动画',
+          eps: 12,
+          images: {
+            large: 'https://lain.bgm.tv/pic/cover/l/aa/bb/11.jpg',
+            small: 'https://lain.bgm.tv/r/200/pic/cover/l/aa/bb/11.jpg',
+          },
+        },
         type: 2,
         rate: 8,
         comment: '  这一季的作画很稳。  ',
@@ -88,6 +95,9 @@ describe('mapBangumiCollections', () => {
     ]);
     expect(rows[0]?.score).toBe(8);
     expect(rows[0]?.comment).toBe('这一季的作画很稳。');
+    expect(rows[0]?.coverSource).toBe(
+      'https://lain.bgm.tv/pic/cover/l/aa/bb/11.jpg',
+    );
   });
 
   it('uses vol_status for books and values as the total', () => {

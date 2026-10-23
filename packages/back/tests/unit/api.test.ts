@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import app from '../../src/app';
 import type { AppBindings } from '../../src/types';
 
@@ -495,110 +495,23 @@ describe('admin content write API', () => {
     expect(momentRes.status).toBe(201);
   });
 
-  it('filters admin bangumi by type and validates the query', async () => {
-    const ok = await app.request(
-      '/api/v1/admin/bangumi?type=book',
-      { headers: auth },
-      adminEnv,
-    );
-    expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ items: [] });
-
-    const invalid = await app.request(
-      '/api/v1/admin/bangumi?type=comic',
-      { headers: auth },
-      adminEnv,
-    );
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({ error: 'invalid_subject_type' });
-  });
-
-  it('creates a bangumi show with an explicit subject type', async () => {
-    const bookRes = await app.request(
-      '/api/v1/admin/bangumi',
-      {
-        method: 'POST',
-        headers: json,
-        body: JSON.stringify({
-          subjectType: 'book',
-          title: '书籍条目',
-          status: 'watching',
-          totalEps: 10,
-          watchedEps: 3,
-        }),
-      },
-      adminEnv,
-    );
-    expect(bookRes.status).toBe(201);
-    const book = (await bookRes.json()) as {
-      item: { id: string; title: string; subjectType: string };
-    };
-    expect(book.item.id).toMatch(/^bg_/);
-    expect(book.item.title).toBe('书籍条目');
-    expect(book.item.subjectType).toBe('book');
-
-    const defaultRes = await app.request(
-      '/api/v1/admin/bangumi',
-      {
-        method: 'POST',
-        headers: json,
-        body: JSON.stringify({ title: '默认动画' }),
-      },
-      adminEnv,
-    );
-    expect(defaultRes.status).toBe(201);
-    const defaulted = (await defaultRes.json()) as {
-      item: { subjectType: string };
-    };
-    expect(defaulted.item.subjectType).toBe('anime');
-  });
-
-  it('accepts subjectType on patch and rejects unknown values', async () => {
-    const patchEnv = createEnv('test', 'secret-token', {
-      bangumiRow: [
-        'bg_1',
-        'anime',
-        1,
-        '某番',
-        'watching',
-        12,
-        3,
-        8,
-        null,
-        null,
-        '2026-10-01T00:00:00.000Z',
-      ],
-    });
-    const patched = await app.request(
-      '/api/v1/admin/bangumi/bg_1',
-      {
-        method: 'PATCH',
-        headers: json,
-        body: JSON.stringify({ subjectType: 'game', watchedEps: 5 }),
-      },
-      patchEnv,
-    );
-    expect(patched.status).toBe(200);
-    const body = (await patched.json()) as {
-      item: { subjectType: string; title: string; watchedEps: number };
-    };
-    expect(body.item.subjectType).toBe('game');
-    expect(body.item.title).toBe('某番');
-    expect(body.item.watchedEps).toBe(5);
-
-    const invalid = await app.request(
-      '/api/v1/admin/bangumi/bg_1',
-      {
-        method: 'PATCH',
-        headers: json,
-        body: JSON.stringify({ subjectType: 'comic' }),
-      },
-      patchEnv,
-    );
-    expect(invalid.status).toBe(400);
-    expect(((await invalid.json()) as { error: string }).error).toBe(
-      'validation_failed',
-    );
+  it('no longer exposes admin bangumi edit endpoints', async () => {
+    for (const method of ['GET', 'POST'] as const) {
+      const res = await app.request(
+        '/api/v1/admin/bangumi',
+        { method, headers: auth },
+        adminEnv,
+      );
+      expect(res.status).toBe(404);
+    }
+    for (const method of ['PATCH', 'DELETE'] as const) {
+      const res = await app.request(
+        '/api/v1/admin/bangumi/bg_1',
+        { method, headers: auth },
+        adminEnv,
+      );
+      expect(res.status).toBe(404);
+    }
   });
 
   it('uploads an image to R2 and registers it', async () => {
@@ -863,5 +776,71 @@ describe('admin access mode', () => {
       accessEnv,
     );
     expect(malformed.status).toBe(401);
+  });
+});
+
+describe('bangumi cover proxy', () => {
+  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it('proxies a Bangumi cover with long-lived cache headers', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(png, { headers: { 'content-type': 'image/png' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const src = 'https://lain.bgm.tv/pic/cover/l/aa/bb/cache-test-1.jpg';
+      const res = await app.request(
+        '/api/v1/bangumi/cover?src=' + encodeURIComponent(src),
+        {},
+        createEnv('test'),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      expect(res.headers.get('cache-control')).toContain('max-age=31536000');
+      expect(await res.arrayBuffer()).toEqual(png.buffer);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects non-Bangumi cover sources', async () => {
+    const res = await app.request(
+      '/api/v1/bangumi/cover?src=' +
+        encodeURIComponent('https://evil.example/cover.jpg'),
+      {},
+      createEnv('test'),
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'invalid_cover_url',
+    );
+  });
+
+  it('rejects upstream responses that are not images', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('<html>nope</html>', {
+            headers: { 'content-type': 'text/html' },
+          }),
+      ),
+    );
+    try {
+      const res = await app.request(
+        '/api/v1/bangumi/cover?src=' +
+          encodeURIComponent('https://lain.bgm.tv/pic/cover/l/html-test.jpg'),
+        {},
+        createEnv('test'),
+      );
+      expect(res.status).toBe(502);
+      expect(((await res.json()) as { error: string }).error).toBe(
+        'invalid_cover_content_type',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

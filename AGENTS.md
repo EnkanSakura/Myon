@@ -16,12 +16,12 @@
 - **后台写接口的临时门禁**是环境变量 `ADMIN_TOKEN`（请求头 `x-admin-token`）：未配置时返回 503，配置后不匹配返回 401。Cloudflare Access 接入后替换为校验 Access JWT。
 - **文章与动态有分类**：`posts.category`、`moments.category`，接口返回 `category`。
 - **列表页数据来自 D1**：文章目次、动态、展柜、追番都在服务端经 `/api/v1/*` 取数渲染；`GET /api/v1/stats` 是公开只读的内容统计，后台总览与前台页头共用。
-- **追番分五类**：`bangumi_shows.subject_type` 为 `anime/book/music/game/real`；`syncBangumi` 一次请求拉全部收藏（超过 100 条才分页），再按响应里的 `subject_type` 分类写入，书籍优先 `vol_status`/`volumes`，并保存我的评分 `score` 与简评 `comment`。`GET /api/v1/bangumi?type=&sort=recent` 支持筛选与按更新时间排序；`/api/v1/stats.bangumi` 提供 `byType` 与 `byStatus` 全量聚合。前台 `/bangumi` 默认简化总览，分类页用 `?type=`。
+- **追番分五类**：`bangumi_shows.subject_type` 为 `anime/book/music/game/real`；`syncBangumi` 一次请求拉全部收藏（超过 100 条才分页），再按响应里的 `subject_type` 分类写入，书籍优先 `vol_status`/`volumes`，并保存我的评分 `score`、简评 `comment` 与封面源 URL `cover_source`。封面不在同步时下载或转存：前台把 `images.large`（回退 common/medium）经站内 `GET /api/v1/bangumi/cover?src=` 代理，Worker 只放行 bgm.tv/bangumi.tv、限制 8MB，并用 Cloudflare 边缘缓存保存一年。`GET /api/v1/bangumi?type=&sort=recent` 支持筛选与按更新时间排序；`/api/v1/stats.bangumi` 提供 `byType` 与 `byStatus` 全量聚合。前台 `/bangumi` 默认简化总览，分类页用 `?type=`。
 - **列表接口分页**：四个列表都返回 `{ items, total, limit, offset }`，页面用 `?page=` 服务端分页（默认每页 20，最大 100），不要一次性全量拉取。
-- **后台写接口已完整**：`/api/v1/admin/{posts,moments,gallery,bangumi,tools}` 提供 CRUD，`/api/v1/admin/media` 上传/列表/删除（R2），`/api/v1/admin/bangumi/sync` 手动同步，`PUT /api/v1/admin/about` 保存关于页 Markdown。
+- **后台写接口**：`/api/v1/admin/{posts,moments,gallery,tools}` 提供 CRUD，`/api/v1/admin/media` 上传/列表/删除（R2），`/api/v1/admin/bangumi/sync` 手动同步，`PUT /api/v1/admin/about` 保存关于页 Markdown。**追番没有后台写接口**：条目只由同步维护，后台页只读展示（用公开 `GET /api/v1/bangumi`），不要恢复 `/admin/bangumi` 的 CRUD。
 - **工具存 D1**：`tools` 表（`slug` / `tool_key` / 名称 / 说明 / 类型 / 关键词 / `href` / `enabled` / `position`）是前台 `/tools` 与后台 `/admin/tools` 的唯一数据源；前台只读 `GET /api/v1/tools`（只返回启用项），后台用 `/api/v1/admin/tools` 增删改。每个工具页地址是 `/tools/<slug>`（页面在 `src/pages/tools/`），自定义链接工具用 `href` 跳转。不要再把工具列表、调用次数、平均耗时写死在页面里。
 - **访问统计写 D1**：`apps/web/src/worker.ts` 对前台 HTML GET 请求写 `page_views`（Asia/Shanghai 天 / 访客指纹 / path），后台总览只用 `GET /api/v1/traffic`（最近 30 天聚合）显示访问数据；后台总览不再展示 D1/R2 资源用量，也不要写设计稿假 PV/UV、假存储额度、假部署哈希。
-- **媒体只存 R2**：`GET /media/<key>` 只从 R2 读；媒体库列表/删除直接操作 R2 对象（`id` 是 key 的 base64url），**D1 里没有 `media` 表，仓库内不保存任何图片资源**。新图片通过 `POST /api/v1/admin/media` 落到 R2。
+- **媒体只存 R2**：`GET /media/<key>` 只从 R2 读；媒体库列表/删除直接操作 R2 对象（`id` 是 key 的 base64url），**D1 里没有 `media` 表，仓库内不保存任何图片资源**。新图片通过 `POST /api/v1/admin/media` 落到 R2。Bangumi 封面走站内代理与边缘缓存，不再写入 R2，也不会出现在媒体库。
 - **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
 - **发布流程拆成三个 workflow**：push `main` 后按 `Database Migrate`（D1 迁移）→ `Deploy`（只构建 + 部署）→ `Smoke Test`（等待 3 分钟后 curl `/api/health`）串联；`deploy.yml` 不再做迁移和 smoke。
 - **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
@@ -29,7 +29,7 @@
 - **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
 - **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
 - **首页窄屏交互**：面板内容高于一屏时先内部滚动，滚到底/顶才翻页，并显示「本页还有内容」提示；不要改回“滚轮直接翻页”。
-- **本地 Bangumi 同步**用 `pnpm bangumi:sync:local`（默认走 `127.0.0.1:7890` 代理，`BANGUMI_PROXY` 可覆盖）；生产 Worker 的 Cron 与后台按钮是直连。
+- **本地 Bangumi 同步**用 `pnpm bangumi:sync:local`（默认走 `127.0.0.1:7890` 代理，`BANGUMI_PROXY` 可覆盖）；生产 Worker 的 Cron 与后台按钮是直连。本地脚本只写 D1 元数据（含 `cover_source`），不下载封面；封面由前台代理路由按需获取。
 - **手机端原生 App** 将来在仓库的另一条分支开发，通过 HTTP 消费 `/api/v1`，不共享 TS 类型。
 - **后台页面尚未接入身份验证**：`/admin*` 本身没有登录，只有写接口有令牌门禁。**令牌入口只有一个**：`AdminLayout` 顶栏的「管理令牌」按钮/弹窗（`public/js/admin-token.js`），页面里不要再放第二个令牌输入框。
 

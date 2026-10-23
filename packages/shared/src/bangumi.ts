@@ -28,6 +28,8 @@ export interface BangumiShow {
   score: number | null;
   /** 我在 Bangumi 写的简评。 */
   comment: string | null;
+  /** Bangumi 原图 URL；同步封面时用来判断是否需要更新。 */
+  coverSource: string | null;
   nextAirAt: string | null;
   coverKey: string | null;
   updatedAt: string;

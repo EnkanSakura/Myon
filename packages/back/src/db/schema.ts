@@ -63,6 +63,8 @@ export const bangumiShows = sqliteTable('bangumi_shows', {
   score: integer('score'),
   /** 我在 Bangumi 写的简评。 */
   comment: text('comment'),
+  /** Bangumi 原图 URL；用于判断封面是否更新。 */
+  coverSource: text('cover_source'),
   nextAirAt: text('next_air_at'),
   coverKey: text('cover_key'),
   updatedAt: text('updated_at').notNull(),
