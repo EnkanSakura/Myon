@@ -29,6 +29,5 @@ jobs:
           SMOKE_URL: ${{ vars.SMOKE_URL }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-        run: |
-          if: ${{ vars.PRODUCTION_URL != '' }}
-          run: curl --fail --silent --show-error --max-time 15 "${{ vars.PRODUCTION_URL }}/api/health"
+        if: ${{ vars.PRODUCTION_URL != '' }}
+        run: curl --fail --silent --show-error --max-time 15 "${{ vars.PRODUCTION_URL }}/api/health"
