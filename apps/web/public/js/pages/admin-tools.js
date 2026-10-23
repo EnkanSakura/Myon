@@ -125,7 +125,7 @@
   var bannerTitle = $("bannerTitle");
   var bannerText = $("bannerText");
   var bannerIssues = $("bannerIssues");
-  var bannerAction = $("bannerAction");
+  var bannerTokenBtn = $("bannerToken");
   var bannerRetry = $("bannerRetry");
 
   var toastEl = $("toast");
@@ -197,11 +197,9 @@
   }
 
   function resetBannerActions() {
-    bannerAction.hidden = true;
+    bannerTokenBtn.hidden = true;
     bannerRetry.hidden = true;
-    bannerAction.onclick = null;
     bannerRetry.onclick = null;
-    bannerAction.removeAttribute("href");
     bannerIssues.hidden = true;
   }
 
@@ -221,17 +219,18 @@
     bannerText.textContent = text || "";
     bannerText.hidden = !text;
     fillIssueList(bannerIssues, issues || []);
-    bannerAction.hidden = true;
+    bannerTokenBtn.hidden = true;
     bannerRetry.hidden = true;
-    bannerAction.onclick = null;
     bannerRetry.onclick = null;
-    bannerAction.removeAttribute("href");
   }
 
-  function bannerLink(label, href) {
-    bannerAction.hidden = false;
-    bannerAction.textContent = label;
-    bannerAction.setAttribute("href", href);
+  /** 需要令牌时把用户引到顶栏的管理令牌弹窗。 */
+  function bannerToken() {
+    bannerTokenBtn.hidden = false;
+  }
+
+  function openToken() {
+    if (window.MyonAdminToken) window.MyonAdminToken.open();
   }
 
   function bannerRetryButton(label, fn) {
@@ -360,15 +359,13 @@
     state.items = [];
     state.total = 0;
     setLoading(false);
-    setEmpty("后台还没连上 · 需要管理令牌才能读写工具。", "去设置令牌", function () {
-      location.href = "/admin/settings";
-    });
+    setEmpty("后台还没连上 · 需要管理令牌才能读写工具。", "管理令牌", openToken);
     showBanner(
       "info",
-      "尚未填写管理令牌",
-      "在「设置 / 管理令牌」里填入本地令牌（dev-admin-token），保存后回到本页刷新。"
+      "尚未连接后台",
+      "工具列表需要管理令牌。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。"
     );
-    bannerLink("去设置令牌 →", "/admin/settings");
+    bannerToken();
   }
 
   function handleLoadError(err) {
@@ -378,25 +375,23 @@
     setLoading(false);
     var status = err && err.status;
     if (status === 401) {
-      setEmpty("管理令牌无效，读不到工具。", "去设置令牌", function () {
-        location.href = "/admin/settings";
-      });
+      setEmpty("管理令牌无效，读不到工具。", "管理令牌", openToken);
       showBanner(
         "error",
-        "管理令牌无效（401）",
-        "令牌被拒绝。去「设置 / 管理令牌」更新后刷新本页；本地令牌通常是 dev-admin-token。"
+        "管理令牌无效",
+        "令牌被拒绝，请在右上角「管理令牌」里更新后刷新本页。"
       );
-      bannerLink("去设置令牌 →", "/admin/settings");
+      bannerToken();
       return;
     }
     if (status === 503) {
-      setEmpty("服务端未配置 ADMIN_TOKEN，后台读不到工具。", "重试", function () {
+      setEmpty("服务端未配置管理令牌，后台读不到工具。", "重试", function () {
         loadTools();
       });
       showBanner(
         "warn",
-        "服务端未配置 ADMIN_TOKEN",
-        "本地请在 apps/web/.dev.vars 里配置 ADMIN_TOKEN 后重启开发服务器。"
+        "服务端未配置管理令牌",
+        "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。"
       );
       bannerRetryButton("重试", function () {
         loadTools();
@@ -580,20 +575,20 @@
     if (status === 401) {
       showBanner(
         "error",
-        label + "失败 · 管理令牌无效（401）",
-        "去「设置 / 管理令牌」更新令牌后再试；本地令牌通常是 dev-admin-token。"
+        label + "失败 · 管理令牌无效",
+        "请在右上角「管理令牌」里更新令牌后再试。"
       );
-      bannerLink("去设置令牌 →", "/admin/settings");
+      bannerToken();
       toast(label + "失败 · 令牌无效");
       return;
     }
     if (status === 503) {
       showBanner(
         "warn",
-        label + "失败 · 服务端未配置 ADMIN_TOKEN",
-        "本地请在 apps/web/.dev.vars 里配置 ADMIN_TOKEN 后重启开发服务器。"
+        label + "失败 · 服务端未配置管理令牌",
+        "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。"
       );
-      toast(label + "失败 · 服务端未配置 ADMIN_TOKEN");
+      toast(label + "失败 · 服务端未配置管理令牌");
       return;
     }
     toast(label + "失败 · HTTP " + status);
@@ -726,7 +721,7 @@
       toolDlgTab.textContent = "TOOL / 新增";
       toolDlgTitle.textContent = "新增工具";
       toolDlgState.textContent = "未保存";
-      formMeta.textContent = "保存后立即写入 D1";
+      formMeta.textContent = "保存后立即生效";
     }
     setFormBusy(false);
     syncFormHint();
@@ -840,16 +835,16 @@
         if (result.res.status === 401) {
           showFormBanner(
             "error",
-            "保存失败 · 管理令牌无效（401）",
-            "去「设置 / 管理令牌」更新令牌后重试；本地令牌通常是 dev-admin-token。"
+            "保存失败 · 管理令牌无效",
+            "请在右上角「管理令牌」里更新令牌后重试。"
           );
           return;
         }
         if (result.res.status === 503) {
           showFormBanner(
             "warn",
-            "保存失败 · 服务端未配置 ADMIN_TOKEN",
-            "本地请在 apps/web/.dev.vars 里配置 ADMIN_TOKEN 后重启开发服务器。"
+            "保存失败 · 服务端未配置管理令牌",
+            "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。"
           );
           return;
         }
@@ -943,7 +938,7 @@
 
   btnNewTool.addEventListener("click", function () {
     if (!state.ready) {
-      toast("还没连上后台 · 先填写管理令牌");
+      toast("还没连上后台 · 先在右上角填写管理令牌");
       return;
     }
     openForm(null);

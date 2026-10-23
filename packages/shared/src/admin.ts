@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { bangumiSubjectTypes } from './bangumi';
 
 /**
  * 后台写接口的入参校验与分页类型。前台只读，不依赖这一层。
@@ -88,18 +89,21 @@ export type GalleryInput = z.infer<typeof galleryInputSchema>;
 // ---------------------------------------------------------------------------
 
 const bangumiFields = {
+  subjectType: z.enum(bangumiSubjectTypes),
   bangumiId: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).max(200),
   status: z.enum(['watching', 'watched', 'wish', 'paused']),
   totalEps: z.number().int().min(0).max(9999),
   watchedEps: z.number().int().min(0).max(9999),
   score: z.number().int().min(0).max(10).nullable().optional(),
+  comment: z.string().max(500).nullable().optional(),
   nextAirAt: z.string().max(40).nullable().optional(),
   coverKey: z.string().max(300).nullable().optional(),
 };
 
 export const bangumiInputSchema = z.object({
   ...bangumiFields,
+  subjectType: bangumiFields.subjectType.default('anime'),
   status: bangumiFields.status.default('wish'),
   totalEps: bangumiFields.totalEps.default(0),
   watchedEps: bangumiFields.watchedEps.default(0),
@@ -130,3 +134,8 @@ export interface MediaItem {
   height: number | null;
   createdAt: string;
 }
+
+/** 关于页 / README 的写入入参。 */
+export const aboutPatchSchema = z.object({
+  markdown: z.string().max(200000),
+});

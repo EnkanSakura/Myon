@@ -88,20 +88,21 @@
   var pgNext = $("pgNext");
 
   var sumAll = $("sumAll");
-  var sumShown = $("sumShown");
   var sumUpdated = $("sumUpdated");
+  var fbCount = $("fbCount");
 
   var qInput = $("q");
   var catSel = $("catSel");
   var sortSel = $("sortSel");
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab2"));
+  var clearFilters = $("clearFilters");
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".filterbar .chip"));
 
   var banner = $("listBanner");
   var bannerK = $("bannerK");
   var bannerTitle = $("bannerTitle");
   var bannerText = $("bannerText");
   var bannerIssues = $("bannerIssues");
-  var bannerAction = $("bannerAction");
+  var bannerTokenBtn = $("bannerToken");
   var bannerRetry = $("bannerRetry");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
 
@@ -181,12 +182,10 @@
 
   function hideBanner() {
     banner.hidden = true;
-    bannerAction.hidden = true;
+    bannerTokenBtn.hidden = true;
     bannerRetry.hidden = true;
-    bannerAction.onclick = null;
     bannerRetry.onclick = null;
     bannerIssues.hidden = true;
-    bannerAction.removeAttribute("href");
   }
 
   function setNoticeTone(tone) {
@@ -202,17 +201,18 @@
     bannerText.textContent = text || "";
     bannerText.hidden = !text;
     fillIssueList(bannerIssues, issues || []);
-    bannerAction.hidden = true;
+    bannerTokenBtn.hidden = true;
     bannerRetry.hidden = true;
-    bannerAction.onclick = null;
     bannerRetry.onclick = null;
-    bannerAction.removeAttribute("href");
   }
 
-  function bannerLink(label, href) {
-    bannerAction.hidden = false;
-    bannerAction.textContent = label;
-    bannerAction.setAttribute("href", href);
+  /** 需要令牌时，把用户引到顶栏的管理令牌弹窗。 */
+  function bannerToken() {
+    bannerTokenBtn.hidden = false;
+  }
+
+  function openToken() {
+    if (window.MyonAdminToken) window.MyonAdminToken.open();
   }
 
   function bannerRetryButton(label, fn) {
@@ -309,8 +309,8 @@
 
   function resetCounts() {
     sumAll.textContent = "—";
-    sumShown.textContent = "—";
     sumUpdated.textContent = "—";
+    fbCount.textContent = "显示 —";
   }
 
   function handleNoToken() {
@@ -319,13 +319,11 @@
     resetCounts();
     showBanner(
       "info",
-      "尚未填写管理令牌",
-      "在「设置 / 管理令牌」里填入本地令牌（dev-admin-token），保存后回到本页刷新。"
+      "尚未连接后台",
+      "文章列表需要管理令牌。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。"
     );
-    bannerLink("去设置令牌 →", "/admin/settings");
-    setEmpty("后台还没连上 · 需要管理令牌才能读写文章。", "去设置令牌", function () {
-      location.href = "/admin/settings";
-    });
+    bannerToken();
+    setEmpty("后台还没连上 · 需要管理令牌才能读写文章。", "管理令牌", openToken);
   }
 
   function handleLoadError(err) {
@@ -336,22 +334,20 @@
     if (status === 401) {
       showBanner(
         "error",
-        "管理令牌无效（401）",
-        "令牌被拒绝。去「设置 / 管理令牌」更新后刷新本页；本地令牌通常是 dev-admin-token。"
+        "管理令牌无效",
+        "令牌被拒绝，请在右上角「管理令牌」里更新后刷新本页。"
       );
-      bannerLink("去设置令牌 →", "/admin/settings");
-      setEmpty("管理令牌无效，读不到文章。", "去设置令牌", function () {
-        location.href = "/admin/settings";
-      });
+      bannerToken();
+      setEmpty("管理令牌无效，读不到文章。", "管理令牌", openToken);
       return;
     }
     if (status === 503) {
       showBanner(
         "warn",
-        "服务端未配置 ADMIN_TOKEN",
-        "本地请在 apps/web/.dev.vars 里配置 ADMIN_TOKEN 后重启开发服务器。"
+        "服务端未配置管理令牌",
+        "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。"
       );
-      setEmpty("服务端未配置 ADMIN_TOKEN，后台只读。", "重试", function () {
+      setEmpty("服务端未配置管理令牌，后台只读。", "重试", function () {
         loadPage(state.page);
       });
       return;
@@ -414,7 +410,6 @@
       if (post.updatedAt && post.updatedAt > latest) latest = post.updatedAt;
     });
     sumAll.textContent = String(state.total);
-    sumShown.textContent = String(state.posts.length);
     sumUpdated.textContent = latest ? fmtUpdated(latest) : "—";
   }
 
@@ -584,6 +579,7 @@
     var list = filteredPosts();
     renderRows(list);
     renderPager();
+    fbCount.textContent = "显示 " + list.length + " 条 · 筛选只作用于本页";
 
     if (list.length === 0) {
       if (state.total === 0) {
@@ -619,8 +615,10 @@
     state.status = "all";
     state.category = "all";
     state.q = "";
+    state.sort = "update";
     qInput.value = "";
     catSel.value = "all";
+    sortSel.value = "update";
     applyStatusTab();
     renderList();
   }
@@ -644,6 +642,7 @@
     state.sort = sortSel.value;
     renderList();
   });
+  clearFilters.addEventListener("click", resetFilters);
   emptyBtn.addEventListener("click", function () {
     if (emptyAction) emptyAction();
   });
@@ -684,10 +683,10 @@
         if (result.res.status === 401) {
           showBanner(
             "error",
-            "切换失败 · 管理令牌无效（401）",
-            "去「设置 / 管理令牌」更新令牌后再试；本地令牌通常是 dev-admin-token。"
+            "切换失败 · 管理令牌无效",
+            "请在右上角「管理令牌」里更新令牌后再试。"
           );
-          bannerLink("去设置令牌 →", "/admin/settings");
+          bannerToken();
           toast("切换失败 · 令牌无效");
           return;
         }
@@ -894,11 +893,11 @@
           return;
         }
         if (result.res.status === 401) {
-          showFormBanner("error", "保存失败 · 管理令牌无效（401）", "去「设置 / 管理令牌」更新令牌后重试；本地令牌通常是 dev-admin-token。");
+          showFormBanner("error", "保存失败 · 管理令牌无效", "请在右上角「管理令牌」里更新令牌后重试。");
           return;
         }
         if (result.res.status === 503) {
-          showFormBanner("warn", "保存失败 · 服务端未配置 ADMIN_TOKEN", "本地请在 apps/web/.dev.vars 里配置 ADMIN_TOKEN 后重启开发服务器。");
+          showFormBanner("warn", "保存失败 · 服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
           return;
         }
         showFormBanner("error", "保存失败（HTTP " + result.res.status + "）", "服务端返回异常，稍后重试；问题持续时查看 Worker 日志。");
@@ -949,10 +948,10 @@
           closeDelete();
           showBanner(
             "error",
-            "删除失败 · 管理令牌无效（401）",
-            "去「设置 / 管理令牌」更新令牌后再试；本地令牌通常是 dev-admin-token。"
+            "删除失败 · 管理令牌无效",
+            "请在右上角「管理令牌」里更新令牌后再试。"
           );
-          bannerLink("去设置令牌 →", "/admin/settings");
+          bannerToken();
           toast("删除失败 · 令牌无效");
           return;
         }

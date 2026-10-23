@@ -51,6 +51,8 @@ export const galleryItems = sqliteTable('gallery_items', {
 
 export const bangumiShows = sqliteTable('bangumi_shows', {
   id: text('id').primaryKey(),
+  /** 1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元，本站用英文枚举。 */
+  subjectType: text('subject_type').notNull().default('anime'),
   bangumiId: integer('bangumi_id'),
   title: text('title').notNull(),
   status: text('status', { enum: ['watching', 'watched', 'wish', 'paused'] })
@@ -59,6 +61,8 @@ export const bangumiShows = sqliteTable('bangumi_shows', {
   totalEps: integer('total_eps').notNull().default(0),
   watchedEps: integer('watched_eps').notNull().default(0),
   score: integer('score'),
+  /** 我在 Bangumi 写的简评。 */
+  comment: text('comment'),
   nextAirAt: text('next_air_at'),
   coverKey: text('cover_key'),
   updatedAt: text('updated_at').notNull(),

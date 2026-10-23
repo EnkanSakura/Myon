@@ -1,36 +1,11 @@
 /* ==========================================================================
-   admin-gallery · 展柜分类管理 / 藏品网格 / 柜位示意
-   外壳来自 admin.html + admin.css；这里只补展柜后台特有块。
+   admin-gallery · 藏品网格 / 柜位示意
+   外壳来自 admin.html + admin.css；筛选栏用共享 .filterbar。
    ========================================================================== */
 
-/* ---------- 01 分类 ---------- */
-.cats{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;align-items:center}
-.cat{
-  display:inline-flex;align-items:baseline;gap:7px;
-  border:2px solid var(--pline);background:transparent;color:var(--pp-62);
-  font-family:var(--mono);font-size:12px;letter-spacing:.07em;padding:4px 10px 5px;line-height:1.5;
-  transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease);
-}
-.cat b{font-family:var(--disp);font-weight:900;font-size:15px;letter-spacing:0;color:var(--pp-70)}
-.cat:hover{color:var(--pp);border-color:var(--pp-62)}
-.cat:hover b{color:var(--pp)}
-.cat.is-on{background:var(--ppk);color:var(--ink);border-color:var(--ink);box-shadow:2px 2px 0 color-mix(in srgb, var(--pp) 30%, transparent)}
-.cat.is-on b{color:var(--ink)}
-.cat:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
-.cats-note{margin-left:auto;font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--pp-55);white-space:nowrap}
-
-/* ---------- 02 藏品 ---------- */
+/* ---------- 藏品 ---------- */
 .gal-body{display:grid;grid-template-columns:1fr 322px;gap:18px;align-items:start;margin-top:14px}
 .gal-main{min-width:0}
-.gal-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.gal-count{font-family:var(--mono);font-size:12px;letter-spacing:.05em;color:var(--pp-55);white-space:nowrap}
-.gal-sort{margin-left:auto;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--pp-55)}
-.gal-sort select{
-  background:var(--panel);color:var(--pp-80);border:2px solid var(--pline);border-radius:0;
-  font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:4px 6px;height:30px;
-}
-.gal-sort select:focus{outline:none;border-color:var(--ppk)}
-
 .gal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .g-card{
   position:relative;min-width:0;border:2px solid var(--pline);background:var(--panel);cursor:pointer;
@@ -157,35 +132,16 @@
 @media (max-width:900px){
   .gal-grid{grid-template-columns:repeat(2,1fr)}
   .gal-side{grid-template-columns:1fr}
-  .cats-note{width:100%;margin-left:0}
 }
 @media (max-width:600px){
   .gal-grid{grid-template-columns:1fr}
-  .gal-sort{margin-left:0;width:100%}
 }
 
 /* ==========================================================================
-   真实 CRUD 追加：管理令牌 / 读取态 / 表单弹层
+   真实 CRUD 追加：读取态 / 表单弹层
    ========================================================================== */
 
 .pdate b{font-weight:900;color:var(--pp)}
-
-/* ---------- 管理令牌 ---------- */
-.tk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding:8px 11px;
-  background:var(--panel);border:2px solid var(--pline);box-shadow:4px 4px 0 var(--ppk-deep)}
-.tk-k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--pp-55);white-space:nowrap}
-.tk-input{flex:1 1 200px;min-width:150px;height:32px;padding:0 9px;border:2px solid var(--pline);border-radius:0;
-  background:var(--desk);color:var(--pp);font-family:var(--mono);font-size:13px;letter-spacing:.04em}
-.tk-input:focus{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
-.tk-input::placeholder{color:var(--pp-55)}
-.tk-btn{height:32px;padding:0 11px;border:2px solid var(--pline);background:transparent;color:var(--pp-70);
-  font-family:var(--mono);font-size:12px;letter-spacing:.06em;border-radius:0}
-.tk-btn:hover{background:var(--ppk);color:var(--ink);border-color:var(--ink)}
-.tk-btn:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
-.tk-state{margin-left:auto;font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap}
-
-/* ---------- 分类按钮容器 ---------- */
-.cat-btns{display:flex;gap:6px;flex-wrap:wrap}
 
 /* ---------- 读取 / 加载态（空态与提示条用 admin.css 的 .empty / .notice） ---------- */
 .gal-loading{display:flex;flex-direction:column;align-items:center;gap:10px;padding:34px 18px;
@@ -228,7 +184,6 @@
 .del-ok:hover{background:var(--ppk)}
 
 @media (max-width:760px){
-  .tk-state{margin-left:0;width:100%}
   .gf-grid{grid-template-columns:1fr}
   .gf-f{flex-direction:column;align-items:flex-start}
   .gf-f .dlg-a{width:100%;justify-content:flex-end}

@@ -1,31 +1,14 @@
 /* ==========================================================================
-   制作进行 · 追番 —— 列表来自 D1，进度 / 状态 / 评分写入 PATCH，手动同步。
-   只作用于本页；外壳来自 admin.html / admin.css。
+   制作进行 · 追番 —— 列表来自 D1，进度 / 类型 / 状态 / 评分写入 PATCH，手动同步。
+   只作用于本页；外壳来自 admin.html / admin.css，筛选栏用共享 .filterbar。
    ========================================================================== */
 
 /* 页头 */
 .phead h1{font-size:40px}
-.pnote{margin-top:3px;font-family:var(--mono);font-size:12px;letter-spacing:.09em;color:var(--pp-55)}
-.pnote .sep{margin:0 7px;color:var(--pp-55)}
-.pnote b{font-family:var(--mono);font-weight:500;letter-spacing:.06em;color:var(--pp-62)}
 .sec-r .sec-note b{font-weight:500;color:var(--pp-62)}
 
-/* ---------- 同步条 ---------- */
-.syncbar{position:relative;display:flex;align-items:center;gap:14px;margin-top:20px;padding:12px 16px 12px 20px;
-  background:var(--panel);border:2px solid var(--pline);box-shadow:5px 5px 0 var(--ppk-deep)}
-.syncbar::before{content:"";position:absolute;left:-2px;top:-2px;bottom:-2px;width:5px;background:var(--ppk);border:2px solid var(--ink)}
-.sb-sq{width:12px;height:12px;flex:none;background:var(--ppk);border:2px solid var(--ink);box-shadow:0 0 10px color-mix(in srgb, var(--pink) 70%, transparent);margin-left:6px}
-.sb-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.sb-k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--pp-55);line-height:1.5}
-.sb-v{font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--pp);line-height:1.5}
-.sb-r{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--pp-55);line-height:1.6}
-.syncbar .sb-btn{height:36px;padding:0 11px;font-size:13px;flex:none;letter-spacing:.02em;
-  box-shadow:3px 3px 0 var(--ppk-deep);gap:7px}
-.syncbar .sb-btn:disabled{opacity:.6;cursor:wait;box-shadow:none;transform:none}
-.syncbar.is-syncing .sb-sq{animation:sbpulse .9s var(--ease) infinite}
-.syncbar.is-syncing .sb-btn .ar{display:inline-block;animation:spin 1s linear infinite}
-@keyframes sbpulse{50%{background:var(--panel);box-shadow:none}}
-@keyframes spin{to{transform:rotate(360deg)}}
+/* 三个指标（看过 / 在追 / 想看） */
+.metrics{grid-template-columns:repeat(3,1fr)}
 
 /* ---------- 记录列表 ---------- */
 .watch-list{margin-top:12px;display:flex;flex-direction:column;gap:10px}
@@ -68,9 +51,12 @@
 .w-meta-v{color:var(--pp-70)}
 .w-score{width:50px;height:26px;border:2px solid var(--pp-55);background:transparent;color:var(--pp);
   font-family:var(--mono);font-size:12px;text-align:center;padding:0 2px;line-height:1}
+.w-type{height:26px;border:2px solid var(--pp-55);background:var(--panel);color:var(--pp-80);
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:0 4px;line-height:1;cursor:pointer}
+.w-type:hover{border-color:var(--ppk);color:var(--ppk)}
 .w-score:hover{border-color:var(--pp-70)}
-.w-score:focus,.w-input:focus,.w-select:focus{outline:none;border-color:var(--ppk);box-shadow:2px 2px 0 var(--ppk-deep)}
-.w-score:focus-visible,.w-input:focus-visible,.w-select:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
+.w-score:focus,.w-input:focus,.w-select:focus,.w-type:focus{outline:none;border-color:var(--ppk);box-shadow:2px 2px 0 var(--ppk-deep)}
+.w-score:focus-visible,.w-input:focus-visible,.w-select:focus-visible,.w-type:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
 
 .w-prog{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .w-bar{flex:1;max-width:236px;height:8px;background:color-mix(in srgb, var(--pp) 13%, transparent);display:block;overflow:hidden}
@@ -105,12 +91,6 @@
 /* ---------- 删除确认 ---------- */
 .cfm-text{margin:2px 0 0;font-size:15px;line-height:1.85;color:var(--ink-80)}
 
-/* 页脚说明 */
-.page-note{margin-top:26px;padding-top:12px;border-top:2px solid var(--pline);
-  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
-  font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--pp-55)}
-.page-note b{font-weight:500;color:var(--pp-62)}
-
 /* 响应式 */
 @media (max-width:1240px){
   .chapter{right:300px;font-size:100px}
@@ -118,24 +98,26 @@
 }
 @media (max-width:1100px){
   .chapter{right:18px;top:-26px;font-size:96px;opacity:.22}
+  .metrics{grid-template-columns:1fr 1fr}
   .wrow{grid-template-columns:52px minmax(0,1fr);row-gap:10px}
   .w-acts{grid-column:2;justify-content:flex-start}
   .w-bar{max-width:100%}
 }
 @media (max-width:900px){
   .chapter{display:none}
-  .metrics{grid-template-columns:1fr 1fr}
   .w-meta{font-size:11px}
 }
 @media (max-width:600px){
-  .syncbar{flex-wrap:wrap;gap:10px;padding:12px 12px 12px 18px}
-  .sb-txt{width:100%}
-  .syncbar .sb-btn{margin-left:auto}
+  .metrics{grid-template-columns:1fr}
   .wrow{padding:10px 11px;box-shadow:3px 3px 0 var(--ppk-deep)}
   .w-title{font-size:15px}
   .w-acts{flex-wrap:wrap}
   .w-btn{flex:1 1 auto;justify-content:center}
   .w-prog{gap:6px 8px}
   .w-bar{flex:1 1 100%;max-width:100%;order:-1}
-  .page-note{flex-direction:column;gap:4px}
 }
+
+/* 简评：评分旁的窄输入，宽屏占满剩余行 */
+.w-meta .w-comment{flex:1 1 220px;min-width:160px;height:26px;padding:2px 7px;border:2px solid var(--pline-2);
+  background:var(--desk);color:var(--pp);font-family:var(--mono);font-size:11px;letter-spacing:.02em}
+.w-meta .w-comment:focus{border-color:var(--pp)}

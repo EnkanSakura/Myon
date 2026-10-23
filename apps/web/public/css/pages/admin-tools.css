@@ -60,11 +60,6 @@
 .list-state{margin-top:18px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--pp-55)}
 .list-state[hidden]{display:none}
 
-/* 底部说明 */
-.page-note{margin-top:24px;padding-top:12px;border-top:2px solid var(--pline);
-  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
-  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55)}
-
 /* ==========================================================================
    弹层：工具表单（白纸 + 墨框 + 硬阴影，复用 admin.css 的 .dlg / .p-in）
    ========================================================================== */
@@ -140,6 +135,5 @@
   .tools-tbl .c-no{display:none}
   .switch-label{display:none}
   .t-name{font-size:13px}
-  .page-note{flex-direction:column;gap:4px}
   .toast{left:14px;right:14px}
 }

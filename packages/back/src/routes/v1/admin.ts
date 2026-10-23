@@ -1,4 +1,6 @@
 import {
+  aboutKey,
+  aboutPatchSchema,
   bangumiInputSchema,
   bangumiPatchSchema,
   galleryInputSchema,
@@ -16,15 +18,17 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { requireAdmin } from '../../auth';
-import { syncBangumi } from '../../bangumi';
+import { isBangumiSubjectType, syncBangumi } from '../../bangumi';
 import { getDb } from '../../db/client';
 import {
   bangumiShows,
   galleryItems,
   moments,
   posts,
+  siteContent,
   tools,
 } from '../../db/schema';
+import { renderMarkdown } from '../../markdown';
 import { deleteMedia, listMedia, MediaError, storeMedia } from '../../media';
 import { readSiteSettings, writeSiteSettings } from '../../site';
 import type { AppBindings } from '../../types';
@@ -83,6 +87,38 @@ admin.put('/settings', async (c) => {
 
   const settings = await writeSiteSettings(c.env.SETTINGS, parsed.data);
   return c.json({ settings });
+});
+
+// ---------------------------------------------------------------------------
+// 关于页
+// ---------------------------------------------------------------------------
+
+/** 写入 site_content 的 about 行；GET /api/v1/about 的读取逻辑不变。 */
+admin.put('/about', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = aboutPatchSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+
+  const updatedAt = new Date().toISOString();
+  const db = getDb(c.env.DB);
+  await db
+    .insert(siteContent)
+    .values({ key: aboutKey, markdown: parsed.data.markdown, updatedAt })
+    .onConflictDoUpdate({
+      target: siteContent.key,
+      set: { markdown: parsed.data.markdown, updatedAt },
+    });
+
+  return c.json({
+    item: {
+      key: aboutKey,
+      markdown: parsed.data.markdown,
+      html: renderMarkdown(parsed.data.markdown),
+      updatedAt,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -361,10 +397,16 @@ admin.delete('/gallery/:id', async (c) => {
 // ---------------------------------------------------------------------------
 
 admin.get('/bangumi', async (c) => {
+  const type = c.req.query('type');
+  if (type && !isBangumiSubjectType(type)) {
+    return c.json({ error: 'invalid_subject_type' }, 400);
+  }
+
   const db = getDb(c.env.DB);
   const items = await db
     .select()
     .from(bangumiShows)
+    .where(type ? eq(bangumiShows.subjectType, type) : undefined)
     .orderBy(bangumiShows.title);
   return c.json({ items });
 });
@@ -379,12 +421,14 @@ admin.post('/bangumi', async (c) => {
 
   const item = {
     id: input.bangumiId ? `bg_${input.bangumiId}` : `bg_${crypto.randomUUID()}`,
+    subjectType: input.subjectType,
     bangumiId: input.bangumiId ?? null,
     title: input.title,
     status: input.status,
     totalEps: input.totalEps,
     watchedEps: input.watchedEps,
     score: input.score ?? null,
+    comment: input.comment ?? null,
     nextAirAt: input.nextAirAt ?? null,
     coverKey: input.coverKey ?? null,
     updatedAt: new Date().toISOString(),

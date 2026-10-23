@@ -25,7 +25,7 @@ const postsApi = `${apiBasePath}/admin/posts`;
           <span class="sticker sticker--paper">内容 / ARTICLES</span>
         </div>
         <h1>文章<span class="dot">。</span></h1>
-        <p class="pdate">共 <span id="sumAll">—</span> 篇 <span class="sep">·</span> 本页 <span id="sumShown">—</span> 条 <span class="sep">·</span> 最后更新 <span id="sumUpdated">—</span></p>
+        <p class="pdate">共 <span id="sumAll">—</span> 篇 <span class="sep">·</span> 最后更新 <span id="sumUpdated">—</span></p>
       </div>
 
       <div class="ph-r">
@@ -46,46 +46,47 @@ const postsApi = `${apiBasePath}/admin/posts`;
         <p id="bannerText"></p>
         <ul class="notice-issues" id="bannerIssues" hidden></ul>
       </div>
-      <a class="notice-a" id="bannerAction" href="/admin/settings" hidden>去设置令牌 →</a>
+      <button class="notice-btn" id="bannerToken" type="button" data-token-open hidden>管理令牌</button>
       <button class="notice-btn" id="bannerRetry" type="button" hidden>重试</button>
     </div>
 
-    <!-- ---------- 工具条 ---------- -->
-    <div class="bar">
-      <div class="search">
+    <!-- ---------- 筛选栏 ---------- -->
+    <div class="filterbar" aria-label="筛选文章">
+      <div class="fb-chips" role="group" aria-label="按状态筛选">
+        <button class="chip is-on" type="button" data-status="all" aria-pressed="true">全部</button>
+        <button class="chip" type="button" data-status="published" aria-pressed="false">已发布</button>
+        <button class="chip" type="button" data-status="draft" aria-pressed="false">草稿</button>
+        <button class="chip" type="button" data-status="archived" aria-pressed="false">归档</button>
+      </div>
+
+      <label class="fb-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M15.6 15.6 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <label class="sr-only" for="q">搜索文章标题或 slug</label>
+        <span class="sr-only">搜索文章标题或 slug</span>
         <input id="q" type="search" placeholder="搜索标题 / slug" autocomplete="off" spellcheck="false" />
-      </div>
+      </label>
 
-      <div class="tabs2" role="group" aria-label="按状态筛选">
-        <button class="tab2 is-on" type="button" data-status="all" aria-pressed="true">全部</button>
-        <button class="tab2" type="button" data-status="published" aria-pressed="false">已发布</button>
-        <button class="tab2" type="button" data-status="draft" aria-pressed="false">草稿</button>
-        <button class="tab2" type="button" data-status="archived" aria-pressed="false">归档</button>
-      </div>
-
-      <label class="sel">分类
+      <label class="fb-sort">分类
         <select id="catSel">
           <option value="all">全部分类</option>
         </select>
       </label>
-      <label class="sel">排序
+      <label class="fb-sort">排序
         <select id="sortSel">
           <option value="update">最近更新</option>
           <option value="title">标题 A→Z</option>
         </select>
       </label>
-    </div>
 
-    <p class="bar-note">筛选与搜索只作用于当前页 · 翻页查看其余文章</p>
+      <span class="fb-count" id="fbCount" aria-live="polite">显示 —</span>
+      <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    </div>
 
     <p class="list-state" id="listState">正在读取文章…</p>
 
     <!-- ---------- 表格 ---------- -->
     <div class="tbl-wrap" id="tblWrap" hidden>
       <table class="tbl tbl--articles">
-        <caption class="sr-only">后台文章列表，数据来自 D1</caption>
+        <caption class="sr-only">后台文章列表</caption>
         <colgroup>
           <col />
           <col style="width:150px" />
@@ -127,7 +128,7 @@ const postsApi = `${apiBasePath}/admin/posts`;
 
     <div class="page-mark">
       <span>P.08 / ARTICLES — 台账</span>
-      <span>标题 → slug → 状态 → 字数 · 数据来自 D1</span>
+      <span>标题 → slug → 状态 → 字数</span>
     </div>
   </div>
 

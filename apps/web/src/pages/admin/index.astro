@@ -10,6 +10,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
 const bindings = env as unknown as AppBindings;
 
+// 维护模式是真实开关：初始状态来自站点设置，切换写回后台设置接口。
+const settingsApi = `${apiBasePath}/admin/settings`;
+const maintenanceEnabled = Astro.locals.site?.maintenanceEnabled ?? false;
+
 /** 单个接口失败不该带崩整页：返回 null，渲染时降级成 0 值 / —。 */
 async function readApi<T>(path: string): Promise<T | null> {
   try {
@@ -226,9 +230,9 @@ const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，P
   crumb="总览"
   active="overview"
 >
-<div class="page">
+<div class="page" data-settings-api={settingsApi} data-maintenance={maintenanceEnabled ? 'true' : 'false'}>
 
-    <!-- ---------- 页头 + 前台灯 ---------- -->
+    <!-- ---------- 页头 + 维护模式 ---------- -->
     <header class="phead">
       <span class="chapter" aria-hidden="true">08</span>
 
@@ -242,14 +246,22 @@ const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，P
       </div>
 
       <div class="ph-r">
-        <div class="lamp" id="lamp" data-on="true">
-          <span class="lamp-tab">FRONT LIGHT</span>
+        <div class="lamp" id="maintLamp" data-on={maintenanceEnabled ? 'false' : 'true'}>
+          <span class="lamp-tab">MAINTENANCE</span>
           <span class="lamp-sq" aria-hidden="true"></span>
           <span class="lamp-txt">
-            <span class="lamp-k">前台灯 / STOREFRONT</span>
-            <span class="lamp-v" id="lampV">亮着 · 访客可访问</span>
+            <span class="lamp-k">维护模式 / MAINTENANCE</span>
+            <span class="lamp-v" id="maintV">{maintenanceEnabled ? '维护中 · 访客看到维护页' : '营业中 · 访客可访问'}</span>
           </span>
-          <button class="switch" id="lampSwitch" type="button" role="switch" aria-checked="true" aria-label="前台灯" data-on="true">
+          <button
+            class="switch"
+            id="maintSwitch"
+            type="button"
+            role="switch"
+            aria-checked={maintenanceEnabled ? 'false' : 'true'}
+            aria-label="维护模式"
+            data-on={maintenanceEnabled ? 'false' : 'true'}
+          >
             <span class="track"><span class="knob"></span></span>
           </button>
         </div>

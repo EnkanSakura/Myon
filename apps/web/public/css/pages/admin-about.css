@@ -1,7 +1,7 @@
 /* ==========================================================================
    后台 · 关于 / README 编辑器
    左：Markdown 编辑器；右：首页 01 封面上的「关于」纸卡实时预览。
-   保存写入 localStorage['myon-about']，前台 site.js 读同一个 key。
+   内容来自 /api/v1/about，保存写 /api/v1/admin/about。
    ========================================================================== */
 body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 
@@ -21,6 +21,7 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 }
 .md-input::placeholder{color:var(--pp-55)}
 .md-input:focus{outline:2px solid var(--ppk);outline-offset:-2px;background:color-mix(in srgb, var(--pink) 3.5%, transparent)}
+.md-input:disabled{opacity:.55;cursor:wait}
 .md-input::-webkit-scrollbar{width:10px;height:10px}
 .md-input::-webkit-scrollbar-track{background:var(--desk)}
 .md-input::-webkit-scrollbar-thumb{background:var(--pp-track);border:2px solid var(--desk)}
@@ -69,13 +70,9 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 .ab-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;border-top:2px solid var(--pline-2);font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);flex:none}
 .ab-foot b{font-weight:500;color:var(--pp-70)}
 
-/* 底部状态条 */
-.ab-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;padding-top:12px;border-top:2px solid var(--pline);flex-wrap:wrap}
-.ab-hint{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.04em;line-height:1.8;color:var(--pp-55)}
-.bar-sq{width:7px;height:7px;background:var(--ppk);border:2px solid var(--ink);flex:none}
-.save-state{font-family:var(--mono);font-size:11px;letter-spacing:.06em;line-height:1.8;color:var(--pp-55);text-align:right}
-.save-state.is-on{color:var(--ppk)}
+/* 页头状态 */
 .ph-note{margin-top:2px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);text-align:right}
+.ph-note.is-on{color:var(--ppk)}
 
 @media (max-width:1100px){
   .ab-grid{grid-template-columns:1fr}
@@ -87,5 +84,4 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
   .ab-body--preview{padding:10px}
   .about-card{padding:12px 13px 14px;box-shadow:6px 6px 0 var(--ppk-deep)}
   .ph-note{text-align:left}
-  .save-state{text-align:left}
 }

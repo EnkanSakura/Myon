@@ -20,12 +20,6 @@
   function readStore(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
-  function writeStore(key, value) {
-    try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
-  }
-  function removeStore(key) {
-    try { localStorage.removeItem(key); } catch (e) {}
-  }
   function pad2(n) { return String(n).padStart(2, "0"); }
   function timeNow() {
     var d = new Date();
@@ -34,12 +28,11 @@
 
   /* ---------------- 元素 ---------------- */
   var toastEl = $("toast");
-  var tokenInput = $("tokenInput");
-  var tokenState = $("tokenState");
   var authBanner = $("authBanner");
   var authK = $("authK");
   var authTitle = $("authTitle");
   var authText = $("authText");
+  var authToken = $("authToken");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
   var grid = $("galGrid");
   var loadingEl = $("galLoading");
@@ -48,10 +41,10 @@
   var stateTitle = $("galStateTitle");
   var stateText = $("galStateText");
   var retryBtn = $("galRetry");
-  var catBtns = $("catBtns");
+  var catBtns = $("catChips");
   var galCount = $("galCount");
-  var galPageNote = $("galPageNote");
   var sortSelect = $("galSortSelect");
+  var clearFilters = $("clearFilters");
   var pgNow = $("pgNow");
   var pgPages = $("pgPages");
   var pgSize = $("pgSize");
@@ -97,6 +90,7 @@
     filter: "全部",
     sort: "slot",
     selectedId: null,
+    locked: false,
     loading: false,
     saving: false,
     editing: null,
@@ -113,7 +107,6 @@
 
   /* ---------------- 令牌 / 授权 ---------------- */
   function tokenValue() { return (readStore(TOKEN_KEY) || "").trim(); }
-  function setTokenState(text) { tokenState.textContent = text; }
   function setNoticeTone(tone) {
     each(NOTICE_TONES, function (name) { authBanner.classList.remove(name); });
     authBanner.classList.add("notice--" + tone);
@@ -124,8 +117,9 @@
     authK.textContent = tone === "error" ? "ERR" : tone === "warn" ? "WARN" : "INFO";
     authTitle.textContent = title;
     authText.textContent = text;
+    authToken.hidden = true;
   }
-  function hideAuth() { authBanner.hidden = true; }
+  function hideAuth() { authBanner.hidden = true; authToken.hidden = true; }
 
   function request(method, url, body) {
     var headers = { accept: "application/json" };
@@ -141,20 +135,21 @@
   function readJson(res) { return res.json().catch(function () { return {}; }); }
 
   function authFailed() {
+    state.locked = true;
     setLoading(false);
-    setTokenState("令牌无效");
     grid.innerHTML = "";
-    showAuth("error", "管理令牌无效（401）", "令牌被服务端拒绝。检查 ADMIN_TOKEN 是否与 .dev.vars / Worker 环境变量一致，改好后点「保存令牌」。");
+    showAuth("error", "管理令牌无效", "令牌被拒绝，请在右上角「管理令牌」里更新后重新读取。");
+    authToken.hidden = false;
     showState("LOCK", "未授权", "令牌无效，重新填写后再读取展柜。", true);
-    toast("401 · 管理令牌无效");
+    toast("管理令牌无效");
   }
   function adminMissing() {
+    state.locked = true;
     setLoading(false);
-    setTokenState("服务端只读");
     grid.innerHTML = "";
-    showAuth("warn", "服务端未配置 ADMIN_TOKEN（503）", "在本地 .dev.vars 或 Worker 环境变量里配置 ADMIN_TOKEN 后重新加载页面。");
-    showState("LOCK", "接口未开放", "服务端没有配置 ADMIN_TOKEN，后台写接口暂时关闭。", true);
-    toast("503 · 服务端未配置 ADMIN_TOKEN");
+    showAuth("warn", "服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
+    showState("LOCK", "接口未开放", "服务端没有配置管理令牌，后台写接口暂时关闭。", true);
+    toast("服务端未配置管理令牌");
   }
 
   /* ---------------- 展示工具 ---------------- */
@@ -218,19 +213,6 @@
     var shown = displayedCount();
     $("gTotal").textContent = String(total);
     $("gShown").textContent = String(shown);
-    $("stickerShown").textContent = String(shown);
-    $("shownCount").textContent = String(shown);
-    $("totalCount").textContent = String(total);
-    var cats = gallery && gallery.categories && gallery.categories.length
-      ? gallery.categories
-      : null;
-    if (cats) {
-      $("gCats").textContent = cats.map(function (c) { return c.name + " " + c.count; }).join(" / ");
-    } else {
-      var names = categoryNames();
-      $("gCats").textContent = names.length ? names.join(" / ") : "还没有分类";
-    }
-    galPageNote.textContent = "本页 " + state.items.length + " 件 · 第 " + state.page + " / " + state.pages + " 页";
     pgNow.textContent = String(state.page);
     pgPages.textContent = String(state.pages);
     pgSize.textContent = String(state.limit);
@@ -278,7 +260,7 @@
   }
 
   function catButton(name, count, on) {
-    var btn = el("button", "cat" + (on ? " is-on" : ""));
+    var btn = el("button", "chip" + (on ? " is-on" : ""));
     btn.type = "button";
     btn.setAttribute("data-cat", name);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -298,7 +280,7 @@
     names.forEach(function (name) {
       catBtns.appendChild(catButton(name, counts[name], state.filter === name));
     });
-    galCount.textContent = "显示 " + visibleItems().length + " 件（本页）";
+    galCount.textContent = "显示 " + visibleItems().length + " 件 · 筛选只作用于本页";
   }
 
   /* ---------------- 藏品卡片 ---------------- */
@@ -376,6 +358,8 @@
     }
     paintSelection();
     renderSlots();
+    // 没连上后台时保留 LOCK 提示，不要被“展柜还空着”覆盖。
+    if (state.locked) return;
     if (state.total === 0) {
       showState("EMPTY", "展柜还空着", "还没有藏品，点右上角「新增藏品」放第一件进来。", false);
     } else if (list.length === 0) {
@@ -490,14 +474,15 @@
 
   function loadData() {
     if (!tokenValue()) {
+      state.locked = true;
       setLoading(false);
       state.items = [];
       state.total = 0;
       state.pages = 1;
       state.selectedId = null;
       grid.innerHTML = "";
-      setTokenState("未填写");
-      showAuth("info", "尚未填写管理令牌", "在页面上方填入 ADMIN_TOKEN 后保存；令牌只存在本机浏览器 localStorage（myon-admin-token），请求时放在 x-admin-token 头里。");
+      showAuth("info", "尚未连接后台", "展柜列表需要管理令牌才能读取。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。");
+      authToken.hidden = false;
       showState("LOCK", "需要管理令牌", "填好令牌后会自动读取展柜数据。", false);
       renderAll();
       return;
@@ -505,7 +490,6 @@
 
     setLoading(true);
     hideAuth();
-    setTokenState("校验中…");
     var offset = (state.page - 1) * state.limit;
     var url = API + "?limit=" + state.limit + "&offset=" + offset;
 
@@ -529,16 +513,15 @@
           loadData();
           return;
         }
+        state.locked = false;
         setLoading(false);
-        setTokenState("已连接");
         renderAll();
         loadStats();
       })
       .catch(function (err) {
         setLoading(false);
         grid.innerHTML = "";
-        setTokenState("读取失败");
-        showState("ERR", "读取失败", (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与本地 D1 是否在运行。", true);
+        showState("ERR", "读取失败", (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与本地数据库是否在运行。", true);
         toast("读取失败 · 请稍后重试");
       });
   }
@@ -592,7 +575,7 @@
     state.saving = false;
     editDlgTab.textContent = item ? "EDIT" : "NEW";
     editDlgTitle.textContent = item ? "编辑藏品" : "新增藏品";
-    editMode.textContent = (item ? "PATCH " : "POST ") + API;
+    editMode.textContent = item ? "编辑现有藏品" : "新增后默认不上架";
     $("fNo").value = item ? item.no : "";
     $("fName").value = item ? item.name : "";
     $("fCat").value = item ? item.category : defaultCategory();
@@ -744,7 +727,7 @@
   function askDelete(item) {
     if (!item) return;
     state.pendingDelete = item;
-    delDlgText.textContent = "删除 " + item.no + "「" + item.name + "」？D1 里的这一行不可恢复，前台展柜会立刻撤下。";
+    delDlgText.textContent = "删除 " + item.no + "「" + item.name + "」？删除后不可恢复，前台展柜会立刻撤下。";
     if (typeof delDlg.showModal === "function") delDlg.showModal();
   }
   function confirmDelete() {
@@ -768,38 +751,6 @@
         loadData();
       })
       .catch(function () { toast("删除失败 · 请稍后重试"); });
-  }
-
-  /* ---------------- 令牌操作 ---------------- */
-  function saveToken() {
-    var token = tokenInput.value.trim();
-    if (!token) {
-      toast("令牌不能为空");
-      tokenInput.focus();
-      return;
-    }
-    if (!writeStore(TOKEN_KEY, token)) {
-      toast("无法写入本机存储 · 请用本地服务器打开");
-      return;
-    }
-    toast("令牌已保存 · 正在读取展柜");
-    setLoading(false);
-    state.page = 1;
-    loadData();
-  }
-  function clearToken() {
-    removeStore(TOKEN_KEY);
-    tokenInput.value = "";
-    state.items = [];
-    state.total = 0;
-    state.pages = 1;
-    state.selectedId = null;
-    grid.innerHTML = "";
-    setTokenState("未填写");
-    showAuth("info", "尚未填写管理令牌", "填入 ADMIN_TOKEN 后点「保存令牌」；令牌只存在本机浏览器 localStorage（myon-admin-token）。");
-    showState("LOCK", "需要管理令牌", "填好令牌后会自动读取展柜数据。", false);
-    renderAll();
-    toast("已清除本机令牌");
   }
 
   /* ---------------- 事件绑定 ---------------- */
@@ -826,7 +777,7 @@
   });
 
   catBtns.addEventListener("click", function (event) {
-    var btn = event.target.closest(".cat");
+    var btn = event.target.closest(".chip");
     if (!btn) return;
     state.filter = btn.getAttribute("data-cat");
     renderCats();
@@ -835,6 +786,14 @@
 
   sortSelect.addEventListener("change", function () {
     state.sort = sortSelect.value;
+    renderGrid();
+  });
+
+  clearFilters.addEventListener("click", function () {
+    state.filter = "全部";
+    state.sort = "slot";
+    sortSelect.value = "slot";
+    renderCats();
     renderGrid();
   });
 
@@ -872,14 +831,6 @@
   btnDelSel.addEventListener("click", function () { askDelete(findItem(state.selectedId)); });
 
   retryBtn.addEventListener("click", function () { loadData(); });
-  $("tokenSave").addEventListener("click", saveToken);
-  $("tokenClear").addEventListener("click", clearToken);
-  tokenInput.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      saveToken();
-    }
-  });
 
   editForm.addEventListener("submit", submitEditor);
   editCancel.addEventListener("click", closeEditor);
@@ -902,7 +853,6 @@
   });
 
   /* ---------------- 初始化 ---------------- */
-  tokenInput.value = tokenValue();
   sortSelect.value = state.sort;
   renderCatOptions();
   renderSlots();

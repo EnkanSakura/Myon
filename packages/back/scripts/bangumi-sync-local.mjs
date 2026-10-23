@@ -35,8 +35,8 @@ const TEMP_SQL_PATH = path.join(WEB_DIR, TEMP_SQL_NAME);
 
 const API_HOST = 'api.bgm.tv';
 const API_PORT = 443;
-const PAGE_SIZE = 50;
-const MAX_FETCH = 500;
+const PAGE_SIZE = 100;
+const MAX_FETCH = 1000;
 const DEFAULT_PROXY = 'http://127.0.0.1:7890';
 const USER_AGENT = 'myon-blog/1.0 (https://myon.top)';
 const CONNECT_TIMEOUT_MS = 15000;
@@ -370,7 +370,7 @@ async function fetchCollections({ token, username, proxy, limit }) {
   for (let offset = 0; offset < limit; offset += PAGE_SIZE) {
     const requestPath =
       `/v0/users/${encodeURIComponent(username)}/collections` +
-      `?subject_type=2&limit=${PAGE_SIZE}&offset=${offset}`;
+      `?limit=${PAGE_SIZE}&offset=${offset}`;
     const payload = await requestJson(requestPath, token, proxy);
     pageCount += 1;
     const page = Array.isArray(payload?.data) ? payload.data : [];
@@ -379,22 +379,42 @@ async function fetchCollections({ token, username, proxy, limit }) {
       entries.length = limit;
       break;
     }
-    if (page.length < PAGE_SIZE) break;
+    const total = Number(payload?.total ?? entries.length);
+    if (page.length < PAGE_SIZE || entries.length >= total) break;
   }
   return { entries, pageCount };
 }
+
+const SUBJECT_TYPE_BY_ID = {
+  1: 'book',
+  2: 'anime',
+  3: 'music',
+  4: 'game',
+  6: 'real',
+};
 
 /** 与 packages/back/src/bangumi.ts 的 mapBangumiCollections 保持一致。 */
 function mapCollections(entries) {
   const rows = [];
   for (const entry of entries) {
     const subject = entry.subject ?? {};
+    const subjectType = SUBJECT_TYPE_BY_ID[entry.subject_type] ?? 'anime';
     const totalEps =
-      typeof subject.eps === 'number' && subject.eps > 0 ? subject.eps : 0;
-    const watched =
-      typeof entry.ep_status === 'number' ? Math.max(0, entry.ep_status) : 0;
+      subjectType === 'book' &&
+      typeof subject.volumes === 'number' &&
+      subject.volumes > 0
+        ? subject.volumes
+        : typeof subject.eps === 'number' && subject.eps > 0
+          ? subject.eps
+          : 0;
+    const progress =
+      subjectType === 'book' && typeof entry.vol_status === 'number'
+        ? entry.vol_status
+        : entry.ep_status;
+    const watched = typeof progress === 'number' ? Math.max(0, progress) : 0;
     rows.push({
       id: `bg_${entry.subject_id}`,
+      subjectType,
       bangumiId: entry.subject_id,
       title: (subject.name_cn || subject.name || '未命名').slice(0, 200),
       status: STATUS_BY_TYPE[entry.type ?? 0] ?? 'wish',
@@ -403,6 +423,10 @@ function mapCollections(entries) {
       score:
         typeof entry.rate === 'number' && entry.rate > 0
           ? Math.round(entry.rate)
+          : null,
+      comment:
+        typeof entry.comment === 'string' && entry.comment.trim() !== ''
+          ? entry.comment.trim().slice(0, 500)
           : null,
       updatedAt: entry.updated_at || new Date().toISOString(),
     });
@@ -426,6 +450,7 @@ function buildSql(rows) {
   const tuples = rows.map((row) => {
     const values = [
       sqlString(row.id),
+      sqlString(row.subjectType),
       sqlNumber(row.bangumiId),
       sqlString(row.title),
       sqlString(row.status),
@@ -434,6 +459,7 @@ function buildSql(rows) {
       row.score === null || row.score === undefined
         ? 'NULL'
         : sqlNumber(row.score),
+      row.comment ? sqlString(row.comment) : 'NULL',
       'NULL',
       'NULL',
       sqlString(row.updatedAt),
@@ -442,9 +468,9 @@ function buildSql(rows) {
   });
 
   return [
-    'INSERT INTO bangumi_shows (id, bangumi_id, title, status, total_eps, watched_eps, score, next_air_at, cover_key, updated_at) VALUES',
+    'INSERT INTO bangumi_shows (id, subject_type, bangumi_id, title, status, total_eps, watched_eps, score, comment, next_air_at, cover_key, updated_at) VALUES',
     `  ${tuples.join(',\n  ')}`,
-    'ON CONFLICT(id) DO UPDATE SET title = excluded.title, status = excluded.status, total_eps = excluded.total_eps, watched_eps = excluded.watched_eps, score = excluded.score, updated_at = excluded.updated_at;',
+    'ON CONFLICT(id) DO UPDATE SET subject_type = excluded.subject_type, title = excluded.title, status = excluded.status, total_eps = excluded.total_eps, watched_eps = excluded.watched_eps, score = excluded.score, comment = excluded.comment, updated_at = excluded.updated_at;',
     '',
   ].join('\n');
 }
@@ -467,6 +493,7 @@ function runSelfTest() {
   const fixtures = [
     {
       subject_id: 101,
+      subject_type: 2,
       subject: { name: 'Naruto', name_cn: '火影忍者', eps: 220 },
       type: 3,
       rate: 8,
@@ -475,6 +502,7 @@ function runSelfTest() {
     },
     {
       subject_id: 102,
+      subject_type: 2,
       subject: { name: 'Mushishi', eps: 26 },
       type: 2,
       rate: 0,
@@ -482,12 +510,14 @@ function runSelfTest() {
     },
     {
       subject_id: 103,
+      subject_type: 6,
       subject: { name_cn: '', name: 'Mono', eps: 0 },
       type: 5,
       ep_status: 3,
     },
     {
       subject_id: 104,
+      subject_type: 3,
       subject: { name: 'X', eps: 12 },
       type: 99,
       rate: 7.6,
@@ -495,12 +525,14 @@ function runSelfTest() {
     },
     {
       subject_id: 105,
+      subject_type: 2,
       subject: { name_cn: "测试'引号", name: 'Q', eps: 12 },
       type: 1,
       ep_status: -1,
     },
     {
       subject_id: 106,
+      subject_type: 4,
       type: 2,
       rate: 9.9,
       ep_status: 5,
@@ -513,12 +545,14 @@ function runSelfTest() {
     rows[0],
     {
       id: 'bg_101',
+      subjectType: 'anime',
       bangumiId: 101,
       title: '火影忍者',
       status: 'watching',
       totalEps: 220,
       watchedEps: 50,
       score: 8,
+      comment: null,
       updatedAt: '2026-01-02T03:04:05.000Z',
     },
     'name_cn 优先 / 在看 / 评分取整前',
@@ -544,16 +578,17 @@ function runSelfTest() {
   is(rows[5].watchedEps, 5, '总集数 0 时保留已看数');
 
   const sql = buildSql(rows);
-  ok(sql.startsWith('INSERT INTO bangumi_shows (id, bangumi_id'), 'SQL 表头');
+  ok(
+    sql.startsWith('INSERT INTO bangumi_shows (id, subject_type, bangumi_id'),
+    'SQL 表头',
+  );
   ok(sql.includes("'测试''引号'"), 'SQL 单引号转义');
   ok(sql.includes("'未命名'"), 'SQL 中文标题');
-  is(
-    (sql.match(/NULL, NULL, /g) || []).length,
-    6,
-    'next_air_at / cover_key 均为 NULL',
-  );
+  ok(sql.includes("'bg_101', 'anime', 101"), 'SQL 写入类型');
   ok(
-    sql.includes('ON CONFLICT(id) DO UPDATE SET title = excluded.title'),
+    sql.includes(
+      'ON CONFLICT(id) DO UPDATE SET subject_type = excluded.subject_type',
+    ),
     'upsert 冲突更新',
   );
   ok(

@@ -71,6 +71,11 @@ const counts = {
 // 顶栏不再挂假的部署哈希，改成当前运行环境标记。
 const environment = String(env.ENVIRONMENT ?? 'unknown').toUpperCase();
 
+// 管理令牌的入口只在这里：所有后台页共用同一个弹窗与连接状态。
+// 状态检测只发一次读请求，页面本身仍然各自处理自己的 401 / 503。
+const tokenCheckUrl = `${apiBasePath}/admin/settings`;
+const maintenanceEnabled = Boolean(site.maintenanceEnabled);
+
 const groups = [
   {
     label: '',
@@ -151,7 +156,7 @@ const tail = [
     <ThemeTokens themeColor={themeColor} metaColor="#17131A" />
     <slot name="head" />
   </head>
-  <body class="admin">
+  <body class="admin" data-token-check={tokenCheckUrl}>
     <aside class="side" aria-label="制作进行侧栏">
       <div class="side-head">
         <div class="s-brand"><b>MYON</b><span>制作进行</span></div>
@@ -195,11 +200,11 @@ const tail = [
       </nav>
 
       <div class="side-foot">
-        <div class="s-state" id="sideLamp" data-on="true">
+        <div class="s-state" id="sideLamp" data-on={maintenanceEnabled ? 'false' : 'true'}>
           <i class="s-lamp" aria-hidden="true"></i>
-          <span id="sideLampText">营业中</span>
+          <span id="sideLampText">{maintenanceEnabled ? '维护中' : '营业中'}</span>
         </div>
-        <a class="s-out" href="/">退出</a>
+        <a class="s-out" href="/">返回前台</a>
       </div>
     </aside>
 
@@ -215,11 +220,56 @@ const tail = [
           <a class="t-preview" href="/">预览前台 <span class="ar" aria-hidden="true">↗</span></a>
           <span class="t-div" aria-hidden="true"></span>
           <span class="deploy">运行环境 <b>{environment}</b></span>
+          <button
+            class="t-token"
+            id="adminTokenOpen"
+            type="button"
+            data-token-open
+            data-state="idle"
+            aria-haspopup="dialog"
+            aria-controls="adminTokenDlg"
+          >
+            <span class="t-token-lamp" id="adminTokenLamp" data-on="false" aria-hidden="true"></span>
+            <span class="t-token-k">管理令牌</span>
+            <b class="t-token-v" id="adminTokenState" aria-live="polite">未填写</b>
+          </button>
           <span class="avatar" role="img" aria-label="登录账号 MY">MY</span>
         </div>
       </header>
 
       <slot />
     </main>
+
+    <!-- ---------- 管理令牌：全后台唯一入口 ---------- -->
+    <dialog class="dlg token-dlg" id="adminTokenDlg" aria-labelledby="adminTokenTitle">
+      <form class="dlg-box" id="adminTokenForm" novalidate>
+        <span class="dlg-tab">ADMIN / 令牌</span>
+        <div class="dlg-h">
+          <span id="adminTokenTitle">管理令牌</span>
+          <span id="adminTokenDlgState">未填写</span>
+        </div>
+        <label class="token-label" for="adminTokenInput">令牌 / TOKEN</label>
+        <input
+          class="dlg-note token-input"
+          id="adminTokenInput"
+          type="password"
+          placeholder="管理令牌"
+          autocomplete="current-password"
+          spellcheck="false"
+        />
+        <p class="dlg-c token-note">
+          令牌只保存在这台浏览器，用来解锁后台的读写操作；清除后页面会回到未连接状态。
+        </p>
+        <div class="dlg-f">
+          <span class="dlg-c" id="adminTokenMsg" role="status" aria-live="polite">未填写</span>
+          <div class="dlg-a">
+            <button class="p-btn" id="adminTokenClear" type="button">清除</button>
+            <button class="p-btn p-btn--pub" id="adminTokenSave" type="submit">保存并刷新</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <script is:inline src="/js/admin-token.js"></script>
   </body>
 </html>

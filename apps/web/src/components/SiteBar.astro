@@ -15,12 +15,14 @@ interface Props {
 
 const { settings } = Astro.props;
 const icpHasLink = /<a[\s>]/i.test(settings.footerIcp ?? '');
+// 版权不再作为独立配置项：© 当前年份 + 后台配置的作者。
+const copyright = `© ${new Date().getFullYear()} ${settings.author || 'Myon'}`;
 ---
 
 <footer class="sitebar" aria-label="页脚">
   <div class="sb-left">
     <slot name="left">
-      <span class="sb-copy">{settings.footerCopyright}</span>
+      <span class="sb-copy">{copyright}</span>
       <span class="sb-tech" set:html={settings.footerTech} />
     </slot>
   </div>

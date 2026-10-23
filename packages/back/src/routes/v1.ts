@@ -1,11 +1,15 @@
 import {
   aboutKey,
+  type BangumiStatus,
+  type BangumiSubjectType,
+  bangumiSubjectTypes,
   isIconifyIconName,
   paginationSchema,
   toPublicSiteSettings,
 } from '@myon/shared';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { isBangumiSubjectType } from '../bangumi';
 import { getDb } from '../db/client';
 import {
   bangumiShows,
@@ -242,18 +246,33 @@ v1.get('/bangumi', async (c) => {
   const db = getDb(c.env.DB);
   const { limit, offset } = paginationSchema.parse(c.req.query());
 
+  // ?type= 非法时明确报错，避免把「筛选失败」误当成「没有收藏」。
+  const type = c.req.query('type');
+  if (type && !isBangumiSubjectType(type)) {
+    return c.json({ error: 'invalid_subject_type' }, 400);
+  }
+  const where = type ? eq(bangumiShows.subjectType, type) : undefined;
+
+  // 默认仍按「在追优先 + 下次放送」排序；?sort=recent 改成最近更新优先。
+  const orderBy =
+    c.req.query('sort') === 'recent'
+      ? [desc(bangumiShows.updatedAt), asc(bangumiShows.title)]
+      : [
+          sql`case when status = 'watching' then 0 else 1 end`,
+          asc(bangumiShows.nextAirAt),
+        ];
+
   const rows = await db
     .select()
     .from(bangumiShows)
-    .orderBy(
-      sql`case when status = 'watching' then 0 else 1 end`,
-      asc(bangumiShows.nextAirAt),
-    )
+    .where(where)
+    .orderBy(...orderBy)
     .limit(limit)
     .offset(offset);
   const totalRows = await db
     .select({ total: sql<number>`count(*)` })
-    .from(bangumiShows);
+    .from(bangumiShows)
+    .where(where);
 
   return c.json({
     items: rows,
@@ -286,10 +305,12 @@ v1.get('/stats', async (c) => {
     .from(galleryItems);
   const bangumiAgg = await db
     .select({
-      total: sql<number>`count(*)`,
-      watching: sql<number>`coalesce(sum(case when status = 'watching' then 1 else 0 end), 0)`,
+      subjectType: bangumiShows.subjectType,
+      status: bangumiShows.status,
+      count: sql<number>`count(*)`,
     })
-    .from(bangumiShows);
+    .from(bangumiShows)
+    .groupBy(bangumiShows.subjectType, bangumiShows.status);
   const galleryCats = await db
     .select({ name: galleryItems.category, count: sql<number>`count(*)` })
     .from(galleryItems)
@@ -322,6 +343,35 @@ v1.get('/stats', async (c) => {
       .sort()
       .at(-1) ?? null;
 
+  // 追番统计是全量聚合：按「类型 × 状态」扫一遍，不再只算第一页。
+  const bangumiByType = Object.fromEntries(
+    bangumiSubjectTypes.map((subjectType) => [
+      subjectType,
+      { total: 0, watching: 0 },
+    ]),
+  ) as Record<BangumiSubjectType, { total: number; watching: number }>;
+  const bangumiByStatus: Record<BangumiStatus, number> = {
+    watching: 0,
+    watched: 0,
+    wish: 0,
+    paused: 0,
+  };
+  let bangumiTotal = 0;
+  let bangumiWatching = 0;
+  for (const row of bangumiAgg) {
+    const count = Number(row.count) || 0;
+    bangumiTotal += count;
+    if (row.status === 'watching') bangumiWatching += count;
+    const typeSummary = bangumiByType[row.subjectType as BangumiSubjectType];
+    if (typeSummary) {
+      typeSummary.total += count;
+      if (row.status === 'watching') typeSummary.watching += count;
+    }
+    if (row.status in bangumiByStatus) {
+      bangumiByStatus[row.status as BangumiStatus] += count;
+    }
+  }
+
   return c.json({
     lastUpdated,
     posts: {
@@ -336,8 +386,10 @@ v1.get('/stats', async (c) => {
       categories: galleryCats,
     },
     bangumi: {
-      total: bangumiAgg[0]?.total ?? 0,
-      watching: bangumiAgg[0]?.watching ?? 0,
+      total: bangumiTotal,
+      watching: bangumiWatching,
+      byType: bangumiByType,
+      byStatus: bangumiByStatus,
     },
     media: { total: mediaTotal },
     tools: {

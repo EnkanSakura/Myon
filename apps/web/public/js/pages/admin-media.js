@@ -20,8 +20,8 @@
     invalid_form: "上传表单无效",
     upload_failed: "服务端上传失败"
   };
-  var AUTH_401 = "管理令牌无效（401）";
-  var AUTH_503 = "服务端未配置 ADMIN_TOKEN（503）";
+  var AUTH_401 = "管理令牌无效";
+  var AUTH_503 = "服务端未配置管理令牌";
 
   var pageEl = document.querySelector(".page[data-api]");
   var API = pageEl ? pageEl.getAttribute("data-api") : "";
@@ -39,21 +39,14 @@
   function readStore(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
-  function writeStore(key, value) {
-    try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
-  }
-  function removeStore(key) {
-    try { localStorage.removeItem(key); } catch (e) {}
-  }
 
   /* ---------------- 元素 ---------------- */
   var toastEl = $("toast");
-  var tokenInput = $("tokenInput");
-  var tokenState = $("tokenState");
   var authBanner = $("authBanner");
   var authK = $("authK");
   var authTitle = $("authTitle");
   var authText = $("authText");
+  var authToken = $("authToken");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
   var btnUpload = $("btnUpload");
   var fileInput = $("fileInput");
@@ -68,11 +61,8 @@
   var batchClear = $("batchClear");
   var qInput = $("q");
   var sortSel = $("sortSel");
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab2"));
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".filterbar .chip"));
   var sumFiles = $("sumFiles");
-  var sumImg = $("sumImg");
-  var sumAtt = $("sumAtt");
-  var sumSize = $("sumSize");
   var stLine = $("stLine");
   var stCount = $("stCount");
   var stImgSeg = $("stImgSeg");
@@ -80,9 +70,6 @@
   var stImg = $("stImg");
   var stAtt = $("stAtt");
   var stSize = $("stSize");
-  var tabAll = $("tabAll");
-  var tabImg = $("tabImg");
-  var tabAtt = $("tabAtt");
   var pgNow = $("pgNow");
   var pgPages = $("pgPages");
   var pgSize = $("pgSize");
@@ -90,6 +77,8 @@
   var pgPrev = $("pgPrev");
   var pgNext = $("pgNext");
   var pgNums = $("pgNums");
+  var fbCount = $("fbCount");
+  var clearFilters = $("clearFilters");
   var delDlg = $("delDlg");
   var delDlgText = $("delDlgText");
   var delCancel = $("delCancel");
@@ -122,7 +111,6 @@
 
   /* ---------------- 令牌 / 授权 ---------------- */
   function tokenValue() { return (readStore(TOKEN_KEY) || "").trim(); }
-  function setTokenState(text) { tokenState.textContent = text; }
   function setNoticeTone(tone) {
     each(NOTICE_TONES, function (name) { authBanner.classList.remove(name); });
     authBanner.classList.add("notice--" + tone);
@@ -133,8 +121,9 @@
     authK.textContent = tone === "error" ? "ERR" : tone === "warn" ? "WARN" : "INFO";
     authTitle.textContent = title;
     authText.textContent = text;
+    authToken.hidden = true;
   }
-  function hideAuth() { authBanner.hidden = true; }
+  function hideAuth() { authBanner.hidden = true; authToken.hidden = true; }
 
   function request(method, url, body) {
     var headers = { accept: "application/json" };
@@ -150,19 +139,18 @@
   function readJson(res) { return res.json().catch(function () { return {}; }); }
 
   function authFailed() {
-    setTokenState("令牌无效");
-    showAuth("error", "管理令牌无效（401）", "令牌被服务端拒绝。检查 ADMIN_TOKEN 是否与 .dev.vars / Worker 环境变量一致，改好后点「保存令牌」。");
+    showAuth("error", "管理令牌无效", "令牌被拒绝，请在右上角「管理令牌」里更新后重新读取。");
+    authToken.hidden = false;
     empty.hidden = false;
     emptyReset.hidden = true;
     emptyText.textContent = "未授权：管理令牌无效，重新保存令牌后再读取。";
     toast(AUTH_401);
   }
   function adminMissing() {
-    setTokenState("服务端只读");
-    showAuth("warn", "服务端未配置 ADMIN_TOKEN（503）", "在本地 .dev.vars 或 Worker 环境变量里配置 ADMIN_TOKEN 后重新加载页面。");
+    showAuth("warn", "服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
     empty.hidden = false;
     emptyReset.hidden = true;
-    emptyText.textContent = "接口未开放：服务端没有配置 ADMIN_TOKEN。";
+    emptyText.textContent = "接口未开放：服务端没有配置管理令牌。";
     toast(AUTH_503);
   }
 
@@ -219,9 +207,6 @@
       ? state.stats.media.total
       : state.total;
     sumFiles.textContent = String(total);
-    sumImg.textContent = String(counts.img);
-    sumAtt.textContent = String(counts.att);
-    sumSize.textContent = sizeLabel(counts.size);
     stLine.textContent = "图片 " + counts.img + " · 其它 " + counts.att + " · 合计 " + sizeLabel(counts.size);
     stCount.textContent = String(counts.all);
     var pct = counts.all ? Math.round((counts.img / counts.all) * 100) : 0;
@@ -230,11 +215,16 @@
     stImg.textContent = String(counts.img);
     stAtt.textContent = String(counts.att);
     stSize.textContent = sizeLabel(counts.size);
-    tabAll.textContent = String(counts.all);
-    tabImg.textContent = String(counts.img);
-    tabAtt.textContent = String(counts.att);
     if ($("railMedia")) $("railMedia").textContent = String(total);
+    paintFilterCount();
     paintPager();
+  }
+
+  /** 筛选栏只保留一个计数：本页通过了类型与关键词筛选的数量。 */
+  function paintFilterCount() {
+    if (!fbCount) return;
+    var shown = visibleItems().length;
+    fbCount.textContent = "显示 " + shown + " 个 · 筛选只作用于本页";
   }
 
   function paintPager() {
@@ -431,15 +421,15 @@
   function loadData() {
     if (!tokenValue()) {
       setLoading(false);
-      setTokenState("未填写");
-      showAuth("info", "尚未填写管理令牌", "在页面上方填入 ADMIN_TOKEN 后保存；令牌只存在本机浏览器 localStorage（myon-admin-token），请求时放在 x-admin-token 头里。");
+      showAuth("info", "尚未连接后台", "媒体库需要管理令牌才能读取。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。");
+      authToken.hidden = false;
       lockView("需要管理令牌", "填好令牌后会自动读取媒体库。");
+      paintFilterCount();
       return;
     }
 
     setLoading(true);
     hideAuth();
-    setTokenState("校验中…");
     var url = API + "?limit=" + state.limit + "&offset=" + (state.page - 1) * state.limit;
 
     request("GET", url)
@@ -450,7 +440,7 @@
         var res = result.res;
         var body = result.body;
         if (res.status === 401) { authFailed(); lockView("未授权", "令牌无效"); return; }
-        if (res.status === 503) { adminMissing(); lockView("接口未开放", "服务端没有配置 ADMIN_TOKEN"); return; }
+        if (res.status === 503) { adminMissing(); lockView("接口未开放", "服务端没有配置管理令牌"); return; }
         if (!res.ok) throw new Error("HTTP " + res.status);
         if (!body || !Array.isArray(body.items)) throw new Error("接口响应缺少 items");
         state.items = body.items;
@@ -464,18 +454,17 @@
           return;
         }
         setLoading(false);
-        setTokenState("已连接");
         renderGrid();
         loadStats();
       })
       .catch(function (err) {
         setLoading(false);
         grid.innerHTML = "";
-        setTokenState("读取失败");
         empty.hidden = false;
         emptyReset.hidden = false;
         emptyReset.textContent = "重新读取";
-        emptyText.textContent = "读取失败：" + (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与 R2 绑定是否正常。";
+        emptyText.textContent = "读取失败：" + (err && err.message ? err.message : "网络异常") + " · 检查网络或服务端状态后重试。";
+        paintFilterCount();
         toast("读取失败 · 请稍后重试");
       });
   }
@@ -485,8 +474,8 @@
     if (!items.length) return;
     state.pendingDelete = items.slice();
     delDlgText.textContent = items.length === 1
-      ? "删除 " + (items[0].filename || items[0].key) + "？R2 对象会被删除，引用它的图片会失效。"
-      : "删除选中的 " + items.length + " 个文件？R2 对象和 D1 记录会一起删除。";
+      ? "删除 " + (items[0].filename || items[0].key) + "？文件会被删除，引用它的图片会失效。"
+      : "删除选中的 " + items.length + " 个文件？删除后不可恢复。";
     if (typeof delDlg.showModal === "function") delDlg.showModal();
   }
 
@@ -692,32 +681,6 @@
     renderGrid();
   }
 
-  /* ---------------- 令牌操作 ---------------- */
-  function saveToken() {
-    var token = tokenInput.value.trim();
-    if (!token) {
-      toast("令牌不能为空");
-      tokenInput.focus();
-      return;
-    }
-    if (!writeStore(TOKEN_KEY, token)) {
-      toast("无法写入本机存储 · 请用本地服务器打开");
-      return;
-    }
-    toast("令牌已保存 · 正在读取媒体库");
-    setLoading(false);
-    state.page = 1;
-    loadData();
-  }
-  function clearToken() {
-    removeStore(TOKEN_KEY);
-    tokenInput.value = "";
-    setTokenState("未填写");
-    showAuth("info", "尚未填写管理令牌", "填入 ADMIN_TOKEN 后点「保存令牌」；令牌只存在本机浏览器 localStorage（myon-admin-token）。");
-    lockView("需要管理令牌", "填好令牌后会自动读取媒体库。");
-    toast("已清除本机令牌");
-  }
-
   /* ---------------- 事件绑定 ---------------- */
   btnUpload.addEventListener("click", function () { fileInput.click(); });
   fileInput.addEventListener("change", function () {
@@ -769,6 +732,7 @@
     state.sort = sortSel.value;
     renderGrid();
   });
+  clearFilters.addEventListener("click", resetFilters);
 
   emptyReset.addEventListener("click", function () {
     if (state.total === 0) fileInput.click();
@@ -810,15 +774,6 @@
     loadData();
   });
 
-  $("tokenSave").addEventListener("click", saveToken);
-  $("tokenClear").addEventListener("click", clearToken);
-  tokenInput.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      saveToken();
-    }
-  });
-
   delCancel.addEventListener("click", function () {
     state.pendingDelete = [];
     if (typeof delDlg.close === "function") delDlg.close();
@@ -832,7 +787,6 @@
   });
 
   /* ---------------- 初始化 ---------------- */
-  tokenInput.value = tokenValue();
   sortSel.value = state.sort;
   paintSummary();
   loadData();

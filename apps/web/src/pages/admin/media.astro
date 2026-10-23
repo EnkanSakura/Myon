@@ -30,7 +30,7 @@ const mediaBase = '/media/';
           <span class="sticker sticker--paper">资源 / MEDIA</span>
         </div>
         <h1>媒体库<span class="dot">。</span></h1>
-        <p class="pdate">共 <b id="sumFiles">—</b> 个文件 <span class="sep">·</span> 本页图片 <span id="sumImg">—</span> <span class="sep">·</span> 本页其它 <span id="sumAtt">—</span> <span class="sep">·</span> 本页合计 <span id="sumSize">—</span></p>
+        <p class="pdate">共 <b id="sumFiles">—</b> 个文件 <span class="sep">·</span> 单张上限 8MB</p>
       </div>
 
       <div class="ph-r">
@@ -41,22 +41,14 @@ const mediaBase = '/media/';
       </div>
     </header>
 
-    <!-- ---------- 管理令牌 ---------- -->
-    <section class="tk-bar" aria-label="管理令牌">
-      <span class="tk-k">TOKEN / 管理令牌</span>
-      <label class="sr-only" for="tokenInput">管理令牌</label>
-      <input class="tk-input" id="tokenInput" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" spellcheck="false">
-      <button class="tk-btn" id="tokenSave" type="button">保存令牌</button>
-      <button class="tk-btn" id="tokenClear" type="button">清除</button>
-      <span class="tk-state" id="tokenState">未填写</span>
-    </section>
-
+    <!-- ---------- 连接 / 授权提示 ---------- -->
     <div class="notice notice--info" id="authBanner" role="status" hidden>
       <span class="notice-k" id="authK">INFO</span>
       <div class="notice-c">
         <b id="authTitle"></b>
         <p id="authText"></p>
       </div>
+      <button class="notice-btn" id="authToken" type="button" data-token-open hidden>管理令牌</button>
     </div>
 
     <!-- ---------- 本页概览（R2 用量需在 Cloudflare 控制台看） ---------- -->
@@ -81,27 +73,30 @@ const mediaBase = '/media/';
       </div>
     </section>
 
-    <!-- ---------- 工具条 ---------- -->
-    <div class="bar">
-      <div class="search">
+    <!-- ---------- 筛选栏 ---------- -->
+    <div class="filterbar" aria-label="筛选媒体">
+      <div class="fb-chips" role="group" aria-label="按类型筛选">
+        <button class="chip is-on" type="button" data-type="all" aria-pressed="true">全部</button>
+        <button class="chip" type="button" data-type="img" aria-pressed="false">图片</button>
+        <button class="chip" type="button" data-type="att" aria-pressed="false">其它</button>
+      </div>
+
+      <label class="fb-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M15.6 15.6 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <label class="sr-only" for="q">搜索文件名</label>
+        <span class="sr-only">搜索文件名</span>
         <input id="q" type="search" placeholder="搜索文件名" autocomplete="off" spellcheck="false">
-      </div>
+      </label>
 
-      <div class="tabs2" role="group" aria-label="按类型筛选">
-        <button class="tab2 is-on" type="button" data-type="all" aria-pressed="true">全部 <b id="tabAll">0</b></button>
-        <button class="tab2" type="button" data-type="img" aria-pressed="false">图片 <b id="tabImg">0</b></button>
-        <button class="tab2" type="button" data-type="att" aria-pressed="false">其它 <b id="tabAtt">0</b></button>
-      </div>
-
-      <label class="sel">排序
+      <label class="fb-sort">排序
         <select id="sortSel">
           <option value="added">最近上传</option>
           <option value="size">最大文件</option>
           <option value="name">名称 A→Z</option>
         </select>
       </label>
+
+      <span class="fb-count" id="fbCount" aria-live="polite">显示 —</span>
+      <button class="fb-clear" id="clearFilters" type="button">清除</button>
     </div>
 
     <!-- ---------- 上传队列 ---------- -->
@@ -139,7 +134,7 @@ const mediaBase = '/media/';
     </div>
 
     <div class="page-mark">
-      <span>P.08 / MEDIA — R2 对象</span>
+      <span>P.08 / MEDIA — 媒体文件</span>
       <span>图片上限 8MB · JPG / PNG / WebP / GIF / AVIF / SVG</span>
     </div>
 
@@ -149,10 +144,10 @@ const mediaBase = '/media/';
 <dialog class="dlg" id="delDlg" aria-labelledby="delDlgTitle">
   <div class="dlg-box">
     <span class="dlg-tab">DANGER</span>
-    <div class="dlg-h"><span id="delDlgTitle">确认删除</span><span>DELETE / R2</span></div>
+    <div class="dlg-h"><span id="delDlgTitle">确认删除</span><span>DELETE / 不可撤销</span></div>
     <p class="cfm-p" id="delDlgText">删除后不可恢复。</p>
     <div class="dlg-f">
-      <span class="dlg-c">只删除 R2 对象，不可恢复</span>
+      <span class="dlg-c">删除后不可恢复</span>
       <div class="dlg-a">
         <button class="p-btn" id="delCancel" type="button">取消</button>
         <button class="p-btn p-btn--pub del-ok" id="delOk" type="button">删除</button>

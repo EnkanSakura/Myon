@@ -27,10 +27,10 @@ const statsApi = `${apiBasePath}/stats`;
       <div class="ph-l">
         <div class="kicker">
           <span class="sticker">CABINET / ADMIN</span>
-          <span class="sticker sticker--paper">已陈列 <span id="stickerShown">—</span></span>
+          <span class="sticker sticker--paper">陈列 / CABINET</span>
         </div>
         <h1>展柜<span class="dot">。</span></h1>
-        <p class="pdate">共 <b id="gTotal">—</b> 件 <span class="sep">·</span> <span id="gCats">正在读取…</span> <span class="sep">·</span> 已陈列 <b id="gShown">—</b></p>
+        <p class="pdate">共 <b id="gTotal">—</b> 件 <span class="sep">·</span> 已陈列 <b id="gShown">—</b></p>
       </div>
 
       <div class="ph-r">
@@ -41,64 +41,46 @@ const statsApi = `${apiBasePath}/stats`;
       </div>
     </header>
 
-    <!-- ---------- 管理令牌 ---------- -->
-    <section class="tk-bar" aria-label="管理令牌">
-      <span class="tk-k">TOKEN / 管理令牌</span>
-      <label class="sr-only" for="tokenInput">管理令牌</label>
-      <input class="tk-input" id="tokenInput" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" spellcheck="false">
-      <button class="tk-btn" id="tokenSave" type="button">保存令牌</button>
-      <button class="tk-btn" id="tokenClear" type="button">清除</button>
-      <span class="tk-state" id="tokenState">未填写</span>
-    </section>
-
+    <!-- ---------- 唯一的页面级提示 ---------- -->
     <div class="notice notice--info" id="authBanner" role="status" hidden>
       <span class="notice-k" id="authK">INFO</span>
       <div class="notice-c">
         <b id="authTitle"></b>
         <p id="authText"></p>
       </div>
+      <button class="notice-btn" id="authToken" type="button" data-token-open hidden>管理令牌</button>
     </div>
 
-    <!-- ---------- 01 分类 ---------- -->
-    <section class="sec" aria-labelledby="h-cats">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-cats">分类</h2>
-        <span class="sec-en">CATEGORIES</span>
-        <div class="sec-r"><span class="sec-note">筛选只在当前页内做 · 计数按本页</span></div>
-      </div>
-
-      <div class="cats" role="group" aria-label="按分类筛选藏品">
-        <span class="cat-btns" id="catBtns"></span>
-        <span class="cats-note" id="galCount" aria-live="polite">正在读取…</span>
-      </div>
-    </section>
-
-    <!-- ---------- 02 藏品 ---------- -->
+    <!-- ---------- 01 藏品 ---------- -->
     <section class="sec" aria-labelledby="h-items">
       <div class="sec-h">
-        <span class="sec-num">02</span>
+        <span class="sec-num">01</span>
         <h2 id="h-items">藏品</h2>
         <span class="sec-en">ITEMS / GRID</span>
         <div class="sec-r">
-          <span class="sec-note" id="galPageNote">正在读取…</span>
           <a class="arrow-link" href="/gallery">前台展柜 <span class="ar" aria-hidden="true">→</span></a>
         </div>
       </div>
 
+      <div class="filterbar" aria-label="筛选藏品">
+        <div class="fb-chips" id="catChips" role="group" aria-label="按分类筛选藏品">
+          <button class="chip is-on" type="button" data-cat="全部" aria-pressed="true">全部</button>
+        </div>
+
+        <label class="fb-sort">排序
+          <select id="galSortSelect" aria-label="藏品排序">
+            <option value="slot">按柜位</option>
+            <option value="new">最近入藏</option>
+            <option value="name">按名称</option>
+          </select>
+        </label>
+
+        <span class="fb-count" id="galCount" aria-live="polite">显示 — 件 · 筛选只作用于本页</span>
+        <button class="fb-clear" id="clearFilters" type="button">清除</button>
+      </div>
+
       <div class="gal-body">
         <div class="gal-main">
-          <div class="gal-toolbar">
-            <span class="gal-count">已陈列 <b id="shownCount">—</b> / <span id="totalCount">—</span> 件</span>
-            <label class="gal-sort">排序
-              <select id="galSortSelect" aria-label="藏品排序">
-                <option value="slot">按柜位</option>
-                <option value="new">最近入藏</option>
-                <option value="name">按名称</option>
-              </select>
-            </label>
-          </div>
-
           <div class="gal-grid" id="galGrid" aria-busy="true"></div>
 
           <div class="gal-loading" id="galLoading" hidden>
@@ -153,7 +135,7 @@ const statsApi = `${apiBasePath}/stats`;
             </div>
           </div>
 
-          <p class="gal-note"><b>注意</b> 删除会同时删掉 D1 里的这一行，前台展柜立刻撤下；操作前会二次确认。媒体 key 为空时前台显示「未拍摄」占位。</p>
+          <p class="gal-note"><b>注意</b> 删除会立即从前台展柜撤下，操作前会二次确认。媒体 key 为空时前台显示「未拍摄」占位。</p>
 
           <div class="recent-panel">
             <div class="sp-h"><span>RECENT / 最近入藏</span><span class="sp-tag">TOP 3</span></div>
@@ -169,7 +151,7 @@ const statsApi = `${apiBasePath}/stats`;
 <dialog class="dlg" id="editDlg" aria-labelledby="editDlgTitle">
   <div class="dlg-box">
     <span class="dlg-tab" id="editDlgTab">NEW</span>
-    <div class="dlg-h"><span id="editDlgTitle">新增藏品</span><span>GALLERY / D1</span></div>
+    <div class="dlg-h"><span id="editDlgTitle">新增藏品</span><span>GALLERY / 展柜</span></div>
 
     <form id="editForm" novalidate>
       <div class="gf-grid">
@@ -220,7 +202,7 @@ const statsApi = `${apiBasePath}/stats`;
 <dialog class="dlg" id="delDlg" aria-labelledby="delDlgTitle">
   <div class="dlg-box">
     <span class="dlg-tab">DANGER</span>
-    <div class="dlg-h"><span id="delDlgTitle">确认删除</span><span>DELETE / D1</span></div>
+    <div class="dlg-h"><span id="delDlgTitle">确认删除</span><span>DELETE / 不可撤销</span></div>
     <p class="cfm-p" id="delDlgText">删除后不可恢复。</p>
     <div class="dlg-f">
       <span class="dlg-c">此操作会立即影响前台展柜</span>

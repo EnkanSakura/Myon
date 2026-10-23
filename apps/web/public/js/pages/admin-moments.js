@@ -17,12 +17,6 @@
   function readStore(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
-  function writeStore(key, value) {
-    try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
-  }
-  function removeStore(key) {
-    try { localStorage.removeItem(key); } catch (e) {}
-  }
   function pad2(n) { return String(n).padStart(2, "0"); }
   function timeNow() {
     var d = new Date();
@@ -110,6 +104,8 @@
   var emptyTitle = $("emptyTitle");
   var emptyText = $("emptyText");
   var btnResetFilter = $("btnResetFilter");
+  var clearFilters = $("clearFilters");
+  var imgToggle = $("imgToggle");
   var toastEl = $("toast");
   var pgNow = $("pgNow");
   var pgTotal = $("pgTotal");
@@ -122,13 +118,6 @@
   var amBannerTitle = $("amBannerTitle");
   var amBannerText = $("amBannerText");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
-  var btnToken = $("btnToken");
-
-  var tokenDlg = $("tokenDlg");
-  var adminToken = $("adminToken");
-  var tokenState = $("tokenState");
-  var tokenSave = $("tokenSave");
-  var tokenClear = $("tokenClear");
 
   var confirmDlg = $("confirmDlg");
   var confirmTitle = $("confirmTitle");
@@ -148,6 +137,7 @@
     limit: PAGE_LIMIT,
     countsKnown: false,
     filter: "all",
+    imgOnly: false,
     q: "",
     editingId: null,
     mediaKey: null,
@@ -211,18 +201,16 @@
     });
   }
 
-  function handleAuth(result, openDialog) {
+  function handleAuth(result) {
     if (!result) return false;
     if (result.status === 401) {
-      showBanner("error", "管理令牌无效（401）", "令牌被服务端拒绝。点右侧「填写管理令牌」，改成与 ADMIN_TOKEN 一致后重试。");
+      showBanner("error", "管理令牌无效", "令牌被服务端拒绝。点右上角「管理令牌」更新后重试。");
       setListState("未授权 · 令牌无效");
-      if (openDialog) openTokenDlg("令牌无效");
       return true;
     }
     if (result.status === 503) {
-      showBanner("warn", "服务端未配置 ADMIN_TOKEN（503）", "本地在 apps/web/.dev.vars 配 ADMIN_TOKEN，线上用 wrangler secret 配置；配置前后台接口不可写。");
-      setListState("只读 · 服务端未配置 ADMIN_TOKEN");
-      if (openDialog) openTokenDlg("服务端未配置 ADMIN_TOKEN");
+      showBanner("warn", "服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
+      setListState("只读 · 服务端未配置管理令牌");
       return true;
     }
     return false;
@@ -295,8 +283,8 @@
   }
 
   function match(row) {
-    if (state.filter === "img" && row.getAttribute("data-img") !== "1") return false;
-    if (state.filter !== "all" && state.filter !== "img" && row.getAttribute("data-tag") !== state.filter) return false;
+    if (state.imgOnly && row.getAttribute("data-img") !== "1") return false;
+    if (state.filter !== "all" && row.getAttribute("data-tag") !== state.filter) return false;
     if (state.q) {
       var hay = row.getAttribute("data-text") || "";
       if (hay.indexOf(state.q) < 0) return false;
@@ -314,7 +302,7 @@
         emptyText.textContent = state.loadError;
       } else if (!hasToken() || !state.countsKnown) {
         emptyTitle.textContent = "还没有读到动态";
-        emptyText.textContent = "填写管理令牌后，这里会显示 D1 里的真实数据。";
+        emptyText.textContent = "填写管理令牌后，这里会显示真实数据。";
       } else {
         emptyTitle.textContent = "还没有动态";
         emptyText.textContent = "用上面的发布框发第一条。";
@@ -340,7 +328,7 @@
       row.hidden = !ok;
       if (ok) shown += 1;
     });
-    setText("shownNotes", "显示 " + shown + " 条 · 本页 " + rows.length + " 条");
+    setText("shownNotes", "显示 " + shown + " 条 · 筛选只作用于本页");
     updateEmpty(rows.length, shown);
   }
 
@@ -353,9 +341,6 @@
   function renderStats() {
     var known = state.countsKnown;
     setText("stickerPub", known ? state.total : "—");
-    setText("noteTotalHead", known ? state.total : "—");
-    setText("noteTotalList", known ? state.total : "—");
-    setText("notePageCount", known ? state.items.length : "—");
     setText("notesEn", "NOTES / " + (known ? state.total : "—"));
     if (!known) {
       setText("noteToday", "—");
@@ -385,7 +370,7 @@
 
   function setFilter(value) {
     state.filter = value;
-    each(document.querySelectorAll(".ftab"), function (btn) {
+    each(document.querySelectorAll(".fb-chips .chip"), function (btn) {
       var on = btn.getAttribute("data-filter") === value;
       btn.classList.toggle("is-on", on);
       btn.setAttribute("aria-pressed", String(on));
@@ -393,18 +378,24 @@
     applyFilter();
   }
 
-  function ensureFilterTabs() {
-    var wrap = document.querySelector(".ftabs");
+  function paintImgToggle() {
+    if (!imgToggle) return;
+    imgToggle.setAttribute("aria-pressed", String(state.imgOnly));
+    imgToggle.classList.toggle("is-on", state.imgOnly);
+  }
+
+  function ensureFilterChips() {
+    var wrap = document.querySelector(".fb-chips");
     if (!wrap) return;
-    // 动态分类标签只按当前数据刷新，SSR 渲染的固定标签保留。
-    each(wrap.querySelectorAll('.ftab[data-dynamic="1"]'), function (btn) { btn.remove(); });
+    // 动态分类 chips 只按当前数据刷新，SSR 渲染的固定分类保留。
+    each(wrap.querySelectorAll('.chip[data-dynamic="1"]'), function (btn) { btn.remove(); });
     var known = {};
-    each(wrap.querySelectorAll(".ftab"), function (btn) { known[btn.getAttribute("data-filter")] = true; });
+    each(wrap.querySelectorAll(".chip"), function (btn) { known[btn.getAttribute("data-filter")] = true; });
     state.items.forEach(function (item) {
       var name = item.category;
       if (!name || known[name]) return;
       known[name] = true;
-      var btn = el("button", "ftab", name);
+      var btn = el("button", "chip", name);
       btn.type = "button";
       btn.setAttribute("data-filter", name);
       btn.setAttribute("data-dynamic", "1");
@@ -412,10 +403,19 @@
       wrap.appendChild(btn);
     });
     var exists = false;
-    each(wrap.querySelectorAll(".ftab"), function (btn) {
+    each(wrap.querySelectorAll(".chip"), function (btn) {
       if (btn.getAttribute("data-filter") === state.filter) exists = true;
     });
     if (!exists) setFilter("all");
+  }
+
+  function resetFilters() {
+    state.q = "";
+    state.imgOnly = false;
+    noteSearch.value = "";
+    paintImgToggle();
+    setFilter("all");
+    noteSearch.focus();
   }
 
   function sortItems() {
@@ -445,7 +445,7 @@
       renderStats();
       renderPager();
       setListState("未连接 · 需要管理令牌");
-      showBanner("info", "尚未填写管理令牌", "后台列表和发布都要管理令牌。点右侧「填写管理令牌」，保存后会自动刷新。");
+      showBanner("info", "尚未连接后台", "动态列表和发布都需要管理令牌。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。");
       return;
     }
     state.loading = true;
@@ -453,7 +453,7 @@
     renderPager();
     var url = MOMENTS_API + "?limit=" + state.limit + "&offset=" + state.offset;
     api("GET", url).then(function (res) {
-      if (handleAuth(res, false)) {
+      if (handleAuth(res)) {
         state.items = [];
         state.total = 0;
         state.countsKnown = false;
@@ -468,7 +468,7 @@
       state.countsKnown = true;
       hideBanner();
       setListState("已连接 · " + timeNow() + " 读取");
-      ensureFilterTabs();
+      ensureFilterChips();
       renderRows();
       renderStats();
     }).catch(function (err) {
@@ -621,7 +621,7 @@
       : api("POST", MOMENTS_API, payload);
 
     req.then(function (res) {
-      if (handleAuth(res, true)) return;
+      if (handleAuth(res)) return;
       if (res.status === 400) {
         showIssues(res.data, isEdit ? "保存失败" : "发布失败");
         return;
@@ -632,10 +632,12 @@
 
       resetCompose();
       hideBanner();
-      setFilter("all");
       state.q = "";
+      state.imgOnly = false;
       noteSearch.value = "";
-      toast(isEdit ? "已保存修改 · 已写入 D1" : "已发布 · 已写入 D1");
+      paintImgToggle();
+      setFilter("all");
+      toast(isEdit ? "已保存修改" : "已发布 · 前台同步");
 
       if (isEdit) {
         loadList(false);
@@ -646,7 +648,7 @@
         state.total += 1;
         state.countsKnown = true;
         sortItems();
-        ensureFilterTabs();
+        ensureFilterChips();
         renderRows();
         renderStats();
         renderPager();
@@ -687,7 +689,7 @@
       mediaKey: item.mediaKey || null
     };
     api("PATCH", MOMENTS_API + "/" + encodeURIComponent(item.id), payload).then(function (res) {
-      if (handleAuth(res, true)) return;
+      if (handleAuth(res)) return;
       if (!res.ok) throw new Error("HTTP " + res.status);
       toast(item.pinned ? "已取消置顶" : "已置顶 · 列表按置顶重排");
       loadList(false);
@@ -720,7 +722,7 @@
     confirmOk.disabled = true;
     confirmState.textContent = "删除中…";
     api("DELETE", MOMENTS_API + "/" + encodeURIComponent(pending.id)).then(function (res) {
-      if (handleAuth(res, true)) {
+      if (handleAuth(res)) {
         confirmOk.disabled = false;
         confirmState.textContent = "未授权 · 需要令牌";
         return;
@@ -780,7 +782,7 @@
     state.mediaLoading = true;
     if (mediaHint) mediaHint.textContent = "正在读取媒体库…";
     api("GET", MEDIA_API + "?limit=30").then(function (res) {
-      if (handleAuth(res, false)) {
+      if (handleAuth(res)) {
         if (mediaHint) mediaHint.textContent = "媒体库读取失败 · 需要令牌";
         return;
       }
@@ -812,7 +814,7 @@
     var form = new FormData();
     form.append("file", file);
     api("POST", MEDIA_API, form).then(function (res) {
-      if (handleAuth(res, true)) return;
+      if (handleAuth(res)) return;
       var data = res.data || {};
       if (!res.ok) {
         var message = mediaErrorText(data.error) || ("HTTP " + res.status);
@@ -836,55 +838,6 @@
       btnUpload.disabled = false;
       if (mediaFile) mediaFile.value = "";
     });
-  }
-
-  /* ================= 管理令牌 ================= */
-  function openTokenDlg(reason) {
-    if (!tokenDlg) return;
-    adminToken.value = readStore(TOKEN_KEY) || "";
-    setText("tokenState", reason || (adminToken.value ? "已填写" : "未填写"));
-    if (typeof tokenDlg.showModal === "function") {
-      if (!tokenDlg.open) tokenDlg.showModal();
-    }
-  }
-  function closeTokenDlg() {
-    if (tokenDlg && typeof tokenDlg.close === "function") tokenDlg.close();
-  }
-  function saveToken() {
-    var token = adminToken.value.trim();
-    if (!token) {
-      toast("令牌不能为空");
-      adminToken.focus();
-      return;
-    }
-    if (!writeStore(TOKEN_KEY, token)) {
-      toast("无法写入本机存储 · 请用本机浏览器打开");
-      return;
-    }
-    closeTokenDlg();
-    hideBanner();
-    state.mediaLoaded = false;
-    state.mediaItems = [];
-    renderThumbs();
-    toast("令牌已保存 · 正在刷新");
-    loadList(true);
-  }
-  function clearToken() {
-    removeStore(TOKEN_KEY);
-    adminToken.value = "";
-    closeTokenDlg();
-    state.items = [];
-    state.total = 0;
-    state.countsKnown = false;
-    state.mediaLoaded = false;
-    state.mediaItems = [];
-    renderThumbs();
-    renderRows();
-    renderStats();
-    renderPager();
-    setListState("未连接 · 需要管理令牌");
-    showBanner("info", "尚未填写管理令牌", "后台列表和发布都要管理令牌。点右侧「填写管理令牌」，保存后会自动刷新。");
-    toast("已清除本机令牌");
   }
 
   /* ================= 事件绑定 ================= */
@@ -975,24 +928,27 @@
   });
 
   // 筛选 / 搜索
-  var ftabs = document.querySelector(".ftabs");
-  if (ftabs) {
-    ftabs.addEventListener("click", function (e) {
-      var btn = e.target.closest(".ftab");
+  var chipWrap = document.querySelector(".fb-chips");
+  if (chipWrap) {
+    chipWrap.addEventListener("click", function (e) {
+      var btn = e.target.closest(".chip");
       if (!btn) return;
       setFilter(btn.getAttribute("data-filter"));
+    });
+  }
+  if (imgToggle) {
+    imgToggle.addEventListener("click", function () {
+      state.imgOnly = !state.imgOnly;
+      paintImgToggle();
+      applyFilter();
     });
   }
   noteSearch.addEventListener("input", function () {
     state.q = noteSearch.value.trim().toLowerCase();
     applyFilter();
   });
-  btnResetFilter.addEventListener("click", function () {
-    state.q = "";
-    noteSearch.value = "";
-    setFilter("all");
-    noteSearch.focus();
-  });
+  btnResetFilter.addEventListener("click", resetFilters);
+  if (clearFilters) clearFilters.addEventListener("click", resetFilters);
 
   // 分页
   pgPrev.addEventListener("click", function () {
@@ -1017,24 +973,6 @@
     setTimeout(function () { noteText.classList.remove("is-flash"); }, 900);
   });
 
-  // 令牌弹层
-  btnToken.addEventListener("click", function () { openTokenDlg(""); });
-  var btnTokenOpen = $("btnTokenOpen");
-  if (btnTokenOpen) btnTokenOpen.addEventListener("click", function () { openTokenDlg(""); });
-  tokenSave.addEventListener("click", saveToken);
-  tokenClear.addEventListener("click", clearToken);
-  adminToken.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      saveToken();
-    }
-  });
-  if (tokenDlg) {
-    tokenDlg.addEventListener("click", function (e) {
-      if (e.target === tokenDlg) closeTokenDlg();
-    });
-  }
-
   // 删除确认
   if (confirmDlg) {
     confirmOk.addEventListener("click", doDelete);
@@ -1053,6 +991,7 @@
   /* ================= 初始化 ================= */
   paintVisibility();
   paintPinned();
+  paintImgToggle();
   updateTagQuick();
   paintMedia();
   syncCounter();

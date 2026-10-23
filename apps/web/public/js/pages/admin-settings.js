@@ -1,9 +1,14 @@
 (function () {
   "use strict";
 
+  /* ==========================================================================
+     后台 · 设置：站点 / 首页 / 外观 / 页脚 / 尾页后记
+     读取与保存都走 /api/v1/admin/settings（需要顶栏的「管理令牌」）。
+     只有一个全局状态（页头 saveState）和一个页面级提示条（#setBanner）。
+     ========================================================================== */
+
   /* ---------------- 常量与工具 ---------------- */
   var TOKEN_KEY = "myon-admin-token";
-  var ABOUT_KEY = "myon-about";
   var THEME_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   var RSS_RE = /^(\/|https?:\/\/)/;
   var LINK_RE = /^(\/|https?:\/\/|mailto:|#)/;
@@ -13,7 +18,6 @@
   var HOME_STATS_MAX = 4;
   var HOME_LINKS_MAX = 6;
   var HOME_JSON_MAX = 3000;
-  var THEME_LABEL = { light: "浅色", dark: "深色", system: "跟随系统" };
 
   // 设置接口字段 → 页面输入框 id
   var FIELD_IDS = {
@@ -21,8 +25,6 @@
     site_subtitle: "siteSubtitle",
     site_description: "siteDescription",
     site_author: "siteAuthor",
-    site_email: "siteEmail",
-    footer_copyright: "footerCopyright",
     footer_tech: "footerTech",
     footer_icp: "footerIcp",
     footer_rss: "footerRss",
@@ -31,18 +33,17 @@
     home_lead: "homeLead",
     home_cover_image: "homeCoverImage",
     home_cover_badge: "homeCoverBadge",
-    home_cover_note: "homeCoverNote"
+    home_cover_note: "homeCoverNote",
+    home_end_title: "homeEndTitle",
+    home_end_lead: "homeEndLead",
+    home_afterword_body: "homeAfterwordBody",
+    home_afterword_sign: "homeAfterwordSign",
+    home_afterword_next: "homeAfterwordNext"
   };
 
   function $(id) { return document.getElementById(id); }
   function readStore(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
-  }
-  function writeStore(key, value) {
-    try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
-  }
-  function removeStore(key) {
-    try { localStorage.removeItem(key); } catch (e) {}
   }
   function pad2(n) { return String(n).padStart(2, "0"); }
   function timeNow() {
@@ -79,32 +80,17 @@
   var bannerTitle = $("setBannerTitle");
   var bannerText = $("setBannerText");
   var issuesEl = $("setIssues");
+  var tokenBtn = $("setTokenBtn");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
 
-  var tokenInput = $("adminToken");
-  var tokenState = $("tokenState");
-  var tokenSave = $("tokenSave");
-  var tokenClear = $("tokenClear");
-
-  var themeButtons = Array.prototype.slice.call(document.querySelectorAll("#themeSeg button"));
-  var themeState = $("themeState");
   var themeColorPick = $("themeColorPick");
   var themeColorText = $("themeColorText");
   var themeColorPreview = $("themeColorPreview");
   var themeColorErr = $("themeColorErr");
 
-  var swComments = $("swComments");
-  var commentsState = $("commentsState");
-  var basicState = $("basicState");
-  var footerState = $("footerState");
-
   var footerRss = $("footerRss");
   var footerRssErr = $("footerRssErr");
-  var footerEmail = $("footerEmail");
-  var feedPreview = $("feedPreview");
-  var feedEmailPreview = $("feedEmailPreview");
 
-  var homeState = $("homeState");
   var homePageLabels = $("homePageLabels");
   var homePageLabelsErr = $("homePageLabelsErr");
   var homeStatsRows = $("homeStatsRows");
@@ -120,23 +106,11 @@
   var homeCoverImage = $("homeCoverImage");
   var homeCoverImageErr = $("homeCoverImageErr");
 
-  var cfmDlg = $("cfmDlg");
-  var cfmTitle = $("cfmTitle");
-  var cfmText = $("cfmText");
-  var cfmOk = $("cfmOk");
-  var cfmCancel = $("cfmCancel");
-
-  var deployState = $("deployState");
-  var latestDeploy = $("latestDeploy");
-  var latestDeployAgo = $("latestDeployAgo");
-
   /* ---------------- 页面状态 ---------------- */
   var state = {
     ready: false,
     saving: false,
-    settings: null,
-    theme: "system",
-    comments: true
+    settings: null
   };
 
   /* ---------------- 提示条 ---------------- */
@@ -153,7 +127,11 @@
     banner.classList.add("notice--" + tone);
   }
 
-  /* ---------------- 顶部状态条 ---------------- */
+  function showTokenButton(on) {
+    if (!tokenBtn) return;
+    tokenBtn.hidden = !on;
+  }
+
   function showBanner(tone, title, text, issues) {
     banner.hidden = false;
     setNoticeTone(tone);
@@ -172,10 +150,13 @@
     } else {
       issuesEl.hidden = true;
     }
+    showTokenButton(false);
   }
+
   function hideBanner() {
     banner.hidden = true;
     issuesEl.hidden = true;
+    showTokenButton(false);
   }
 
   /* ---------------- 保存状态 / 可编辑状态 ---------------- */
@@ -186,9 +167,6 @@
   function dirty() {
     if (!state.ready) return;
     setStatus("有未保存的修改", true);
-    basicState.textContent = "有修改";
-    homeState.textContent = "有修改";
-    footerState.textContent = "有修改";
   }
   function setEditable(on) {
     each(document.querySelectorAll("[data-setting]"), function (el) {
@@ -197,15 +175,6 @@
     saveBtn.disabled = !on || state.saving;
     syncRowState("stat");
     syncRowState("link");
-  }
-
-  /* ---------------- 外观：默认主题 ---------------- */
-  function applyTheme(value) {
-    state.theme = THEME_LABEL[value] ? value : "system";
-    each(themeButtons, function (b) {
-      b.setAttribute("aria-pressed", String(b.getAttribute("data-theme") === state.theme));
-    });
-    themeState.textContent = THEME_LABEL[state.theme];
   }
 
   /* ---------------- 外观：主题色 ---------------- */
@@ -234,20 +203,6 @@
       themeColorErr.hidden = false;
     }
     return false;
-  }
-
-  /* ---------------- 评论开关 ---------------- */
-  function applyComments(on) {
-    state.comments = !!on;
-    swComments.setAttribute("aria-checked", String(state.comments));
-    swComments.setAttribute("data-on", String(state.comments));
-    commentsState.textContent = state.comments ? "已开启" : "已关闭";
-  }
-
-  /* ---------------- 订阅预览 ---------------- */
-  function syncFeedPreview() {
-    feedPreview.textContent = footerRss.value.trim() || "—";
-    feedEmailPreview.textContent = footerEmail.value.trim() || "—";
   }
 
   /* ---------------- 首页：数据块 / 联系方式行编辑器 ---------------- */
@@ -432,12 +387,12 @@
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         window.removeEventListener("blur", onCancel);
-        var state = dragState;
-        if (!state) return;
-        var target = state.target;
-        var placeAfter = state.placeAfter;
+        var current = dragState;
+        if (!current) return;
+        var target = current.target;
+        var placeAfter = current.placeAfter;
         clearRowDrag();
-        if (target) moveRowTo(state.kind, state.row, target, placeAfter);
+        if (target) moveRowTo(current.kind, current.row, target, placeAfter);
       }
 
       document.addEventListener("mousemove", onMove);
@@ -703,8 +658,6 @@
     });
     var color = themeColorText.value.trim();
     data.theme_color = THEME_COLOR_RE.test(color) ? color.toUpperCase() : color;
-    data.default_theme = state.theme;
-    data.comments_enabled = state.comments ? "true" : "false";
     data.home_page_labels = JSON.stringify(readPageLabels());
     data.home_stats = JSON.stringify(readStats());
     data.home_links = JSON.stringify(readLinks());
@@ -719,15 +672,9 @@
       el.value = typeof value === "string" ? value : "";
     });
     applyColor(typeof settings.theme_color === "string" ? settings.theme_color : THEME_COLOR_DEFAULT);
-    applyTheme(settings.default_theme);
-    applyComments(settings.comments_enabled === "true");
     renderPageLabels(settings.home_page_labels);
     renderStats(settings.home_stats);
     renderLinks(settings.home_links);
-    syncFeedPreview();
-    basicState.textContent = "已同步";
-    homeState.textContent = "已同步";
-    footerState.textContent = "已同步";
     clearFieldErrors();
     state.settings = settings;
   }
@@ -868,7 +815,7 @@
     }
 
     if (!ok) {
-      var first = document.querySelector(".fld.is-invalid input, .fld.is-invalid textarea, .row.is-invalid input");
+      var first = document.querySelector(".fld.is-invalid input, .fld.is-invalid textarea, .fld.is-invalid select, .row.is-invalid input");
       if (first) first.focus();
     }
     return ok;
@@ -898,29 +845,26 @@
     hideBanner();
 
     if (!token) {
-      tokenState.textContent = "未填写";
       setStatus("未连接 · 需要管理令牌", true);
-      showBanner("info", "尚未填写管理令牌", "在页面底部「系统 · 管理令牌」填入 ADMIN_TOKEN 后保存，页面会重新拉取站点设置。");
+      showBanner("info", "尚未连接后台", "点右上角「管理令牌」填入令牌后保存，页面会自动刷新并读取站点设置。");
+      showTokenButton(true);
       return;
     }
 
-    tokenState.textContent = "校验中…";
     setStatus("正在读取设置…", false);
     request("GET").then(function (res) {
       if (res.status === 401) {
-        tokenState.textContent = "令牌无效";
         setStatus("未授权 · 令牌无效", true);
-        showBanner("error", "管理令牌无效（401）", "检查令牌是否与 ADMIN_TOKEN 一致，改好后到页面底部「系统 · 管理令牌」重新保存。");
+        showBanner("error", "管理令牌无效", "令牌被拒绝，请在右上角「管理令牌」里更新后重试。");
+        showTokenButton(true);
         return;
       }
       if (res.status === 503) {
-        tokenState.textContent = "只读";
-        setStatus("只读 · 服务端未配置 ADMIN_TOKEN", true);
-        showBanner("warn", "服务端未配置 ADMIN_TOKEN，当前只读", "在 Workers 的环境变量或本地 .dev.vars 里配置 ADMIN_TOKEN 后重新加载页面。");
+        setStatus("只读 · 服务端未配置管理令牌", true);
+        showBanner("warn", "服务端未配置管理令牌，当前只读", "联系站点管理员配置后重新加载页面。");
         return;
       }
       if (!res.ok) {
-        tokenState.textContent = "读取失败";
         setStatus("读取失败 · HTTP " + res.status, true);
         showBanner("error", "读取设置失败（HTTP " + res.status + "）", "稍后重试；问题持续时查看 Worker 日志。");
         return;
@@ -930,12 +874,10 @@
         applySettings(data.settings);
         state.ready = true;
         setEditable(true);
-        tokenState.textContent = "已连接";
-        setStatus("已连接 · " + timeNow() + " 读取", false);
+        setStatus("已读取 · " + timeNow(), false);
         hideBanner();
       });
     }).catch(function (err) {
-      tokenState.textContent = "连接失败";
       setStatus("连接失败 · 请检查服务", true);
       showBanner("error", "无法读取设置", err && err.message ? err.message : "网络或服务端异常，请稍后重试。");
     });
@@ -958,7 +900,7 @@
     });
     if (Object.keys(patch).length === 0) {
       toast("没有需要保存的修改");
-      setStatus("已连接 · 没有修改", false);
+      setStatus("已读取 · 没有修改", false);
       return;
     }
 
@@ -974,19 +916,18 @@
       if (result.status === 401) {
         state.ready = false;
         setEditable(false);
-        tokenState.textContent = "令牌无效";
         setStatus("未授权 · 令牌无效", true);
-        showBanner("error", "保存失败 · 管理令牌无效（401）", "令牌被拒绝，请检查页面底部「系统 · 管理令牌」后重新保存。");
+        showBanner("error", "保存失败 · 管理令牌无效", "请在右上角「管理令牌」里更新令牌后重试。");
+        showTokenButton(true);
         toast("保存失败 · 令牌无效");
         return;
       }
       if (result.status === 503) {
         state.ready = false;
         setEditable(false);
-        tokenState.textContent = "只读";
-        setStatus("只读 · 服务端未配置 ADMIN_TOKEN", true);
-        showBanner("warn", "服务端未配置 ADMIN_TOKEN，当前只读", "在 Workers 的环境变量或本地 .dev.vars 里配置 ADMIN_TOKEN 后重新加载页面。");
-        toast("保存失败 · 服务端未配置 ADMIN_TOKEN");
+        setStatus("只读 · 服务端未配置管理令牌", true);
+        showBanner("warn", "服务端未配置管理令牌，当前只读", "联系站点管理员配置后重新加载页面。");
+        toast("保存失败 · 服务端未配置管理令牌");
         return;
       }
       if (result.status === 400) {
@@ -1004,12 +945,21 @@
       }
       if (!result.body || !result.body.settings) throw new Error("接口响应缺少 settings 字段");
       applySettings(result.body.settings);
-      setStatus("最后保存 " + timeNow() + " · 已写入 KV", false);
+      setStatus("最后保存 " + timeNow(), false);
       hideBanner();
       var homeChanged = Object.keys(patch).some(function (key) {
         return key.indexOf("home_") === 0;
       });
-      toast(homeChanged ? "设置已保存 · 首页第一页已更新" : "设置已保存 · 已写入 KV");
+      var endChanged = Object.keys(patch).some(function (key) {
+        return key.indexOf("home_end_") === 0 || key.indexOf("home_afterword_") === 0;
+      });
+      toast(
+        endChanged
+          ? "设置已保存 · 首页尾页已更新"
+          : homeChanged
+            ? "设置已保存 · 首页已更新"
+            : "设置已保存"
+      );
     }).catch(function (err) {
       setStatus("保存失败 · 请重试", true);
       showBanner("error", "保存失败", err && err.message ? err.message : "网络或服务端异常，请稍后重试。");
@@ -1021,41 +971,7 @@
     });
   }
 
-  /* ---------------- 管理令牌 ---------------- */
-  function saveToken() {
-    var token = tokenInput.value.trim();
-    if (!token) {
-      toast("令牌不能为空");
-      tokenInput.focus();
-      return;
-    }
-    if (!writeStore(TOKEN_KEY, token)) {
-      toast("无法写入本机存储 · 请用本地服务器打开");
-      return;
-    }
-    tokenInput.value = token;
-    toast("令牌已保存 · 正在重新拉取");
-    loadSettings();
-  }
-  function clearToken() {
-    removeStore(TOKEN_KEY);
-    tokenInput.value = "";
-    state.ready = false;
-    state.settings = null;
-    setEditable(false);
-    tokenState.textContent = "未填写";
-    setStatus("未连接 · 需要管理令牌", true);
-    showBanner("info", "尚未填写管理令牌", "在页面底部「系统 · 管理令牌」填入 ADMIN_TOKEN 后保存，页面会重新拉取站点设置。");
-    toast("已清除本机令牌");
-  }
-
-  /* ---------------- 主题 / 字段事件 ---------------- */
-  each(themeButtons, function (b) {
-    b.addEventListener("click", function () {
-      applyTheme(b.getAttribute("data-theme"));
-      dirty();
-    });
-  });
+  /* ---------------- 字段事件 ---------------- */
   themeColorPick.addEventListener("input", function () {
     applyColor(themeColorPick.value);
     dirty();
@@ -1067,15 +983,10 @@
   themeColorText.addEventListener("blur", function () {
     syncColorFromText(true);
   });
-  swComments.addEventListener("click", function () {
-    applyComments(!state.comments);
-    dirty();
-  });
   Object.keys(FIELD_IDS).forEach(function (key) {
     var el = $(FIELD_IDS[key]);
     if (!el) return;
     el.addEventListener("input", function () {
-      if (key === "footer_rss" || key === "footer_email") syncFeedPreview();
       if (key === "home_cover_image" && COVER_RE.test(homeCoverImage.value.trim())) {
         homeCoverImage.closest(".fld").classList.remove("is-invalid");
         homeCoverImageErr.hidden = true;
@@ -1092,75 +1003,10 @@
   });
   homeStatsAdd.addEventListener("click", addStatRow);
   homeLinksAdd.addEventListener("click", addLinkRow);
-  tokenSave.addEventListener("click", saveToken);
-  tokenClear.addEventListener("click", clearToken);
-  tokenInput.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      saveToken();
-    }
-  });
   saveBtn.addEventListener("click", saveSettings);
 
-  /* ---------------- 危险操作确认 ---------------- */
-  var pending = null;
-
-  function ask(title, desc, fn) {
-    cfmTitle.textContent = title;
-    cfmText.textContent = desc;
-    pending = fn;
-    if (typeof cfmDlg.showModal === "function") cfmDlg.showModal();
-  }
-  cfmCancel.addEventListener("click", function () { cfmDlg.close(); });
-  cfmDlg.addEventListener("click", function (e) {
-    if (e.target === cfmDlg) cfmDlg.close();
-  });
-  cfmOk.addEventListener("click", function () {
-    var fn = pending;
-    pending = null;
-    cfmDlg.close();
-    if (fn) fn();
-  });
-
-  function actionPurge() {
-    toast("已清除缓存 · 前端模拟，未连后端");
-  }
-  function actionExport() {
-    var payload = {
-      exportedAt: new Date().toISOString(),
-      settings: readForm(),
-      about: readStore(ABOUT_KEY) || ""
-    };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "myon-export.json";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    toast("已导出 myon-export.json");
-  }
-  function actionRebuild() {
-    // 构建由 GitHub Actions 运行，后台没有触发部署的权限；这里只给出提示，不伪造部署结果。
-    toast("构建由 GitHub Actions 运行 · 请到 Actions 手动触发");
-  }
-
-  $("btnPurge").addEventListener("click", function () {
-    ask("清除缓存", this.getAttribute("data-desc"), actionPurge);
-  });
-  $("btnExport").addEventListener("click", function () {
-    ask("导出数据", this.getAttribute("data-desc"), actionExport);
-  });
-  $("btnRebuild").addEventListener("click", function () {
-    ask("重建站点", this.getAttribute("data-desc"), actionRebuild);
-  });
-
   /* ---------------- 初始化 ---------------- */
-  tokenInput.value = readStore(TOKEN_KEY) || "";
   applyColor(THEME_COLOR_DEFAULT);
-  syncFeedPreview();
   setEditable(false);
   loadSettings();
 })();

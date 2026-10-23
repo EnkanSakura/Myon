@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import type { BangumiStatus, BangumiSubjectType } from './bangumi';
 
 /** 全站共用的纯类型与校验，不依赖 Cloudflare 运行时。 */
 
 export * from './admin';
+export * from './bangumi';
 export * from './icons';
 export * from './settings';
 export * from './tools';
@@ -83,21 +85,6 @@ export interface GalleryItem {
   createdAt: string;
 }
 
-export type BangumiStatus = 'watching' | 'watched' | 'wish' | 'paused';
-
-export interface BangumiShow {
-  id: string;
-  bangumiId: number | null;
-  title: string;
-  status: BangumiStatus;
-  totalEps: number;
-  watchedEps: number;
-  score: number | null;
-  nextAirAt: string | null;
-  coverKey: string | null;
-  updatedAt: string;
-}
-
 /** 站点统计：后台总览与前台页头共用，只读。 */
 export interface SiteStats {
   /** 全站内容的最后更新时间（文章/动态/展柜取最大），ISO 字符串。 */
@@ -105,7 +92,12 @@ export interface SiteStats {
   posts: { published: number; draft: number; words: number };
   moments: { total: number };
   gallery: { total: number; displayed: number; categories: CategoryCount[] };
-  bangumi: { total: number; watching: number };
+  bangumi: {
+    total: number;
+    watching: number;
+    byType: Record<BangumiSubjectType, { total: number; watching: number }>;
+    byStatus: Record<BangumiStatus, number>;
+  };
   /** 媒体库文件数（实时统计 R2 对象）。 */
   media: { total: number };
   /** 站内工具数量：后台侧栏计数用。 */

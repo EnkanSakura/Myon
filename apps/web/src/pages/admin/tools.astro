@@ -43,7 +43,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
         <p id="bannerText"></p>
         <ul class="notice-issues" id="bannerIssues" hidden></ul>
       </div>
-      <a class="notice-a" id="bannerAction" href="/admin/settings" hidden>去设置令牌 →</a>
+      <button class="notice-btn" id="bannerToken" type="button" data-token-open hidden>管理令牌</button>
       <button class="notice-btn" id="bannerRetry" type="button" hidden>重试</button>
     </div>
 
@@ -52,7 +52,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
       <div class="metric">
         <div class="m-k"><i aria-hidden="true"></i>工具总数 / TOOLS</div>
         <div class="m-v" id="mTotal">—</div>
-        <div class="m-f">后台与前台 /tools 共用 D1 里的同一份工具</div>
+        <div class="m-f">后台与前台 /tools 共用同一份工具</div>
       </div>
       <div class="metric">
         <div class="m-k"><i aria-hidden="true"></i>启用中 / ENABLED</div>
@@ -79,7 +79,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
         <span class="sec-en" id="secEn">TOOLS / —</span>
         <div class="sec-r">
           <span class="sec-note">启用中 <b id="enabledCount">—</b> / <span id="totalCount">—</span></span>
-          <span class="sec-note">启用状态写入 D1 · 前台地址是 /tools/&lt;slug&gt;</span>
+          <span class="sec-note">启用状态即时生效 · 前台地址是 /tools/&lt;slug&gt;</span>
         </div>
       </div>
 
@@ -87,7 +87,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
 
       <div class="tbl-wrap" id="tblWrap" hidden>
         <table class="tbl tools-tbl">
-          <caption class="sr-only">后台工具列表，数据来自 D1</caption>
+          <caption class="sr-only">后台工具列表</caption>
           <colgroup>
             <col style="width:62px" />
             <col />
@@ -114,11 +114,6 @@ const toolsApi = `${apiBasePath}/admin/tools`;
         <div class="empty-actions"><button class="btn" id="emptyBtn" type="button">新增工具</button></div>
       </div>
     </section>
-
-    <p class="page-note">
-      <span>工具列表来自 D1 · 启用开关与编辑即时写入</span>
-      <span>前台 /tools 只读启用项 · 打开链接走 /tools/&lt;slug&gt;</span>
-    </p>
 
   </div>
 
@@ -195,7 +190,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
       <p class="tf-hint" id="formHint">内置工具选一个 key 即可；「自定义链接」需要填链接。</p>
 
       <div class="dlg-f">
-        <span class="dlg-c" id="formMeta">保存后立即写入 D1</span>
+        <span class="dlg-c" id="formMeta">保存后立即生效</span>
         <div class="dlg-a">
           <button class="p-btn" type="button" id="formCancel">取消</button>
           <button class="p-btn p-btn--pub" type="submit" id="formSave">创建工具</button>

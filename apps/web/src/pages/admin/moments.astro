@@ -61,26 +61,25 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
           <span class="sticker sticker--paper">共 <span id="stickerPub">—</span> 条</span>
         </div>
         <h1>动态<span class="dot">。</span></h1>
-        <p class="pdate"><span id="noteTotalHead">—</span> 条 <span class="sep">·</span> 今天 <span id="noteToday">—</span> 条 <span class="sep">·</span> 最后发布 <span id="noteLast">—</span></p>
+        <p class="pdate">今天 <span id="noteToday">—</span> 条 <span class="sep">·</span> 最后发布 <span id="noteLast">—</span></p>
       </div>
 
       <div class="ph-r">
         <div class="acts">
           <button class="btn btn--pink" id="btnCompose" type="button">发动态 <span class="ar" aria-hidden="true">＋</span></button>
-          <button class="btn" id="btnTokenOpen" type="button">管理令牌</button>
           <a class="btn" href="/moments">看前台动态 <span class="ar" aria-hidden="true">↗</span></a>
         </div>
       </div>
     </header>
 
-    <!-- ---------- 连接状态 / 令牌提示 ---------- -->
+    <!-- ---------- 唯一的页面级提示 ---------- -->
     <div class="notice notice--info" id="amBanner" role="status" hidden>
       <span class="notice-k" id="amBannerK">INFO</span>
       <div class="notice-c">
         <b id="amBannerTitle"></b>
         <p id="amBannerText"></p>
       </div>
-      <button class="notice-btn" id="btnToken" type="button">填写管理令牌</button>
+      <button class="notice-btn" id="btnToken" type="button" data-token-open>管理令牌</button>
     </div>
 
     <!-- ---------- 01 发布 ---------- -->
@@ -168,22 +167,28 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
         <h2 id="h-list">列表</h2>
         <span class="sec-en" id="notesEn">NOTES / —</span>
         <div class="sec-r">
-          <span class="sec-note">共 <span id="noteTotalList">—</span> 条 <span class="sep">·</span> 本页 <span id="notePageCount">—</span> 条</span>
           <span class="sec-note" id="listState" aria-live="polite">未连接</span>
           <a class="arrow-link" href="/moments">前台四格 <span class="ar" aria-hidden="true">→</span></a>
         </div>
       </div>
 
-      <div class="list-tools">
-        <div class="ftabs" role="group" aria-label="筛选动态">
-          <button class="ftab is-on" type="button" data-filter="all" aria-pressed="true">全部</button>
-          <button class="ftab" type="button" data-filter="img" aria-pressed="false">带图</button>
+      <div class="filterbar" aria-label="筛选动态">
+        <div class="fb-chips" role="group" aria-label="按分类筛选">
+          <button class="chip is-on" type="button" data-filter="all" aria-pressed="true">全部</button>
           {categoryOptions.map((name) => (
-            <button class="ftab" type="button" data-filter={name} aria-pressed="false">{name}</button>
+            <button class="chip" type="button" data-filter={name} aria-pressed="false">{name}</button>
           ))}
         </div>
-        <label class="list-search"><span>SEARCH</span><input id="noteSearch" type="search" placeholder="搜正文、分类或标签" autocomplete="off"><span class="sr-only">搜索动态</span></label>
-        <span class="list-count" id="shownNotes" aria-live="polite">显示 — 条 · 本页 — 条</span>
+
+        <button class="fb-toggle" id="imgToggle" type="button" aria-pressed="false">带图</button>
+
+        <label class="fb-search">
+          <span class="sr-only">搜索动态</span>
+          <input id="noteSearch" type="search" placeholder="搜正文、分类或标签" autocomplete="off">
+        </label>
+
+        <span class="fb-count" id="shownNotes" aria-live="polite">显示 — 条 · 筛选只作用于本页</span>
+        <button class="fb-clear" id="clearFilters" type="button">清除</button>
       </div>
 
       <div class="notes" id="noteList">
@@ -211,25 +216,6 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     </section>
 
   </div>
-
-
-<!-- ---------- 管理令牌 ---------- -->
-<dialog class="dlg" id="tokenDlg" aria-labelledby="tokenTitle">
-  <div class="dlg-box">
-    <span class="dlg-tab">ADMIN TOKEN</span>
-    <div class="dlg-h"><span id="tokenTitle">管理令牌 / TOKEN</span><span>LOCAL ONLY</span></div>
-    <label class="sr-only" for="adminToken">管理令牌</label>
-    <input class="dlg-note token-input" id="adminToken" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" spellcheck="false">
-    <p class="dlg-c">令牌只存在本机浏览器 localStorage <b>myon-admin-token</b>，请求时放在 <b>x-admin-token</b> 头里；不会写进仓库或页面源码。</p>
-    <div class="dlg-f">
-      <span class="dlg-c" id="tokenState">未填写</span>
-      <div class="dlg-a">
-        <button class="p-btn" id="tokenClear" type="button">清除</button>
-        <button class="p-btn p-btn--pub" id="tokenSave" type="button">保存并刷新</button>
-      </div>
-    </div>
-  </div>
-</dialog>
 
 <!-- ---------- 删除确认 ---------- -->
 <dialog class="dlg" id="confirmDlg" aria-labelledby="confirmTitle">

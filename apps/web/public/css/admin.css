@@ -104,6 +104,23 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 .t-div{width:2px;height:16px;background:var(--pline);flex:none}
 .deploy{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--pp-55);white-space:nowrap}
 .deploy b{font-family:var(--mono);font-weight:500;letter-spacing:.06em;color:var(--ppk-soft)}
+
+/* 顶栏：管理令牌入口（全后台唯一入口） */
+.t-token{
+  display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 9px;
+  border:2px solid var(--pline);border-radius:0;background:transparent;color:var(--pp-70);
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;line-height:1;cursor:pointer;
+  transition:border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);
+}
+.t-token:hover{border-color:var(--ppk);color:var(--pp);background:color-mix(in srgb, var(--pink) 8%, transparent)}
+.t-token:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
+.t-token-lamp{width:7px;height:7px;flex:none;background:var(--pp-off);border:1px solid var(--ink)}
+.t-token[data-state="ok"] .t-token-lamp{background:var(--ppk);box-shadow:0 0 8px color-mix(in srgb, var(--pink) 65%, transparent)}
+.t-token[data-state="bad"] .t-token-lamp,
+.t-token[data-state="readOnly"] .t-token-lamp{background:var(--ppk-deep)}
+.t-token-v{font-family:var(--mono);font-weight:500;letter-spacing:.04em;color:var(--pp-55);white-space:nowrap}
+.t-token[data-state="ok"] .t-token-v{color:var(--ppk-soft)}
+.t-token[data-state="checking"] .t-token-v{color:var(--pp-62)}
 .avatar{
   width:30px;height:30px;flex:none;display:grid;place-items:center;
   background:var(--ppk);color:var(--ink);border:2px solid var(--ink);
@@ -125,7 +142,7 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 .ph-r{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:none}
 .acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 
-/* 前台灯：控制台上的拨杆 */
+/* 维护模式：控制台上的拨杆 */
 .lamp{
   position:relative;display:flex;align-items:center;gap:10px;
   width:354px;max-width:100%;height:auto;padding:10px 12px 10px 14px;
@@ -139,8 +156,8 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 .lamp-k{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:var(--pp-55);line-height:1.4;white-space:nowrap}
 .lamp-v{font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1.5;color:var(--pp);white-space:nowrap}
 .lamp[data-on="false"] .lamp-v{color:var(--pp-80)}
-/* 开关本体见下方「共享组件：开关」；首页前台灯的状态由 .lamp[data-on] 驱动
-   （控制台脚本 admin.js 不在本轮改动范围，switch 根的 data-on 保持初始值）。 */
+/* 开关本体见下方「共享组件：开关」；总览的维护模式开关由 .lamp[data-on] 驱动
+   （状态来自站点设置的 maintenance_enabled，切换会写回后台接口）。 */
 .lamp[data-on="false"] .switch .track{border-color:var(--pp-55);background:color-mix(in srgb, var(--pp) 6%, transparent)}
 .lamp[data-on="false"] .switch .knob{transform:none;background:var(--pp-off);box-shadow:none}
 
@@ -323,7 +340,71 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 }
 .toast::before{content:"";width:8px;height:8px;background:var(--ppk);border:2px solid var(--ink);flex:none}
 .toast.is-on{opacity:1;transform:none}
-body.front-off .toast::before{background:var(--pp-off)}
+
+/* ---------- 共享组件：管理令牌弹窗 ---------- */
+.token-dlg{width:520px}
+.token-label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--ink-62);margin-bottom:6px}
+.token-input{display:block;width:100%;height:46px;min-height:0;border:2px solid var(--ink);border-radius:0;background:var(--paper);
+  color:var(--ink);font-family:var(--mono);font-size:14px;letter-spacing:.04em;padding:0 11px;line-height:1.4}
+.token-input:focus{outline:none;border-color:var(--pink-deep);box-shadow:3px 3px 0 var(--pink)}
+.token-note{margin-top:9px;line-height:1.7}
+#adminTokenSave:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:3px 3px 0 var(--shade)}
+
+/* ---------- 共享组件：筛选栏 ---------- */
+/* 唯一实现：.filterbar 根 + .fb-chips（chips）+ 可选 .fb-toggle（独立开关）
+   + .fb-search + .fb-sort / 其它 .fb-select + .fb-count + .fb-clear。
+   顺序固定：chips →（toggle）→ 搜索 → 排序 → 计数 → 清除。 */
+.filterbar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding:9px 11px;
+  background:var(--panel);border:2px solid var(--pline);box-shadow:4px 4px 0 var(--ppk-deep);
+}
+.fb-chips{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
+.chip{
+  display:inline-flex;align-items:baseline;gap:6px;
+  border:2px solid transparent;background:transparent;padding:4px 9px 5px;
+  font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.07em;line-height:1.5;
+  color:var(--pp-62);cursor:pointer;
+  transition:color .14s var(--ease),background .14s var(--ease),border-color .14s var(--ease),box-shadow .14s var(--ease);
+}
+.chip b{font-family:var(--disp);font-weight:900;font-size:14px;letter-spacing:0;color:var(--pp-55)}
+.chip:hover{color:var(--pp);border-color:var(--pp-62)}
+.chip.is-on{background:var(--ppk);color:var(--ink);border-color:var(--ink);box-shadow:2px 2px 0 color-mix(in srgb, var(--pp) 30%, transparent)}
+.chip.is-on b{color:var(--ink)}
+.chip:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
+.chip[hidden]{display:none}
+.fb-toggle{
+  border:2px solid var(--pline);background:transparent;color:var(--pp-62);
+  font-family:var(--mono);font-size:12px;letter-spacing:.07em;padding:4px 9px 5px;line-height:1.5;
+  transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease);
+}
+.fb-toggle:hover{color:var(--pp);border-color:var(--pp-62)}
+.fb-toggle[aria-pressed="true"]{background:var(--ppk);color:var(--ink);border-color:var(--ink);box-shadow:2px 2px 0 color-mix(in srgb, var(--pp) 30%, transparent)}
+.fb-toggle:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
+.fb-search{position:relative;flex:1 1 220px;max-width:330px;min-width:180px}
+.fb-search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--pp-55);pointer-events:none}
+.fb-search input{
+  width:100%;height:34px;padding:0 10px 0 32px;
+  background:var(--desk);border:2px solid var(--pline);border-radius:0;color:var(--pp);
+  font-family:var(--mono);font-size:13px;letter-spacing:.02em;
+}
+.fb-search input::placeholder{color:var(--pp-55)}
+.fb-search input:focus{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
+.fb-sort{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--pp-55);white-space:nowrap}
+.fb-sort select,
+.fb-select{
+  height:32px;background:var(--desk);border:2px solid var(--pline);border-radius:0;color:var(--pp);
+  font-family:var(--mono);font-size:13px;letter-spacing:.02em;padding:0 6px;
+}
+.fb-sort select:focus,
+.fb-select:focus{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
+.fb-count{margin-left:auto;font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap}
+.fb-clear{
+  height:32px;padding:0 10px;border:2px solid var(--pline);background:transparent;color:var(--pp-70);
+  font-family:var(--mono);font-size:12px;letter-spacing:.06em;border-radius:0;white-space:nowrap;
+  transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease);
+}
+.fb-clear:hover{background:var(--ppk);color:var(--ink);border-color:var(--ink)}
+.fb-clear:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
 
 /* ---------- 共享组件：开关 ---------- */
 /* 唯一实现：
@@ -416,6 +497,8 @@ body.front-off .toast::before{background:var(--pp-off)}
   .ph-r{width:100%;align-items:flex-start}
   .acts{justify-content:flex-start}
   .lamp{width:100%;max-width:420px}
+  .fb-search{flex:1 1 100%;max-width:none}
+  .fb-count{margin-left:0}
   .chapter{right:18px;top:-26px;font-size:96px;opacity:.24}
   .metrics{grid-template-columns:1fr 1fr;margin-top:24px}
   .metric:nth-child(3){border-left:0;padding-left:0}
@@ -468,6 +551,10 @@ body.front-off .toast::before{background:var(--pp-off)}
 @media (max-width:600px){
   .top{height:auto;padding:8px 14px;flex-wrap:wrap;gap:8px 16px}
   .deploy{display:none}
+  .t-token-k{display:none}
+  .filterbar{gap:8px;padding:8px 9px}
+  .fb-chips{width:100%}
+  .fb-clear{margin-left:auto}
   .phead{flex-wrap:wrap;gap:24px}
   .phead h1{font-size:32px}
   .pdate{font-size:13px}

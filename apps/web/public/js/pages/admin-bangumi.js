@@ -11,6 +11,14 @@
     wish: { label: "想看" },
     paused: { label: "暂缓" }
   };
+  var SUBJECT_TYPE = {
+    anime: "动画",
+    book: "书籍",
+    music: "音乐",
+    game: "游戏",
+    real: "三次元"
+  };
+  var SUBJECT_TYPE_ORDER = ["anime", "book", "music", "game", "real"];
 
   /* ---------------- 小工具 ---------------- */
   function $(id) { return document.getElementById(id); }
@@ -104,20 +112,16 @@
   var tbannerLink = $("tbannerLink");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
 
-  var syncbar = $("syncbar");
-  var syncMeta = $("syncMeta");
-  var syncState = $("syncState");
-  var syncResult = $("syncResult");
-  var syncBtn = $("syncBtn");
-  var syncBtnLabel = $("syncBtnLabel");
   var syncMain = $("syncMain");
   var syncMainLabel = $("syncMainLabel");
 
   var exportBtn = $("exportBtn");
   var latestUpdated = $("latestUpdated");
-  var footUpdated = $("footUpdated");
   var secEn = $("secEn");
   var railBangumi = $("railBangumi");
+  var fbCount = $("fbCount");
+  var clearFilters = $("clearFilters");
+  var typeChips = Array.prototype.slice.call(document.querySelectorAll(".filterbar .chip"));
 
   var toastEl = $("toast");
   var toastTimer = null;
@@ -134,6 +138,7 @@
     loading: true,
     authorized: false,
     syncing: false,
+    typeFilter: "all",
     busy: {}
   };
 
@@ -186,14 +191,14 @@
   function authFailure(status) {
     if (status === 401) {
       state.authorized = false;
-      showBanner("error", "管理令牌无效（401）", "令牌与 ADMIN_TOKEN 不一致。到「设置」页更新令牌后刷新本页。", true);
+      showBanner("error", "管理令牌无效", "令牌与后台不一致。点右上角「管理令牌」更新后重新加载本页。", true);
       setPageState("未授权 · 令牌无效");
       return true;
     }
     if (status === 503) {
       state.authorized = false;
-      showBanner("warn", "服务端未配置 ADMIN_TOKEN，当前只读", "接口返回 503：在 Workers 变量或本地 .dev.vars 配置 ADMIN_TOKEN 后重新加载页面。", false);
-      setPageState("只读 · 服务端未配置 ADMIN_TOKEN");
+      showBanner("warn", "服务端未配置管理令牌，当前只读", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。", false);
+      setPageState("只读 · 服务端未配置管理令牌");
       return true;
     }
     return false;
@@ -201,12 +206,12 @@
 
   function canWrite() {
     if (!state.token) {
-      showBanner("info", "尚未填写管理令牌", "后台接口需要 x-admin-token。令牌只存在本机 localStorage：到「设置」页填入 ADMIN_TOKEN（本地开发是 dev-admin-token）后刷新本页。", true);
+      showBanner("info", "尚未连接后台", "追番记录需要管理令牌才能读写。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。", true);
       toast("未填写管理令牌 · 无法写入");
       return false;
     }
     if (!state.authorized) {
-      showBanner("error", "尚未连接后台接口", "请先在「设置」页校验管理令牌，再回到本页操作。", true);
+      showBanner("error", "尚未连接后台接口", "请先在右上角「管理令牌」里校验令牌，再回到本页操作。", true);
       toast("尚未连接后台接口");
       return false;
     }
@@ -254,17 +259,6 @@
     });
     return count;
   }
-  function averageScore() {
-    var sum = 0;
-    var count = 0;
-    each(state.items, function (item) {
-      if (typeof item.score === "number" && isFinite(item.score)) {
-        sum += item.score;
-        count += 1;
-      }
-    });
-    return count > 0 ? { value: sum / count, count: count } : { value: null, count: 0 };
-  }
   function latestUpdatedAt() {
     var latest = "";
     each(state.items, function (item) {
@@ -272,27 +266,24 @@
     });
     return latest;
   }
+  function subjectLabel(type) {
+    return SUBJECT_TYPE[type] || "动画";
+  }
 
   function renderStats() {
     var watched = countByStatus("watched");
     var watching = countByStatus("watching");
     var wish = countByStatus("wish");
-    var avg = averageScore();
     var latest = latestUpdatedAt();
 
     setText($("pTotal"), state.authorized ? String(state.items.length) : "—");
-    setText($("pWatching"), state.authorized ? String(watching) : "—");
-    setText($("pAvg"), avg.value === null ? "—" : avg.value.toFixed(1));
     setText($("mWatched"), state.authorized ? String(watched) : "—");
     setText($("mWatching"), state.authorized ? String(watching) : "—");
     setText($("mWish"), state.authorized ? String(wish) : "—");
-    setText($("mAvg"), avg.value === null ? "—" : avg.value.toFixed(1));
-    setText($("mWatchedNote"), "部 · " + (state.authorized ? "来自 D1" : "未连接"));
-    setText($("mWatchingNote"), "部 · " + (state.authorized ? "前台同源" : "未连接"));
-    setText($("mWishNote"), "部 · 待补清单");
-    setText($("mAvgNote"), avg.count > 0 ? "分 · " + avg.count + " 部有评分" : "分 · 暂无评分");
+    setText($("mWatchedNote"), state.authorized ? "条 · 已看完" : "未连接");
+    setText($("mWatchingNote"), state.authorized ? "条 · 正在追" : "未连接");
+    setText($("mWishNote"), state.authorized ? "条 · 待补" : "未连接");
     setText(latestUpdated, latest ? formatDateTime(latest) : "—");
-    setText(footUpdated, latest ? formatDateTime(latest) : "—");
     setText(secEn, "ALL / " + (state.authorized ? pad2(state.items.length) : "—"));
     setText(railBangumi, state.authorized ? String(state.items.length) : "—");
   }
@@ -319,6 +310,7 @@
     var row = el("article", "wrow");
     row.setAttribute("data-id", item.id);
     row.setAttribute("data-status", item.status);
+    row.setAttribute("data-type", subjectLabel(item.subjectType));
     if (busy) {
       row.classList.add("is-busy");
       row.setAttribute("aria-busy", "true");
@@ -350,8 +342,21 @@
     if (item.bangumiId) top.appendChild(el("span", "w-bgm", "BGM #" + item.bangumiId));
     main.appendChild(top);
 
-    /* 评分（可编辑）/ 下次放送 / 更新时间 */
+    /* 类型 / 评分（可编辑）/ 下次放送 / 更新时间 */
     var meta = el("div", "w-meta");
+    meta.appendChild(el("span", "w-meta-k", "类型"));
+    var typeSelect = document.createElement("select");
+    typeSelect.className = "w-type";
+    typeSelect.setAttribute("aria-label", "《" + item.title + "》类型");
+    each(SUBJECT_TYPE_ORDER, function (type) {
+      var option = document.createElement("option");
+      option.value = type;
+      option.textContent = SUBJECT_TYPE[type];
+      if (type === (item.subjectType || "anime")) option.selected = true;
+      typeSelect.appendChild(option);
+    });
+    meta.appendChild(typeSelect);
+    meta.appendChild(el("span", "msep", "·"));
     meta.appendChild(el("span", "w-meta-k", "评分"));
     var scoreInput = document.createElement("input");
     scoreInput.className = "w-score";
@@ -363,6 +368,16 @@
     scoreInput.placeholder = "—";
     scoreInput.setAttribute("aria-label", "《" + item.title + "》评分");
     meta.appendChild(scoreInput);
+    meta.appendChild(el("span", "msep", "·"));
+    meta.appendChild(el("span", "w-meta-k", "简评"));
+    var commentInput = document.createElement("input");
+    commentInput.className = "w-comment";
+    commentInput.type = "text";
+    commentInput.maxLength = 500;
+    commentInput.value = item.comment || "";
+    commentInput.placeholder = "写一句…";
+    commentInput.setAttribute("aria-label", "《" + item.title + "》简评");
+    meta.appendChild(commentInput);
     meta.appendChild(el("span", "msep", "·"));
     meta.appendChild(el("span", "w-meta-k", "下次放送"));
     meta.appendChild(el("span", "w-meta-v", nextAirText(item.nextAirAt)));
@@ -426,33 +441,60 @@
     return row;
   }
 
+  function filteredItems() {
+    if (state.typeFilter === "all") return state.items;
+    return state.items.filter(function (item) {
+      return (item.subjectType || "anime") === state.typeFilter;
+    });
+  }
+
   function renderList() {
     if (!listEl) return;
     listEl.textContent = "";
     listEl.setAttribute("aria-busy", state.loading ? "true" : "false");
 
     if (state.loading) {
-      listEl.appendChild(listStateNode("正在读取 D1 …", "列表来自 GET /api/v1/admin/bangumi。"));
+      listEl.appendChild(listStateNode("正在读取追番记录…", "读完会显示在这里。"));
+      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
       return;
     }
     if (!state.token) {
-      listEl.appendChild(listStateNode("未连接：尚未填写管理令牌。", "到「设置」页填入 ADMIN_TOKEN（本地开发是 dev-admin-token）后刷新本页。"));
+      listEl.appendChild(listStateNode("未连接：尚未填写管理令牌。", "点右上角「管理令牌」填入后页面会自动刷新。"));
+      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
       return;
     }
     if (!state.authorized) {
-      listEl.appendChild(listStateNode("未连接：令牌无效或服务端未配置 ADMIN_TOKEN。", "按上方提示修正后刷新本页。"));
+      listEl.appendChild(listStateNode("未连接：令牌无效或服务端未配置管理令牌。", "按上方提示修正后刷新本页。"));
+      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
       return;
     }
     if (state.items.length === 0) {
-      listEl.appendChild(listStateNode("还没有追番记录。", "同步 Bangumi 或用 POST /api/v1/admin/bangumi 手动新增后，这里会显示记录。"));
+      listEl.appendChild(listStateNode("还没有追番记录。", "点右上角「同步 Bangumi」把收藏拉进来。"));
+      setText(fbCount, "显示 0 条 · 筛选只作用于本页");
+      return;
+    }
+
+    var list = filteredItems();
+    if (list.length === 0) {
+      listEl.appendChild(listStateNode("该类型下没有记录。", "点筛选栏的「清除」看全部记录。"));
+      setText(fbCount, "显示 0 条 · 筛选只作用于本页");
       return;
     }
 
     var fragment = document.createDocumentFragment();
-    each(state.items, function (item) {
+    each(list, function (item) {
       fragment.appendChild(renderRow(item));
     });
     listEl.appendChild(fragment);
+    setText(fbCount, "显示 " + list.length + " 条 · 筛选只作用于本页");
+  }
+
+  function paintTypeChips() {
+    each(typeChips, function (btn) {
+      var on = btn.getAttribute("data-type") === state.typeFilter;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", String(on));
+    });
   }
 
   function renderAll() {
@@ -469,6 +511,8 @@
       focus.type === "select" ? ".w-select" :
       focus.type === "input" ? ".w-input" :
       focus.type === "score" ? ".w-score" :
+      focus.type === "comment" ? ".w-comment" :
+      focus.type === "type" ? ".w-type" :
       '[data-act="' + focus.act + '"]';
     var node = row.querySelector(selector);
     if (node) node.focus();
@@ -477,12 +521,14 @@
   /** 完整记录 + 本次改动；PATCH 带上全部字段，避免 patch schema 的默认值覆盖未提交字段。 */
   function patchBody(item, changes) {
     var body = {
+      subjectType: item.subjectType || "anime",
       bangumiId: item.bangumiId === undefined ? null : item.bangumiId,
       title: item.title,
       status: item.status,
       totalEps: item.totalEps,
       watchedEps: item.watchedEps,
       score: item.score === undefined ? null : item.score,
+      comment: item.comment === undefined ? null : item.comment,
       nextAirAt: item.nextAirAt === undefined ? null : item.nextAirAt,
       coverKey: item.coverKey === undefined ? null : item.coverKey
     };
@@ -579,6 +625,18 @@
     }, { id: id, type: "select" });
   }
 
+  function saveSubjectType(id, type) {
+    var item = findItem(id);
+    if (!item || !SUBJECT_TYPE[type]) return;
+    if (type === (item.subjectType || "anime")) {
+      renderAll();
+      return;
+    }
+    mutate(id, { subjectType: type }, function (updated) {
+      return "《" + updated.title + "》类型改为 " + subjectLabel(updated.subjectType);
+    }, { id: id, type: "type" });
+  }
+
   function saveScore(id, raw) {
     var item = findItem(id);
     if (!item) return;
@@ -607,13 +665,27 @@
     }, { id: id, type: "score" });
   }
 
+  function saveComment(id, raw) {
+    var item = findItem(id);
+    if (!item) return;
+    var value = String(raw || "").trim();
+    var next = value ? value.slice(0, 500) : null;
+    if ((item.comment || null) === next) {
+      renderAll();
+      return;
+    }
+    mutate(id, { comment: next }, function (updated) {
+      return "《" + updated.title + "》简评已更新";
+    }, { id: id, type: "comment" });
+  }
+
   /* ---------------- 删除 ---------------- */
   function askDelete(id) {
     var item = findItem(id);
     if (!item) return;
     if (!canWrite()) return;
     pendingDeleteId = id;
-    setText(cfmText, "确定删除《" + item.title + "》？记录会立即从 D1 删除，前台 /bangumi 不再显示，且不可撤销。");
+    setText(cfmText, "确定删除《" + item.title + "》？记录会立即删除，前台 /bangumi 不再显示，且不可撤销。");
     if (cfmDlg && typeof cfmDlg.showModal === "function") {
       cfmDlg.showModal();
     } else if (window.confirm("确定删除《" + item.title + "》？删除后不可撤销。")) {
@@ -647,14 +719,11 @@
   /* ---------------- 同步 ---------------- */
   function setSyncBusy(busy) {
     state.syncing = busy;
-    if (syncbar) syncbar.classList.toggle("is-syncing", busy);
-    each([syncBtn, syncMain], function (button) {
-      if (!button) return;
-      button.disabled = busy;
-      if (busy) button.setAttribute("aria-busy", "true");
-      else button.removeAttribute("aria-busy");
-    });
-    setText(syncBtnLabel, busy ? "同步中…" : "立即同步");
+    if (syncMain) {
+      syncMain.disabled = busy;
+      if (busy) syncMain.setAttribute("aria-busy", "true");
+      else syncMain.removeAttribute("aria-busy");
+    }
     setText(syncMainLabel, busy ? "同步中…" : "同步 Bangumi");
   }
 
@@ -662,9 +731,6 @@
     if (state.syncing) return;
     if (!canWrite()) return;
     setSyncBusy(true);
-    setText(syncState, "正在同步…");
-    setText(syncResult, "正在请求 Bangumi 收藏并写入 D1…");
-    setText(syncMeta, "BANGUMI API · 手动同步");
 
     api("POST", "/sync").then(function (res) {
       return readJson(res).then(function (body) { return { res: res, body: body }; });
@@ -673,30 +739,21 @@
       var body = result.body || {};
       if (!result.res.ok || body.ok !== true) {
         var reason = body.reason || "HTTP " + result.res.status;
-        setText(syncState, "同步失败 · " + reason);
-        setText(syncResult, "Bangumi 接口未返回成功（" + reason + "），请检查 BANGUMI_ACCESS_TOKEN 与网络。");
         toast("同步失败 · " + reason);
         return;
       }
       if (body.reason === "not_configured") {
-        setText(syncState, "已跳过 · 未配置令牌");
-        setText(syncResult, "未配置 BANGUMI_ACCESS_TOKEN，已跳过本次同步（没有写入任何记录）。");
-        toast("未配置 BANGUMI_ACCESS_TOKEN，已跳过同步");
+        toast("未配置 Bangumi 令牌，已跳过同步");
         return;
       }
       var synced = typeof body.synced === "number" ? body.synced : 0;
-      setText(syncState, "同步完成 · 写入 " + synced + " 条");
-      setText(syncResult, "Bangumi 收藏已同步 · " + synced + " 条记录写入 D1");
-      toast("同步完成 · " + synced + " 条记录已写入 D1");
+      toast("同步完成 · " + synced + " 条记录已更新");
       hideBanner();
       loadItems(true);
     }).catch(function () {
-      setText(syncState, "同步失败 · 网络异常");
-      setText(syncResult, "请求后台接口失败，请检查网络或稍后重试。");
       toast("同步失败 · 网络异常");
     }).then(function () {
       setSyncBusy(false);
-      setText(syncMeta, "BANGUMI API · 上次尝试 今天 " + clockNow());
     });
   }
 
@@ -714,7 +771,7 @@
       state.loading = false;
       state.authorized = false;
       if (!quiet) {
-        showBanner("info", "尚未填写管理令牌", "后台接口需要 x-admin-token。令牌只存在本机 localStorage：到「设置」页填入 ADMIN_TOKEN（本地开发是 dev-admin-token）后刷新本页。", true);
+        showBanner("info", "尚未连接后台", "追番记录需要管理令牌才能读取。点右上角「管理令牌」填入后页面会自动刷新。", true);
         setPageState("未连接 · 未填写管理令牌");
       }
       renderAll();
@@ -723,7 +780,7 @@
 
     if (!quiet) {
       state.loading = true;
-      setPageState("正在读取 D1…");
+      setPageState("正在读取追番记录…");
       renderAll();
     }
 
@@ -766,7 +823,6 @@
       return;
     }
     var payload = {
-      source: "d1",
       exportedAt: new Date().toISOString(),
       items: state.items
     };
@@ -807,10 +863,26 @@
     var id = row.getAttribute("data-id");
     if (target.classList.contains("w-input")) saveEps(id, target.value);
     else if (target.classList.contains("w-score")) saveScore(id, target.value);
+    else if (target.classList.contains("w-comment")) saveComment(id, target.value);
     else if (target.classList.contains("w-select")) saveStatus(id, target.value);
+    else if (target.classList.contains("w-type")) saveSubjectType(id, target.value);
   });
 
-  if (syncBtn) syncBtn.addEventListener("click", sync);
+  each(typeChips, function (chip) {
+    chip.addEventListener("click", function () {
+      state.typeFilter = chip.getAttribute("data-type") || "all";
+      paintTypeChips();
+      renderList();
+    });
+  });
+  if (clearFilters) {
+    clearFilters.addEventListener("click", function () {
+      state.typeFilter = "all";
+      paintTypeChips();
+      renderList();
+    });
+  }
+
   if (syncMain) syncMain.addEventListener("click", sync);
   if (exportBtn) exportBtn.addEventListener("click", exportRecords);
 
@@ -826,6 +898,7 @@
   });
 
   /* ---------------- 初始化 ---------------- */
+  paintTypeChips();
   renderAll();
   loadItems(false);
 })();

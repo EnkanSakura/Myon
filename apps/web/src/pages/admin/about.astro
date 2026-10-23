@@ -1,7 +1,11 @@
 ---
-// 迁移自 design 分支 design/site/admin-about.html
+// 后台 · 关于 / README：读取 GET /api/v1/about，保存 PUT /api/v1/admin/about。
 // 样式：public/css/pages/admin-about.css；脚本：public/js/pages/admin-about.js
+import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
+
+const aboutReadApi = `${apiBasePath}/about`;
+const aboutApi = `${apiBasePath}/admin/about`;
 ---
 
 <AdminLayout
@@ -13,27 +17,38 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <link rel="stylesheet" href="/css/pages/admin-about.css" />
   </Fragment>
 
-<div class="page">
+  <div class="page" data-api={aboutApi} data-read-api={aboutReadApi}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
       <div class="ph-l">
         <div class="kicker">
           <span class="sticker">CONSOLE · README</span>
-          <span class="sticker sticker--paper">首页封面</span>
+          <span class="sticker sticker--paper">关于页</span>
         </div>
         <h1>关于 / README<span class="dot">。</span></h1>
-        <p class="pdate">首页封面叠放展示 <span class="sep">·</span> 支持 Markdown <span class="sep">·</span> 保存后立即生效</p>
+        <p class="pdate">首页封面叠放展示 <span class="sep">·</span> 支持 Markdown</p>
       </div>
 
       <div class="ph-r">
         <div class="acts">
-          <button class="btn" id="resetBtn" type="button">恢复默认</button>
-          <button class="btn btn--pink" id="saveBtn" type="button">保存</button>
+          <button class="btn" id="reloadBtn" type="button">重新读取</button>
+          <button class="btn btn--pink" id="saveBtn" type="button" disabled>保存</button>
         </div>
-        <p class="ph-note">写入 localStorage['myon-about']</p>
+        <p class="ph-note" id="saveState" role="status" aria-live="polite">读取中…</p>
       </div>
     </header>
+
+    <!-- ---------- 唯一的页面级提示 ---------- -->
+    <div class="notice notice--info" id="abBanner" role="status" hidden>
+      <span class="notice-k" id="abBannerK">INFO</span>
+      <div class="notice-c">
+        <b id="abBannerTitle"></b>
+        <p id="abBannerText"></p>
+      </div>
+      <button class="notice-btn" id="abToken" type="button" data-token-open hidden>管理令牌</button>
+      <button class="notice-btn" id="abRetry" type="button" hidden>重试</button>
+    </div>
 
     <!-- ---------- 编辑器 + 预览 ---------- -->
     <div class="ab-grid">
@@ -46,10 +61,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </div>
         <div class="ab-body ab-body--editor">
           <label class="sr-only" for="mdInput">README Markdown 内容</label>
-          <textarea class="md-input" id="mdInput" spellcheck="false" placeholder="# 关于 Myon&#10;&#10;在这里写一段关于自己的话。"></textarea>
+          <textarea class="md-input" id="mdInput" spellcheck="false" disabled placeholder="# 关于 Myon&#10;&#10;在这里写一段关于自己的话。"></textarea>
         </div>
         <div class="ab-foot">
-          <span>Markdown · 标题 / 列表 / 引用 / 粗斜体 / 行内代码 / 链接</span>
+          <span>标题 / 列表 / 引用 / 粗斜体 / 行内代码 / 链接</span>
           <span id="mdCounts">—</span>
         </div>
       </section>
@@ -68,20 +83,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           </aside>
         </div>
         <div class="ab-foot">
-          <span>渲染自 js/markdown.js</span>
-          <span id="sourceTag">来源：默认内容</span>
+          <span>预览是本地渲染，保存后前台才会更新</span>
+          <span id="sourceTag">来源：读取中…</span>
         </div>
       </section>
     </div>
-
-    <div class="ab-bar">
-      <p class="ab-hint"><i class="bar-sq" aria-hidden="true"></i>前台第一页每次切回都会逐段淡入这份内容。</p>
-      <p class="save-state" id="saveState" role="status" aria-live="polite">来源：默认内容 · 尚未保存</p>
-    </div>
   </div>
 
-
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script is:inline src="/js/markdown.js"></script>
   <script is:inline src="/js/pages/admin-about.js"></script>

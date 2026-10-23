@@ -25,6 +25,12 @@ export const siteSettingKeys = [
   'home_cover_image',
   'home_cover_badge',
   'home_cover_note',
+  'home_end_title',
+  'home_end_lead',
+  'home_afterword_body',
+  'home_afterword_sign',
+  'home_afterword_next',
+  'maintenance_enabled',
 ] as const;
 
 export type SiteSettingKey = (typeof siteSettingKeys)[number];
@@ -126,6 +132,14 @@ export const defaultSiteSettings: SiteSettings = {
   home_cover_image: '/media/cabinet.jpg',
   home_cover_badge: '全七页 / ALL 7',
   home_cover_note: 'LIGHT ON · 只开一盏灯',
+  home_end_title: '谢谢翻完',
+  home_end_lead:
+    '如果哪一件你也喜欢，或者只是想聊两句——下次漫展见，或者现在写邮件给我。',
+  home_afterword_body: `这一册做到第七页的时候，窗外刚好天亮了。
+下一册想多放一点动画截图和旅行速写，也可能什么计划都没有，想到哪画到哪。`,
+  home_afterword_sign: '—— Myon，于 10 月的某个凌晨',
+  home_afterword_next: 'NEXT ISSUE · ？',
+  maintenance_enabled: 'false',
 };
 
 const text = (max: number) => z.string().max(max);
@@ -212,6 +226,12 @@ export const siteSettingsPatchSchema = z
       .regex(/^(\/|https?:\/\/)/, '封面图需要是站内路径或 http(s) 链接'),
     home_cover_badge: text(40),
     home_cover_note: text(60),
+    home_end_title: text(60),
+    home_end_lead: text(240),
+    home_afterword_body: text(600),
+    home_afterword_sign: text(120),
+    home_afterword_next: text(80),
+    maintenance_enabled: z.enum(['true', 'false']),
   })
   .partial();
 
@@ -244,6 +264,10 @@ export interface HomeCoverSettings {
 export interface PublicSiteSettings {
   /** 站点名，例如 Myon。 */
   name: string;
+  /** 作者，页脚版权与后记落款使用。 */
+  author: string;
+  /** 维护模式：开启后前台返回维护页。 */
+  maintenanceEnabled: boolean;
   /** 站点副标题（后台可改），例如 同人志。 */
   subtitle: string;
   /** 站点描述，用于 head-description / SEO。 */
@@ -255,6 +279,15 @@ export interface PublicSiteSettings {
   footerRss: string;
   footerEmail: string;
   home: HomeCoverSettings;
+  /** 尾页 / 后记文案。 */
+  end: HomeEndSettings;
+}
+
+/** 尾页：左侧感谢语 + 后记正文。 */
+export interface HomeEndSettings {
+  title: string;
+  lead: string;
+  afterword: { body: string; sign: string; next: string };
 }
 
 function parseJsonArray<T>(raw: string, fallback: T[]): T[] {
@@ -330,6 +363,8 @@ export function toPublicSiteSettings(
 ): PublicSiteSettings {
   return {
     name: settings.site_name,
+    author: settings.site_author,
+    maintenanceEnabled: settings.maintenance_enabled === 'true',
     subtitle: settings.site_subtitle,
     description: settings.site_description,
     themeColor: settings.theme_color,
@@ -355,6 +390,15 @@ export function toPublicSiteSettings(
         image: settings.home_cover_image.replace(/^\/assets\//, '/media/'),
         badge: settings.home_cover_badge,
         note: settings.home_cover_note,
+      },
+    },
+    end: {
+      title: settings.home_end_title,
+      lead: settings.home_end_lead,
+      afterword: {
+        body: settings.home_afterword_body,
+        sign: settings.home_afterword_sign,
+        next: settings.home_afterword_next,
       },
     },
   };

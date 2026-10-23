@@ -1,29 +1,7 @@
 /* ==========================================================================
    admin-media —— 媒体库：R2 存储条 + 媒体网格 + 选择/批量
-   页面特有样式，复用 admin.css 的深墨控制台语言。
+   页面特有样式，复用 admin.css 的深墨控制台语言；筛选栏用共享 .filterbar。
    ========================================================================== */
-
-/* 工具条 */
-.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding:9px 11px;
-  background:var(--panel);border:2px solid var(--pline);box-shadow:4px 4px 0 var(--ppk-deep)}
-.search{position:relative;flex:1 1 220px;max-width:330px;min-width:190px}
-.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--pp-55);pointer-events:none}
-.search input{width:100%;height:34px;padding:0 10px 0 32px;background:var(--desk);border:2px solid var(--pline);
-  color:var(--pp);font-family:var(--mono);font-size:13px;letter-spacing:.02em;border-radius:0}
-.search input::placeholder{color:var(--pp-55)}
-.search input:focus-visible{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
-.tabs2{display:flex;gap:2px;flex-wrap:wrap}
-.tab2{display:inline-flex;align-items:baseline;gap:6px;border:2px solid transparent;padding:5px 9px;
-  font-size:14px;font-weight:700;letter-spacing:.02em;color:var(--pp-62);
-  transition:color .14s var(--ease),background .14s var(--ease),border-color .14s var(--ease),box-shadow .14s var(--ease)}
-.tab2 b{font-family:var(--mono);font-size:12px;font-weight:400;letter-spacing:.03em;color:var(--pp-55)}
-.tab2:hover{color:var(--pp);background:color-mix(in srgb, var(--pink) 10%, transparent)}
-.tab2.is-on{background:var(--ppk);color:var(--ink);border-color:var(--ink);box-shadow:3px 3px 0 color-mix(in srgb, var(--pp) 30%, transparent)}
-.tab2.is-on b{color:var(--ink)}
-.sel{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--pp-55);white-space:nowrap}
-.sel select{height:32px;background:var(--desk);border:2px solid var(--pline);color:var(--pp);
-  font-family:var(--mono);font-size:13px;letter-spacing:.02em;padding:0 6px;border-radius:0}
-.sel select:focus-visible{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
 
 /* ---------- R2 存储 ---------- */
 .storage{margin-top:14px;background:var(--panel);border:2px solid var(--pline);
@@ -118,7 +96,6 @@
   .media-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media (max-width:1100px){
-  .search{flex:1 1 100%;max-width:none}
   .media-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .storage{padding:12px 13px}
 }
@@ -129,24 +106,10 @@
 }
 
 /* ==========================================================================
-   真实上传 / 删除追加：管理令牌 / 上传队列 / 读取态
+   真实上传 / 删除追加：上传队列 / 读取态
    ========================================================================== */
 
 .pdate b{font-weight:900;color:var(--pp)}
-
-/* ---------- 管理令牌 ---------- */
-.tk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding:8px 11px;
-  background:var(--panel);border:2px solid var(--pline);box-shadow:4px 4px 0 var(--ppk-deep)}
-.tk-k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--pp-55);white-space:nowrap}
-.tk-input{flex:1 1 200px;min-width:150px;height:32px;padding:0 9px;border:2px solid var(--pline);border-radius:0;
-  background:var(--desk);color:var(--pp);font-family:var(--mono);font-size:13px;letter-spacing:.04em}
-.tk-input:focus{outline:none;border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
-.tk-input::placeholder{color:var(--pp-55)}
-.tk-btn{height:32px;padding:0 11px;border:2px solid var(--pline);background:transparent;color:var(--pp-70);
-  font-family:var(--mono);font-size:12px;letter-spacing:.06em;border-radius:0}
-.tk-btn:hover{background:var(--ppk);color:var(--ink);border-color:var(--ink)}
-.tk-btn:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
-.tk-state{margin-left:auto;font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap}
 
 /* ---------- 上传队列 ---------- */
 .up-list{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding:10px 12px;
@@ -174,7 +137,6 @@
 .del-ok:hover{background:var(--ppk)}
 
 @media (max-width:760px){
-  .tk-state{margin-left:0;width:100%}
   .up-row{grid-template-columns:1fr;gap:4px}
   .up-st{order:2;text-align:left}
   .up-track{grid-column:1;order:3}

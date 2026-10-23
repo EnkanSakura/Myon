@@ -82,23 +82,6 @@
 .c-hint{margin:0;font-size:15px;line-height:1.7;color:var(--pp-70);border-top:2px solid var(--pline-2);padding-top:9px}
 
 /* ---------- 02 列表 ---------- */
-.list-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
-.ftabs{display:flex;gap:5px;flex-wrap:wrap}
-.ftab{
-  border:2px solid var(--pline);background:transparent;color:var(--pp-62);
-  font-family:var(--mono);font-size:12px;letter-spacing:.07em;padding:4px 9px 5px;line-height:1.5;
-  transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease);
-}
-.ftab:hover{color:var(--pp);border-color:var(--pp-62)}
-.ftab.is-on{background:var(--ppk);color:var(--ink);border-color:var(--ink);box-shadow:2px 2px 0 color-mix(in srgb, var(--pp) 30%, transparent)}
-.ftab:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
-.list-search{display:flex;align-items:center;gap:7px;height:34px;padding:0 9px;border:2px solid var(--pline);background:var(--panel);margin-left:auto}
-.list-search span{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--pp-55)}
-.list-search input{width:200px;border:0;background:transparent;color:var(--pp);font-family:var(--mono);font-size:13px;letter-spacing:.02em;outline:none}
-.list-search input::placeholder{color:var(--pp-55)}
-.list-search:focus-within{border-color:var(--ppk)}
-.list-count{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap}
-
 .notes{margin-top:12px}
 .note-head,.note-r{display:grid;grid-template-columns:124px minmax(0,1fr) 84px 124px 168px;gap:12px;align-items:center}
 .note-head{padding:0 6px 8px;border-bottom:3px solid var(--pp-62);font-family:var(--mono);font-size:11px;letter-spacing:.13em;color:var(--pp-55)}
@@ -143,9 +126,6 @@
 
 /* 无结果 / 分页：共享组件见 admin.css（.empty / .pager） */
 
-/* 管理令牌输入 */
-.token-input{min-height:0;height:46px;font-family:var(--mono);font-size:14px;letter-spacing:.04em}
-
 /* ---------- 响应式 ---------- */
 @media (max-width:1240px){
   .compose{grid-template-columns:1fr 268px}
@@ -157,7 +137,6 @@
   .c-hint{grid-column:1 / -1}
   .note-head,.note-r{grid-template-columns:108px minmax(0,1fr) 164px}
   .note-head .hd-thumb,.note-head .hd-tag,.note-r .nr-thumb,.note-r .nr-tag{display:none}
-  .list-search{margin-left:0}
 }
 @media (max-width:900px){
   .note-head{display:none}

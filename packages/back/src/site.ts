@@ -1,5 +1,7 @@
 import {
   defaultSiteSettings,
+  defaultThemeColor,
+  type PublicSiteSettings,
   type SiteSettingKey,
   type SiteSettings,
   siteSettingKeys,
@@ -66,4 +68,102 @@ export function sanitizeFooterHtml(value: string): string {
       }),
     },
   });
+}
+
+/** 维护模式不拦的路径：后台、API 与静态资源，维护页自己也要能加载。 */
+const MAINTENANCE_BYPASS_PATTERNS: RegExp[] = [
+  /^\/admin(?:\/|$)/,
+  /^\/api(?:\/|$)/,
+  /^\/_astro\//,
+  /^\/css\//,
+  /^\/js\//,
+  /^\/assets\//,
+  /^\/media\//,
+  /^\/favicon(?:\.ico|\.svg)?$/,
+  /^\/rss\.xml$/,
+];
+
+/**
+ * 维护模式是否该拦住这次请求：只拦前台 HTML 页面。
+ * 纯函数，Worker 入口与单测共用；`accept` 里没有 text/html 的一律放行。
+ */
+export function shouldServeMaintenance(
+  pathname: string,
+  accept: string,
+  maintenanceEnabled: boolean,
+): boolean {
+  if (!maintenanceEnabled) return false;
+  if (!accept.includes('text/html')) return false;
+  if (!pathname.startsWith('/') || pathname.startsWith('//')) return false;
+  return !MAINTENANCE_BYPASS_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 维护页：不依赖前端 CSS / JS 的独立 HTML，只显示站点名、作者与「维护中」。
+ * 颜色仍取站点主题色，但只接受 #RRGGBB，避免把设置内容直接写进样式。
+ */
+export function renderMaintenancePage(
+  settings: Pick<PublicSiteSettings, 'name' | 'author' | 'themeColor'>,
+): string {
+  const name = escapeHtml(settings.name || 'Myon');
+  const author = escapeHtml(settings.author || settings.name || 'Myon');
+  const accent = /^#[0-9a-fA-F]{6}$/.test(settings.themeColor)
+    ? settings.themeColor
+    : defaultThemeColor;
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<title>维护中 · ${name}</title>
+<style>
+  :root { --accent: ${accent}; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #f7f3ef;
+    color: #17131a;
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .card {
+    width: min(520px, 100%);
+    padding: 36px 32px 32px;
+    background: #fff;
+    border: 2px solid #17131a;
+    box-shadow: 8px 8px 0 #17131a;
+  }
+  .bar { height: 8px; margin-bottom: 28px; background: var(--accent); border: 2px solid #17131a; }
+  .label { margin: 0 0 12px; font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 12px; letter-spacing: .18em; }
+  h1 { margin: 0 0 16px; font-size: 40px; line-height: 1.1; }
+  p { margin: 0; font-size: 15px; line-height: 1.7; }
+  .author { margin-top: 24px; font-size: 12px; letter-spacing: .12em; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="bar"></div>
+    <p class="label">MAINTENANCE</p>
+    <h1>维护中</h1>
+    <p>${name} 正在整理中，请稍后再来。</p>
+    <p class="author">${author}</p>
+  </main>
+</body>
+</html>`;
 }
