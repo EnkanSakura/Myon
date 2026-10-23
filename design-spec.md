@@ -129,6 +129,7 @@
 | 高度、宽度、最大宽度、网格、gap、定位、transform、动画 | ✅ | `.room-head .sub{max-width:44ch}` 可以 |
 | 新增变体 | ✅ 用修饰类 | `.stat-box .v--word`、`.moment--ink` |
 | 新增本页组件 | ✅ 全新类名 | `.schedule`、`.drawer`、`.lb` |
+| 筛选栏 | ❌ 共享 `.filterbar`（前台 `v2.css` / 后台 `admin.css`） | 不要另造 `.toolbar` / `.tabs2` / `.ftabs` / `.cats`；顺序为 chips → 搜索 → 排序 → 计数 → 清除 |
 
 **判断方法**：如果你为了让某一页「看着更合适」而改共享组件的字号/颜色/内边距，那就是在制造下一轮漂移。
 要么回 `v2.css` 改唯一口径（并接受所有页面一起变），要么给这一页做一个新变体类。
@@ -144,7 +145,7 @@
 内页（SiteLayout）
 ├─ .topbar（fixed，高 --topbar-h）
 │  ├─ .brand / .nav / .page-sticker / .topmeta
-├─ .room-head（页头：kicker + h1 + sub + 右侧 .room-stats + 水印 .chapter）
+├─ .room-head（页头：kicker + h1 + 右侧 .room-stats + 水印 .chapter；不再有 .sub）
 ├─ 页面内容（.wrap）
 └─ .sitebar（fixed，高 --bottombar-h：左格 / 中格备案号 / 右格 RSS + 邮箱）
 
@@ -190,6 +191,9 @@
 
 后台是「暗色制作台」：深墨底 + 纸色字 + 柔性阴影 + 2px 细线，**故意不与前台同款**，这是设计决定，不要合并。
 
+- 展柜：展品上不固定放 sticker / NEW / 展签；hover 或键盘 focus 时浮出编号、分类、名称与 `note`（空 note 只显示前三项）。
+- 页面副标题 `.sub`、叙事便签 `.narration` 与引文 `.kai-note` 已从全站删除，不要再新增。
+
 | 前台 | 后台等价 | 说明 |
 | --- | --- | --- |
 | `--paper` | `--pp`（`#F7F3EF`） | 后台的前景色 |
@@ -204,7 +208,7 @@
 - 后台字号偏小是**有意的密度**（整数档 11–15px），不套前台的 10/11/12/13/14/16 档；
   但同样**只允许整数档**，`<10px` 依然禁止。
 
-### 9.1 后台共享组件（唯一实现，在 `admin.css` 的「共享组件」四段）
+### 9.1 后台共享组件（唯一实现，在 `admin.css` 的共享组件段）
 
 | 组件 | 结构 | 状态 |
 | --- | --- | --- |
@@ -212,8 +216,10 @@
 | 空状态 | `.empty` + `.empty-k`（标签）/ `.empty-no`（幽灵编号，可选）/ `.empty-c`（`.empty-t` 标题 + `.empty-d` 说明）/ `.empty-actions`；`.empty--inline` 用于表单、侧栏内 | `hidden` 属性显隐 |
 | 分页 | `.pager` + `.pager-info` + `.pager-btns` + `.pager-nums` / `.pager-gap` + `.pager-btn` | `.is-on` 当前页、`disabled` 禁用 |
 | 提示条 | `.notice` + `.notice-k` + `.notice-c` + `.notice-issues` + `.notice-a` / `.notice-btn`；变体 `.notice--info / --warn / --ok / --error` | 语气用修饰类切换；浮层 `.toast` 不是提示条，别混用 |
+| 筛选栏 | `.filterbar` + `.filterbar-tabs` + `.filterbar-tab` + `.filterbar-search` + `.filterbar-sort` + `.filterbar-count` + `.filterbar-clear` | chips 用 `is-on` / `aria-pressed`；清除仅激活时出现 |
+| 管理令牌 | `AdminLayout` 顶栏按钮 + 弹窗（`public/js/admin-token.js`） | 全后台唯一入口；页面只放 `[data-token-open]` 引导，不重复输入框 |
 
-页面 CSS 里**不得**再为这四类组件写样式，也不要另造同义类名（如 `.tsw` / `.pager2` / `.list-banner`）；
+页面 CSS 里**不得**再为这些共享组件写样式，也不要另造同义类名（如 `.tsw` / `.pager2` / `.list-banner` / `.tabs2`）；
 新增后台页面直接套上面的结构，JS 只操作 `data-on`、`hidden`、`.is-on`、`disabled` 和 `notice--*` 修饰类。
 
 ---

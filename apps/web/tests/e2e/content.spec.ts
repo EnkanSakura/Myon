@@ -10,7 +10,7 @@ test.describe('文章目次', () => {
 
     await expect(rows.first()).toHaveAttribute('href', /^\/articles\//);
 
-    const tab = page.locator('.tab').nth(1);
+    const tab = page.locator('.filterbar-tab').nth(1);
     const tag = await tab.getAttribute('data-tag');
     expect(tag).toBeTruthy();
     await tab.click();
@@ -32,7 +32,7 @@ test.describe('动态流', () => {
     const total = await page.locator('.moment').count();
     expect(total).toBeGreaterThan(0);
 
-    await page.locator('.tabs .tag[data-tag="技术"]').click();
+    await page.locator('.filterbar-tab[data-tag="技术"]').click();
     const visible = await page.locator('.moment:visible').count();
     expect(visible).toBeGreaterThan(0);
     expect(visible).toBeLessThanOrEqual(total);
@@ -43,8 +43,12 @@ test.describe('展柜', () => {
   test('渲染藏品，分类筛选与灯箱可用', async ({ page }) => {
     await page.goto('/gallery');
     expect(await page.locator('.ex').count()).toBeGreaterThan(0);
+    // 展品上的固定 sticker / 展签 / NEW 已删除，展签只在 hover 时浮出。
+    expect(
+      await page.locator('.ex .sticker, .ex .ex-meta, .ex .cap').count(),
+    ).toBe(0);
 
-    const tab = page.locator('.tab').nth(1);
+    const tab = page.locator('.filterbar-tab').nth(1);
     const category = await tab.getAttribute('data-cat');
     expect(category).toBeTruthy();
     await tab.click();
@@ -59,6 +63,16 @@ test.describe('展柜', () => {
       );
     }
 
+    const noteFigure = page.locator('.ex:has(.ex-note)').first();
+    if ((await noteFigure.count()) > 0) {
+      const note = noteFigure.locator('.ex-note');
+      await expect(note).toHaveCSS('opacity', '0');
+      await noteFigure.hover();
+      await expect(note).toHaveCSS('opacity', '1');
+      await expect(note.locator('.ex-note-k')).toHaveText(/^[A-Z]-\d{3} \//);
+      await expect(note.locator('.ex-note-name')).not.toBeEmpty();
+    }
+
     await visible.first().locator('.ex-open').click();
     await expect(page.locator('.lb')).toBeVisible();
     await page.locator('.lb-close').click();
@@ -67,10 +81,15 @@ test.describe('展柜', () => {
 });
 
 test.describe('追番', () => {
-  test('渲染在追记录与统计', async ({ page }) => {
+  test('渲染总览、分类筛选与记录', async ({ page }) => {
     await page.goto('/bangumi');
-    expect(await page.locator('.program').count()).toBeGreaterThan(0);
-    await expect(page.locator('.program').first()).toBeVisible();
+    await expect(page.locator('h1').first()).toContainText('追番');
+    expect(await page.locator('.record').count()).toBeGreaterThan(0);
+    await expect(page.locator('.record').first()).toBeVisible();
+
+    await page.locator('.filterbar-tab', { hasText: '动画' }).click();
+    await expect(page).toHaveURL(/type=anime/);
+    await expect(page.locator('.filterbar-tab.is-on')).toContainText('动画');
   });
 });
 

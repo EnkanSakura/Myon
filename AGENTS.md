@@ -11,25 +11,27 @@
 - **两个分支是两套东西**：`main` 是业务代码；`design` 是孤儿分支，只放设计稿（`design/site`、`design/v1`）。`main` 上不存在 `design/` 目录。
 - **运行时绑定**：D1（`DB`）、R2（`MEDIA`）、KV（`SETTINGS`，站点设置）、静态资产（`ASSETS`）。部署配置由 `apps/web/wrangler.template.jsonc` + 环境变量生成到 `apps/web/wrangler.jsonc`，**生成文件不入库**；CI 与本地都用 `pnpm wrangler:config` 生成。
 - **API 已版本化**：内容接口在 `/api/v1/*`，探针 `/api/health` 不版本化。后台写接口在 `/api/v1/admin/*`。
-- **站点配置存在 Workers KV**：主题色、页脚文案、站点名/副标题/描述与首页配置都在 KV 键 `site-settings:v1`（一份 JSON），键名与默认值定义在 `@myon/shared` 的 `siteSettingKeys`；**D1 里没有 `settings` 表**。前台通过 `GET /api/v1/site` 读取，后台设置页通过 `/api/v1/admin/settings` 读写。每页 head-title 统一为 `页面名 · 站点名 副标题`（`formatPageTitle`），head-description 统一取站点描述。
+- **站点配置存在 Workers KV**：主题色、页脚文案、站点名/副标题/描述、首页配置与尾页后记（`home_end_*` / `home_afterword_*`）都在 KV 键 `site-settings:v1`（一份 JSON），键名与默认值定义在 `@myon/shared` 的 `siteSettingKeys`；**D1 里没有 `settings` 表**。前台通过 `GET /api/v1/site` 读取，后台设置页通过 `/api/v1/admin/settings` 读写。每页 head-title 统一为 `页面名 · 站点名 副标题`（`formatPageTitle`），head-description 统一取站点描述。页脚版权不再单独配置，由「© 当前年份 + `site_author`」生成。
+- **维护模式**：`maintenance_enabled` 存 KV；`apps/web/src/worker.ts` 对前台 HTML GET 返回 503 维护页，`/admin`、`/api`、静态资源与 RSS 放行；后台总览的开关写同一个设置。
 - **后台写接口的临时门禁**是环境变量 `ADMIN_TOKEN`（请求头 `x-admin-token`）：未配置时返回 503，配置后不匹配返回 401。Cloudflare Access 接入后替换为校验 Access JWT。
 - **文章与动态有分类**：`posts.category`、`moments.category`，接口返回 `category`。
 - **列表页数据来自 D1**：文章目次、动态、展柜、追番都在服务端经 `/api/v1/*` 取数渲染；`GET /api/v1/stats` 是公开只读的内容统计，后台总览与前台页头共用。
+- **追番分五类**：`bangumi_shows.subject_type` 为 `anime/book/music/game/real`；`syncBangumi` 一次请求拉全部收藏（超过 100 条才分页），再按响应里的 `subject_type` 分类写入，书籍优先 `vol_status`/`volumes`，并保存我的评分 `score` 与简评 `comment`。`GET /api/v1/bangumi?type=&sort=recent` 支持筛选与按更新时间排序；`/api/v1/stats.bangumi` 提供 `byType` 与 `byStatus` 全量聚合。前台 `/bangumi` 默认简化总览，分类页用 `?type=`。
 - **列表接口分页**：四个列表都返回 `{ items, total, limit, offset }`，页面用 `?page=` 服务端分页（默认每页 20，最大 100），不要一次性全量拉取。
-- **后台写接口已完整**：`/api/v1/admin/{posts,moments,gallery,bangumi,tools}` 提供 CRUD，`/api/v1/admin/media` 上传/列表/删除（R2），`/api/v1/admin/bangumi/sync` 手动同步。
+- **后台写接口已完整**：`/api/v1/admin/{posts,moments,gallery,bangumi,tools}` 提供 CRUD，`/api/v1/admin/media` 上传/列表/删除（R2），`/api/v1/admin/bangumi/sync` 手动同步，`PUT /api/v1/admin/about` 保存关于页 Markdown。
 - **工具存 D1**：`tools` 表（`slug` / `tool_key` / 名称 / 说明 / 类型 / 关键词 / `href` / `enabled` / `position`）是前台 `/tools` 与后台 `/admin/tools` 的唯一数据源；前台只读 `GET /api/v1/tools`（只返回启用项），后台用 `/api/v1/admin/tools` 增删改。每个工具页地址是 `/tools/<slug>`（页面在 `src/pages/tools/`），自定义链接工具用 `href` 跳转。不要再把工具列表、调用次数、平均耗时写死在页面里。
 - **访问统计写 D1**：`apps/web/src/worker.ts` 对前台 HTML GET 请求写 `page_views`（Asia/Shanghai 天 / 访客指纹 / path），后台总览只用 `GET /api/v1/traffic`（最近 30 天聚合）显示访问数据；后台总览不再展示 D1/R2 资源用量，也不要写设计稿假 PV/UV、假存储额度、假部署哈希。
 - **媒体只存 R2**：`GET /media/<key>` 只从 R2 读；媒体库列表/删除直接操作 R2 对象（`id` 是 key 的 base64url），**D1 里没有 `media` 表，仓库内不保存任何图片资源**。新图片通过 `POST /api/v1/admin/media` 落到 R2。
 - **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
 - **发布流程拆成三个 workflow**：push `main` 后按 `Database Migrate`（D1 迁移）→ `Deploy`（只构建 + 部署）→ `Smoke Test`（等待 3 分钟后 curl `/api/health`）串联；`deploy.yml` 不再做迁移和 smoke。
 - **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
-- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图与贴纸文案都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。
+- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图与贴纸文案都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。
 - **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
 - **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
 - **首页窄屏交互**：面板内容高于一屏时先内部滚动，滚到底/顶才翻页，并显示「本页还有内容」提示；不要改回“滚轮直接翻页”。
 - **本地 Bangumi 同步**用 `pnpm bangumi:sync:local`（默认走 `127.0.0.1:7890` 代理，`BANGUMI_PROXY` 可覆盖）；生产 Worker 的 Cron 与后台按钮是直连。
 - **手机端原生 App** 将来在仓库的另一条分支开发，通过 HTTP 消费 `/api/v1`，不共享 TS 类型。
-- **后台页面尚未接入身份验证**：`/admin*` 本身没有登录，只有写接口有令牌门禁。
+- **后台页面尚未接入身份验证**：`/admin*` 本身没有登录，只有写接口有令牌门禁。**令牌入口只有一个**：`AdminLayout` 顶栏的「管理令牌」按钮/弹窗（`public/js/admin-token.js`），页面里不要再放第二个令牌输入框。
 
 ---
 
@@ -86,6 +88,7 @@
 - 页脚统一由 `src/components/SiteBar.astro` 渲染（浮动底栏），主题色统一由 `src/components/ThemeTokens.astro` 注入；页面不要自写 footer，也不要硬编码主题色。
 - 顶栏与底栏都是 fixed 浮动层，内容区必须用 `--topbar-h` / `--bottombar-h` 预留高度，不要让内容被遮住且滚不到。
 - 页面专属样式放 `public/css/pages/<name>.css`，页面专属脚本放 `public/js/pages/<name>.js`，通过 `is:inline` 的 `<link>` / `<script src>` 引入（`public/` 下的资源不参与打包）。
+- 筛选栏统一用共享 `.filterbar` / `.filterbar-tab` / `.filterbar-search` / `.filterbar-sort` / `.filterbar-count` / `.filterbar-clear`（前台样式在 `v2.css`，后台在 `admin.css`）；顺序固定为「chips → 搜索 → 排序 → 计数 → 清除」，不要在页面里另造 `.toolbar` / `.tabs2` / `.ftabs` / `.cats` 一套。
 - 页面样式必须在 `v2.css` 之后加载，不要写进 `v2.css`。
 - 不出现指向 `.html` 的链接；一律用路由（如 `/articles`、`/admin/about`）。
 - 不在页面里硬编码 API 路径，用 `@myon/shared` 的 `API_VERSION` / `apiBasePath`；站点设置从 `Astro.locals.site` 取（middleware 已注入）。
@@ -104,6 +107,8 @@
 - 响应式断点：前台沿用 `1100px` 与 `760px`；后台控制台另用 `1100px` / `900px` / `600px`（900 折叠侧栏）。
 - 除设计稿里已有的圆形元素（光晕、头像、图标）外，不使用 `border-radius`。
 - 文字字号下限：顶栏、底栏、贴纸与各页小标签不低于 `10px`；字号只用整数档，共享组件用 `v2.css` 的 `--fs-1`…`--fs-6`。
+- 删除页面里的 `.sub` 页面副标题、`.narration` 便签与 `.kai-note` 引文；不要再新增这三类装饰性说明。展柜展品上不再放 sticker / NEW / 固定展签，展签只在 hover / focus 时浮出编号、分类、名称与 note。
+- 深色模式投影使用纸白色（`[data-theme="dark"]` 的 `--shade`），浅色保持墨黑；不要写死黑色 `box-shadow`。
 - 首页面板高度不可假设等于一屏：新增内容必须能在面板内滚动，并保证底部留出 `--bottombar-h`。
 
 ### 4.4 文案

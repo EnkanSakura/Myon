@@ -4,16 +4,54 @@ import type { AppBindings } from '../../src/types';
 
 /**
  * 够用的 D1 桩：health 走原生 `prepare().first()`，业务路由走 drizzle
- * （内部会调 `all()`）。按 SQL 区分，避免两套查询互相干扰。
+ * （内部按是否带字段分别调 `raw()` / `all()`）。按 SQL 区分，避免互相干扰。
  */
-function createEnv(environment = 'test', adminToken?: string) {
+interface EnvStubs {
+  /** /stats 的「类型 × 状态」聚合行：[subjectType, status, count]。 */
+  bangumiGroups?: Array<[string, string, number]>;
+  /** 追番列表查询返回的行（按 schema 列顺序的 values 数组）。 */
+  bangumiList?: unknown[][];
+  /** 后台 PATCH 读取单条追番时返回的行（按 schema 列顺序的 values 数组）。 */
+  bangumiRow?: unknown[];
+}
+
+function createEnv(
+  environment = 'test',
+  adminToken?: string,
+  stubs: EnvStubs = {},
+) {
+  /** 执行过的 SQL，供「确实写了 site_content」这类断言用。 */
+  const statements: string[] = [];
+
   const statement = (sql: string) => {
+    const normalized = sql.toLowerCase();
     const isHealth = sql.includes('SELECT 1 AS ok');
+    const isBangumiGroup =
+      normalized.includes('from "bangumi_shows"') &&
+      normalized.includes('group by');
+    const isBangumiById =
+      normalized.includes('from "bangumi_shows"') &&
+      normalized.includes(' where ');
+    const isBangumiList =
+      normalized.includes('from "bangumi_shows"') &&
+      !isBangumiGroup &&
+      !isBangumiById &&
+      !normalized.includes('count(*)');
+
+    // drizzle 的 select 带字段时走 raw()；行是 values 数组而不是对象。
+    const rows = isBangumiGroup
+      ? (stubs.bangumiGroups ?? [])
+      : isBangumiById && stubs.bangumiRow
+        ? [stubs.bangumiRow]
+        : isBangumiList && stubs.bangumiList
+          ? stubs.bangumiList
+          : [];
+
     const stmt = {
       bind: () => stmt,
       first: async () => (isHealth ? { ok: 1 } : null),
       all: async () => ({ results: [], success: true, meta: {} }),
-      raw: async () => [],
+      raw: async () => rows,
       run: async () => ({ success: true, meta: {} }),
     };
     return stmt;
@@ -64,12 +102,18 @@ function createEnv(environment = 'test', adminToken?: string) {
   };
 
   return {
-    DB: { prepare: (sql: string) => statement(sql) },
+    DB: {
+      prepare: (sql: string) => {
+        statements.push(sql);
+        return statement(sql);
+      },
+    },
     MEDIA: media,
     SETTINGS: settings,
     ENVIRONMENT: environment,
     ADMIN_TOKEN: adminToken,
-  } as unknown as AppBindings;
+    statements,
+  } as unknown as AppBindings & { statements: string[] };
 }
 
 const env = createEnv();
@@ -207,6 +251,56 @@ describe('content categories', () => {
     });
   });
 
+  it('filters the bangumi collection by type and supports recent sorting', async () => {
+    for (const type of ['anime', 'book', 'music', 'game', 'real']) {
+      const res = await app.request(`/api/v1/bangumi?type=${type}`, {}, env);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        items: [],
+        total: 0,
+        limit: 20,
+        offset: 0,
+      });
+    }
+
+    const recent = await app.request('/api/v1/bangumi?sort=recent', {}, env);
+    expect(recent.status).toBe(200);
+    expect((await recent.json()) as { total: number }).toMatchObject({
+      total: 0,
+    });
+
+    const invalid = await app.request('/api/v1/bangumi?type=comic', {}, env);
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'invalid_subject_type' });
+  });
+
+  it('returns subjectType on bangumi items', async () => {
+    const listEnv = createEnv('test', undefined, {
+      bangumiList: [
+        [
+          'bg_1',
+          'book',
+          1,
+          '某本书',
+          'watching',
+          10,
+          2,
+          null,
+          null,
+          null,
+          '2026-10-01T00:00:00.000Z',
+        ],
+      ],
+    });
+    const res = await app.request('/api/v1/bangumi', {}, listEnv);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{ id: string; subjectType: string }>;
+    };
+    expect(body.items[0]?.id).toBe('bg_1');
+    expect(body.items[0]?.subjectType).toBe('book');
+  });
+
   it('reports zeroed site stats without data', async () => {
     const res = await app.request('/api/v1/stats', {}, env);
     expect(res.status).toBe(200);
@@ -215,10 +309,56 @@ describe('content categories', () => {
       posts: { published: 0, draft: 0, words: 0 },
       moments: { total: 0 },
       gallery: { total: 0, displayed: 0, categories: [] },
-      bangumi: { total: 0, watching: 0 },
+      bangumi: {
+        total: 0,
+        watching: 0,
+        byType: {
+          anime: { total: 0, watching: 0 },
+          book: { total: 0, watching: 0 },
+          music: { total: 0, watching: 0 },
+          game: { total: 0, watching: 0 },
+          real: { total: 0, watching: 0 },
+        },
+        byStatus: { watching: 0, watched: 0, wish: 0, paused: 0 },
+      },
       media: { total: 0 },
       tools: { total: 0, enabled: 0 },
       categories: { posts: [], moments: [] },
+    });
+  });
+
+  it('aggregates bangumi stats across every subject type and status', async () => {
+    const statsEnv = createEnv('test', undefined, {
+      bangumiGroups: [
+        ['anime', 'watching', 2],
+        ['anime', 'watched', 1],
+        ['book', 'watching', 1],
+        ['music', 'paused', 1],
+      ],
+    });
+    const res = await app.request('/api/v1/stats', {}, statsEnv);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      bangumi: {
+        total: number;
+        watching: number;
+        byType: Record<string, { total: number; watching: number }>;
+        byStatus: Record<string, number>;
+      };
+    };
+    expect(body.bangumi.total).toBe(5);
+    expect(body.bangumi.watching).toBe(3);
+    expect(body.bangumi.byType.anime).toEqual({ total: 3, watching: 2 });
+    expect(body.bangumi.byType.book).toEqual({ total: 1, watching: 1 });
+    expect(body.bangumi.byType.music).toEqual({ total: 1, watching: 0 });
+    expect(body.bangumi.byType.game).toEqual({ total: 0, watching: 0 });
+    expect(body.bangumi.byType.real).toEqual({ total: 0, watching: 0 });
+    expect(body.bangumi.byStatus).toEqual({
+      watching: 3,
+      watched: 1,
+      wish: 0,
+      paused: 1,
     });
   });
 });
@@ -355,6 +495,112 @@ describe('admin content write API', () => {
     expect(momentRes.status).toBe(201);
   });
 
+  it('filters admin bangumi by type and validates the query', async () => {
+    const ok = await app.request(
+      '/api/v1/admin/bangumi?type=book',
+      { headers: auth },
+      adminEnv,
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ items: [] });
+
+    const invalid = await app.request(
+      '/api/v1/admin/bangumi?type=comic',
+      { headers: auth },
+      adminEnv,
+    );
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'invalid_subject_type' });
+  });
+
+  it('creates a bangumi show with an explicit subject type', async () => {
+    const bookRes = await app.request(
+      '/api/v1/admin/bangumi',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          subjectType: 'book',
+          title: '书籍条目',
+          status: 'watching',
+          totalEps: 10,
+          watchedEps: 3,
+        }),
+      },
+      adminEnv,
+    );
+    expect(bookRes.status).toBe(201);
+    const book = (await bookRes.json()) as {
+      item: { id: string; title: string; subjectType: string };
+    };
+    expect(book.item.id).toMatch(/^bg_/);
+    expect(book.item.title).toBe('书籍条目');
+    expect(book.item.subjectType).toBe('book');
+
+    const defaultRes = await app.request(
+      '/api/v1/admin/bangumi',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ title: '默认动画' }),
+      },
+      adminEnv,
+    );
+    expect(defaultRes.status).toBe(201);
+    const defaulted = (await defaultRes.json()) as {
+      item: { subjectType: string };
+    };
+    expect(defaulted.item.subjectType).toBe('anime');
+  });
+
+  it('accepts subjectType on patch and rejects unknown values', async () => {
+    const patchEnv = createEnv('test', 'secret-token', {
+      bangumiRow: [
+        'bg_1',
+        'anime',
+        1,
+        '某番',
+        'watching',
+        12,
+        3,
+        8,
+        null,
+        null,
+        '2026-10-01T00:00:00.000Z',
+      ],
+    });
+    const patched = await app.request(
+      '/api/v1/admin/bangumi/bg_1',
+      {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ subjectType: 'game', watchedEps: 5 }),
+      },
+      patchEnv,
+    );
+    expect(patched.status).toBe(200);
+    const body = (await patched.json()) as {
+      item: { subjectType: string; title: string; watchedEps: number };
+    };
+    expect(body.item.subjectType).toBe('game');
+    expect(body.item.title).toBe('某番');
+    expect(body.item.watchedEps).toBe(5);
+
+    const invalid = await app.request(
+      '/api/v1/admin/bangumi/bg_1',
+      {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ subjectType: 'comic' }),
+      },
+      patchEnv,
+    );
+    expect(invalid.status).toBe(400);
+    expect(((await invalid.json()) as { error: string }).error).toBe(
+      'validation_failed',
+    );
+  });
+
   it('uploads an image to R2 and registers it', async () => {
     const form = new FormData();
     const png = Buffer.from(
@@ -404,6 +650,91 @@ describe('admin content write API', () => {
       synced: 0,
       reason: 'not_configured',
     });
+  });
+});
+
+describe('admin about API', () => {
+  const auth = { 'x-admin-token': 'secret-token' };
+  const json = { ...auth, 'content-type': 'application/json' };
+  // 独立一份环境，方便断言这次 PUT 真的写了 site_content。
+  const aboutEnv = createEnv('test', 'secret-token');
+
+  it('requires the admin token', async () => {
+    const res = await app.request(
+      '/api/v1/admin/about',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ markdown: '# 关于' }),
+      },
+      aboutEnv,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects malformed and invalid payloads before writing', async () => {
+    const invalid = await app.request(
+      '/api/v1/admin/about',
+      {
+        method: 'PUT',
+        headers: json,
+        body: JSON.stringify({ markdown: 123 }),
+      },
+      aboutEnv,
+    );
+    expect(invalid.status).toBe(400);
+    expect(((await invalid.json()) as { error: string }).error).toBe(
+      'validation_failed',
+    );
+
+    const malformed = await app.request(
+      '/api/v1/admin/about',
+      { method: 'PUT', headers: json, body: 'not-json' },
+      aboutEnv,
+    );
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: 'invalid_json' });
+  });
+
+  it('writes the about row and returns rendered html', async () => {
+    const res = await app.request(
+      '/api/v1/admin/about',
+      {
+        method: 'PUT',
+        headers: json,
+        body: JSON.stringify({
+          markdown: '## 关于本站\n\n这里是正文。',
+        }),
+      },
+      aboutEnv,
+    );
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      item: {
+        key: string;
+        markdown: string;
+        html: string;
+        updatedAt: string;
+      };
+    };
+    expect(body.item.key).toBe('about');
+    expect(body.item.markdown).toContain('关于本站');
+    expect(body.item.html).toContain('<h2>关于本站</h2>');
+    expect(body.item.html).toContain('这里是正文');
+    expect(body.item.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    const executed = aboutEnv.statements.map((sql) => sql.toLowerCase());
+    expect(
+      executed.some(
+        (sql) => sql.includes('insert') && sql.includes('site_content'),
+      ),
+    ).toBe(true);
+    expect(
+      executed.some(
+        (sql) => sql.includes('site_content') && sql.includes('on conflict'),
+      ),
+    ).toBe(true);
   });
 });
 

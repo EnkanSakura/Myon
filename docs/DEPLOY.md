@@ -241,8 +241,8 @@ push main
 1. `pnpm install --frozen-lockfile`；
 2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空；
 3. `pnpm wrangler:config` 生成生产配置（`D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
-4. `wrangler d1 migrations apply myon-blog --remote`（按 migration 编号顺序应用 `packages/back/migrations/`，
-   0013/0014 会分别删除 `media` 与 `settings` 表）。
+4. `wrangler d1 migrations apply myon-blog --remote`（按 migration 编号顺序应用 `packages/back/migrations/`：
+   0013/0014 删 `media`/`settings` 表，0015 给 `bangumi_shows` 加 `subject_type`，0016 加 `comment`）。
 
 ### 5.2 Deploy
 

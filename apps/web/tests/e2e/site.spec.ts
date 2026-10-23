@@ -13,7 +13,7 @@ test.describe('浮动底栏', () => {
       'fixed',
     );
 
-    await expect(bar.locator('.sb-copy')).toContainText('MYON');
+    await expect(bar.locator('.sb-copy')).toContainText('Myon');
     await expect(bar.locator('.sb-tech')).toContainText('Cloudflare');
     await expect(bar.locator('.sb-icp')).toContainText('ICP备');
     await expect(bar.locator('.sb-right a')).toHaveCount(2);
@@ -109,5 +109,36 @@ test.describe('站点配置与订阅', () => {
       'content',
       settings.description,
     );
+  });
+});
+
+test.describe('视觉清理', () => {
+  test('所有前台页面不再有 .sub / .narration / .kai-note / syncbar', async ({
+    page,
+  }) => {
+    for (const path of [
+      '/articles',
+      '/moments',
+      '/gallery',
+      '/bangumi',
+      '/tools',
+      '/tools/timestamp',
+    ]) {
+      await page.goto(path);
+      expect(await page.locator('.sub').count(), path).toBe(0);
+      expect(await page.locator('.narration').count(), path).toBe(0);
+      expect(await page.locator('.kai-note').count(), path).toBe(0);
+      expect(await page.locator('.syncbar').count(), path).toBe(0);
+    }
+  });
+
+  test('深色模式投影使用纸白色', async ({ page }) => {
+    await page.goto('/articles?theme=dark');
+    const shadow = await page
+      .locator('.filterbar')
+      .evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(shadow).not.toContain('rgba(0, 0, 0');
+    expect(shadow).not.toContain('rgb(0, 0, 0)');
+    expect(shadow).toContain('rgb(241, 234, 230)');
   });
 });

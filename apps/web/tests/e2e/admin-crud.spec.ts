@@ -230,6 +230,42 @@ test.describe('后台媒体上传', () => {
   });
 });
 
+test.describe('后台关于页', () => {
+  test('PUT /admin/about 写入后 GET /about 能读到同一份 Markdown', async ({
+    request,
+  }) => {
+    const before = await request.get('/api/v1/about');
+    expect(before.status()).toBe(200);
+    const original = (await before.json()) as { markdown: string };
+    const marker = `# E2E 关于 ${uniqueSuffix()}\n\n临时内容，用例结束会恢复。`;
+
+    try {
+      const saved = await request.put('/api/v1/admin/about', {
+        headers: ADMIN_HEADERS,
+        data: { markdown: marker },
+      });
+      expect(saved.status()).toBe(200);
+      const savedBody = (await saved.json()) as {
+        item: { markdown: string; updatedAt: string };
+      };
+      expect(savedBody.item.markdown).toBe(marker);
+      expect(savedBody.item.updatedAt).toBeTruthy();
+
+      const after = await request.get('/api/v1/about');
+      expect(after.status()).toBe(200);
+      const afterBody = (await after.json()) as { markdown: string };
+      expect(afterBody.markdown).toBe(marker);
+    } finally {
+      await request
+        .put('/api/v1/admin/about', {
+          headers: ADMIN_HEADERS,
+          data: { markdown: original.markdown },
+        })
+        .catch(() => undefined);
+    }
+  });
+});
+
 test.describe('后台 Bangumi 同步', () => {
   test('手动同步返回 ok 或 not_configured', async ({ request }) => {
     const res = await request.post('/api/v1/admin/bangumi/sync', {

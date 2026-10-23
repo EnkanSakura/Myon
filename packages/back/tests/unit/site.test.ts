@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   readSiteSettings,
+  renderMaintenancePage,
   sanitizeFooterHtml,
+  shouldServeMaintenance,
   writeSiteSettings,
 } from '../../src/site';
 
@@ -27,6 +29,75 @@ describe('sanitizeFooterHtml', () => {
 
   it('passes plain text through unchanged', () => {
     expect(sanitizeFooterHtml('Astro · Workers')).toBe('Astro · Workers');
+  });
+});
+
+describe('maintenance mode', () => {
+  const html = 'text/html,application/xhtml+xml';
+
+  it('only guards front-end HTML pages while enabled', () => {
+    expect(shouldServeMaintenance('/', html, true)).toBe(true);
+    expect(shouldServeMaintenance('/about', html, true)).toBe(true);
+    expect(shouldServeMaintenance('/articles', html, true)).toBe(true);
+    expect(shouldServeMaintenance('/tools/timestamp', html, true)).toBe(true);
+    expect(shouldServeMaintenance('/apiary', html, true)).toBe(true);
+    expect(shouldServeMaintenance('/', html, false)).toBe(false);
+  });
+
+  it('lets API, admin and static assets through', () => {
+    const bypassed = [
+      '/api',
+      '/api/v1/posts',
+      '/admin',
+      '/admin/about',
+      '/_astro/app.css',
+      '/css/v2.css',
+      '/js/app.js',
+      '/assets/cover.png',
+      '/media/cabinet.jpg',
+      '/favicon.ico',
+      '/favicon.svg',
+      '/rss.xml',
+    ];
+    for (const pathname of bypassed) {
+      expect(shouldServeMaintenance(pathname, html, true)).toBe(false);
+    }
+  });
+
+  it('ignores non-HTML requests', () => {
+    expect(shouldServeMaintenance('/about', 'application/json', true)).toBe(
+      false,
+    );
+    expect(shouldServeMaintenance('/about', '', true)).toBe(false);
+  });
+
+  it('renders a standalone page with the site name and author', () => {
+    const page = renderMaintenancePage({
+      name: 'Myon',
+      author: '小画手',
+      themeColor: '#EC88C2',
+    });
+    expect(page).toContain('<!doctype html>');
+    expect(page).toContain('维护中');
+    expect(page).toContain('Myon');
+    expect(page).toContain('小画手');
+    expect(page).toContain('#EC88C2');
+    expect(page).not.toContain('<script');
+    expect(page).not.toContain('/css/');
+    expect(page).toContain('rel="icon" href="/assets/favicon.svg"');
+    expect(page).toContain('rel="icon" href="/favicon.ico"');
+  });
+
+  it('escapes settings and rejects non-hex theme colors', () => {
+    const page = renderMaintenancePage({
+      name: '<b>Myon</b>',
+      author: 'A&B',
+      themeColor: 'red;background:url(x)',
+    });
+    expect(page).toContain('&lt;b&gt;Myon&lt;/b&gt;');
+    expect(page).toContain('A&amp;B');
+    expect(page).not.toContain('red;background');
+    expect(page).toContain('#EC88C2');
   });
 });
 

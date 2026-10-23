@@ -15,3 +15,22 @@ test('七页封面、翻页与深浅色切换', async ({ page }) => {
     before ?? 'light',
   );
 });
+
+test('尾页后记文案来自后台设置', async ({ page }) => {
+  await page.goto('/');
+  const end = page.locator('.p7');
+  await expect(end.locator('h2')).toContainText('谢谢翻完');
+  await expect(end.locator('.after')).toContainText('如果哪一件你也喜欢');
+  await expect(end.locator('.letter')).toContainText('第七页');
+  await expect(end.locator('.thank')).toContainText('Myon');
+});
+
+test('第 2 页最近文章来自 D1', async ({ page }) => {
+  await page.goto('/');
+  const rows = page.locator('.p2 .rows .r');
+  expect(await rows.count()).toBeGreaterThan(0);
+  for (let i = 0; i < (await rows.count()); i += 1) {
+    await expect(rows.nth(i)).toHaveAttribute('href', /^\/articles\/[^/]+$/);
+  }
+  await expect(page.locator('.p2 .rows-empty')).toHaveCount(0);
+});

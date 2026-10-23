@@ -106,6 +106,154 @@ async function dragRowByHandle(
   await page.mouse.up();
 }
 
+test.describe('后台设置 · 清理后的页面', () => {
+  test('已删除的字段与面板不再出现，尾页/后记可以保存', async ({
+    page,
+    request,
+  }) => {
+    const { readSettings } = await openMockedSettings(page, request);
+
+    // 站点邮箱、默认主题、评论、版权、订阅镜像、部署、危险区与令牌区都已删除
+    for (const selector of [
+      '#siteEmail',
+      '#footerCopyright',
+      '#swComments',
+      '#themeSeg',
+      '#deployState',
+      '#feedPreview',
+      '#btnPurge',
+      '#btnExport',
+      '#btnRebuild',
+      '.sp--danger',
+      '.sp--token',
+      '.page-note',
+    ]) {
+      await expect(
+        page.locator(selector),
+        `${selector} 应该被删除`,
+      ).toHaveCount(0);
+    }
+
+    // 尾页 / 后记字段随设置一起保存并回读
+    const title = `谢谢翻完 ${Date.now()}`;
+    const sign = '—— E2E 落款';
+    await page.locator('#homeEndTitle').fill(title);
+    await page.locator('#homeEndLead').fill('这一段是结尾导语。');
+    await page
+      .locator('#homeAfterwordBody')
+      .fill('第一段后记。\n\n第二段后记。');
+    await page.locator('#homeAfterwordSign').fill(sign);
+    await page.locator('#homeAfterwordNext').fill('NEXT ISSUE · 测试');
+
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#saveState')).toContainText('最后保存');
+
+    const saved = readSettings();
+    expect(saved.home_end_title).toBe(title);
+    expect(saved.home_end_lead).toBe('这一段是结尾导语。');
+    expect(saved.home_afterword_body).toBe('第一段后记。\n\n第二段后记。');
+    expect(saved.home_afterword_sign).toBe(sign);
+    expect(saved.home_afterword_next).toBe('NEXT ISSUE · 测试');
+
+    // 重新加载后仍能读到服务端保存的值
+    await page.reload();
+    await expect(page.locator('#homeEndTitle')).toHaveValue(title);
+    await expect(page.locator('#homeAfterwordSign')).toHaveValue(sign);
+  });
+});
+
+test.describe('后台总览 · 维护模式', () => {
+  test('开关写入真实设置并同步侧栏状态', async ({ page }) => {
+    let settings: Record<string, string> = { maintenance_enabled: 'false' };
+    await page.route('**/api/v1/admin/settings', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: { settings } });
+        return;
+      }
+      if (route.request().method() === 'PUT') {
+        settings = {
+          ...settings,
+          ...(route.request().postDataJSON() as Record<string, string>),
+        };
+        await route.fulfill({ json: { settings } });
+        return;
+      }
+      await route.continue();
+    });
+    await page.addInitScript((token) => {
+      localStorage.setItem('myon-admin-token', token);
+    }, ADMIN_TOKEN);
+
+    await page.goto('/admin');
+    const toggle = page.locator('#maintSwitch');
+    await expect(toggle).toBeVisible();
+
+    // 初始状态来自站点设置；点一下切到相反状态
+    const initialOpen = await toggle.getAttribute('aria-checked');
+    const next = initialOpen === 'true' ? 'false' : 'true';
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', next);
+    expect(settings.maintenance_enabled).toBe(
+      next === 'true' ? 'false' : 'true',
+    );
+    if (next === 'true') {
+      await expect(page.locator('#sideLampText')).toHaveText('营业中');
+    } else {
+      await expect(page.locator('#sideLampText')).toHaveText('维护中');
+    }
+
+    // 再切回来，证明状态与接口真实联动，而不是前端假开关
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', initialOpen ?? 'true');
+    expect(settings.maintenance_enabled).toBe(
+      initialOpen === 'true' ? 'false' : 'true',
+    );
+  });
+});
+
+test.describe('后台关于页 · 服务端 Markdown', () => {
+  test('读取与保存都走接口，不再用 localStorage', async ({ page }) => {
+    let markdown = '# 关于 Myon\n\n初始内容。';
+    let updatedAt = '2026-10-20T01:12:00.000Z';
+
+    await page.route('**/api/v1/about', async (route) => {
+      await route.fulfill({
+        json: { key: 'about', markdown, html: '', updatedAt },
+      });
+    });
+    await page.route('**/api/v1/admin/about', async (route) => {
+      const body = route.request().postDataJSON() as { markdown: string };
+      markdown = body.markdown;
+      updatedAt = new Date().toISOString();
+      await route.fulfill({
+        json: {
+          item: { key: 'about', markdown, html: '', updatedAt },
+        },
+      });
+    });
+    await page.addInitScript((token) => {
+      localStorage.setItem('myon-admin-token', token);
+    }, ADMIN_TOKEN);
+
+    await page.goto('/admin/about');
+    await expect(page.locator('#mdInput')).toHaveValue(
+      '# 关于 Myon\n\n初始内容。',
+    );
+    await expect(page.locator('#saveState')).toContainText('已读取');
+    expect(
+      await page.evaluate(() => localStorage.getItem('myon-about')),
+    ).toBeNull();
+
+    await page.locator('#mdInput').fill('# 改过的关于\n\n新的正文。');
+    await expect(page.locator('#saveState')).toContainText('有未保存的修改');
+    await page.locator('#saveBtn').click();
+
+    await expect(page.locator('#saveState')).toContainText('已保存');
+    expect(markdown).toBe('# 改过的关于\n\n新的正文。');
+    await expect(page.locator('#sourceTag')).toContainText('服务端');
+  });
+});
+
 test.describe('后台设置 · 行排序', () => {
   test('数据块和联系方式可以用 ↑ ↓ 调整顺序并在保存后生效', async ({
     page,
@@ -126,7 +274,7 @@ test.describe('后台设置 · 行排序', () => {
     // 刚到边界时，第一行的 ↑ 与最后一行的 ↓ 不可用
     await expect(linkRows.first().locator('[data-move="up"]')).toBeDisabled();
     await expect(linkRows.last().locator('[data-move="down"]')).toBeDisabled();
-    await expect(page.locator('#saveState')).toContainText('已连接');
+    await expect(page.locator('#saveState')).toContainText('已读取');
 
     // 联系方式：把第一条往下移，页面应标记为有未保存修改
     const expectedLinks = [...linksBefore];
