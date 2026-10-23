@@ -38,6 +38,14 @@
 
 .ex-open{display:block;width:100%;padding:0;border:0;background:none;text-align:left;cursor:zoom-in}
 .ex .frame{aspect-ratio:var(--ar,4/3);transition:transform .16s var(--ease),box-shadow .16s var(--ease)}
+/* 展签只在 hover/focus 时浮出：编号 + 分类 + 名称 + note。 */
+.ex-note{position:absolute;left:0;right:0;bottom:0;z-index:5;display:flex;flex-direction:column;gap:4px;
+  padding:10px 12px;background:var(--ink);color:var(--paper);text-align:left;
+  opacity:0;transform:translateY(8px);transition:opacity .15s var(--ease),transform .15s var(--ease);pointer-events:none}
+.ex:hover .ex-note,.ex:focus-within .ex-note{opacity:1;transform:none}
+.ex-note-k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:color-mix(in srgb, var(--paper) 72%, var(--ink))}
+.ex-note-name{font-size:16px;font-weight:900;line-height:1.3}
+.ex-note-c{font-family:var(--kai);font-size:14px;line-height:1.65;color:var(--paper-2);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ex:hover .frame{transform:translate(-3px,-3px);box-shadow:8px 8px 0 var(--shade)}
 .ex:hover .frame img{filter:grayscale(1) contrast(1.22) brightness(1.1)}
 .ex .frame .cap{font-size:10px}

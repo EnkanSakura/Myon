@@ -1,25 +1,112 @@
 (function () {
   "use strict";
 
-  /* ---------------- 前台灯：两态 ---------------- */
-  var body = document.body;
-  var lamp = document.getElementById("lamp");
-  var lampSwitch = document.getElementById("lampSwitch");
-  var lampV = document.getElementById("lampV");
+  /* ---------------- 维护模式：真实开关 ---------------- */
+  var TOKEN_KEY = "myon-admin-token";
+  var pageEl = document.querySelector(".page[data-settings-api]");
+  var SETTINGS_API = pageEl ? pageEl.getAttribute("data-settings-api") || "" : "";
+
+  var maintLamp = document.getElementById("maintLamp");
+  var maintSwitch = document.getElementById("maintSwitch");
+  var maintV = document.getElementById("maintV");
   var sideLamp = document.getElementById("sideLamp");
   var sideLampText = document.getElementById("sideLampText");
+  var toastEl = document.getElementById("toast");
+  var maintBusy = false;
+  var toastTimer = null;
 
-  function setLamp(on) {
-    lamp.dataset.on = String(on);
-    lampSwitch.setAttribute("aria-checked", String(on));
-    body.classList.toggle("front-off", !on);
-    lampV.textContent = on ? "亮着 · 访客可访问" : "前台已关灯 · 访客看到维护页";
-    sideLamp.dataset.on = String(on);
-    sideLampText.textContent = on ? "营业中" : "已打烊 · 维护页";
+  function toast(text) {
+    if (!toastEl) return;
+    toastEl.textContent = text;
+    toastEl.classList.add("is-on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("is-on"); }, 3200);
   }
-  lampSwitch.addEventListener("click", function () {
-    setLamp(lamp.dataset.on !== "true");
-  });
+
+  function readToken() {
+    try { return (localStorage.getItem(TOKEN_KEY) || "").trim(); } catch (e) { return ""; }
+  }
+
+  /** 页面里的开关、侧栏状态都按同一份真实状态绘制。 */
+  function paintMaintenance(on) {
+    var open = !on;
+    if (maintLamp) maintLamp.setAttribute("data-on", String(open));
+    if (maintSwitch) {
+      maintSwitch.setAttribute("aria-checked", String(open));
+      maintSwitch.setAttribute("data-on", String(open));
+    }
+    if (maintV) {
+      maintV.textContent = on ? "维护中 · 访客看到维护页" : "营业中 · 访客可访问";
+    }
+    if (sideLamp) sideLamp.setAttribute("data-on", String(open));
+    if (sideLampText) sideLampText.textContent = on ? "维护中" : "营业中";
+  }
+
+  function currentMaintenance() {
+    return maintLamp ? maintLamp.getAttribute("data-on") !== "true" : false;
+  }
+
+  function saveMaintenance(next) {
+    if (maintBusy) return;
+    var token = readToken();
+    if (!token) {
+      toast("需要管理令牌 · 点右上角「管理令牌」");
+      return;
+    }
+    if (!SETTINGS_API) {
+      toast("页面缺少设置接口地址");
+      return;
+    }
+    maintBusy = true;
+    if (maintSwitch) maintSwitch.disabled = true;
+    if (maintV) maintV.textContent = "切换中…";
+    fetch(SETTINGS_API, {
+      method: "PUT",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "x-admin-token": token
+      },
+      cache: "no-store",
+      body: JSON.stringify({ maintenance_enabled: next ? "true" : "false" })
+    })
+      .then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (body) {
+          return { status: response.status, ok: response.ok, body: body };
+        });
+      })
+      .then(function (result) {
+        if (result.ok && result.body && result.body.settings) {
+          var enabled = result.body.settings.maintenance_enabled === "true";
+          paintMaintenance(enabled);
+          toast(enabled ? "已进入维护模式 · 前台显示维护页" : "已恢复营业 · 前台可正常访问");
+          return;
+        }
+        if (result.status === 401) {
+          toast("切换失败 · 管理令牌无效");
+          return;
+        }
+        if (result.status === 503) {
+          toast("切换失败 · 服务端未配置管理令牌");
+          return;
+        }
+        toast("切换失败 · HTTP " + result.status);
+      })
+      .catch(function () {
+        toast("切换失败 · 请检查网络或服务");
+      })
+      .then(function () {
+        maintBusy = false;
+        if (maintSwitch) maintSwitch.disabled = false;
+        paintMaintenance(currentMaintenance());
+      });
+  }
+
+  if (maintSwitch) {
+    maintSwitch.addEventListener("click", function () {
+      saveMaintenance(!currentMaintenance());
+    });
+  }
 
   /* ---------------- 访问曲线：hover 看每天 ---------------- */
   var chart = document.getElementById("chart");

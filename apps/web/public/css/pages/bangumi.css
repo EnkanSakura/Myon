@@ -177,3 +177,33 @@
   .empty-card .zero{font-size:64px}
   .empty-card h3{font-size:20px}
 }
+
+/* ---------- 总览 / 分类的统一记录列表 ---------- */
+.filterbar-tab{text-decoration:none}
+.records{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.record{display:grid;grid-template-columns:104px minmax(0,1fr);gap:14px;align-items:start;padding:14px;border:2px solid var(--ink);background:var(--paper);box-shadow:var(--hard-sm)}
+.record:hover{background:var(--pink-wash)}
+.record-cover{display:block;width:104px;height:142px;border:2px solid var(--ink);background:var(--paper-2);overflow:hidden}
+.record-cover img{width:100%;height:100%;object-fit:cover;filter:grayscale(.2) contrast(1.05)}
+.record-nofig{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62)}
+.record-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.record-kicker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.record-status{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-62)}
+.record-title{font-size:18px;line-height:1.4;letter-spacing:-.01em}
+.record-meta{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink-62);line-height:1.7}
+.record-score{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--pink-deep);white-space:nowrap}
+.record-comment{display:-webkit-box;margin-top:2px;padding-top:7px;border-top:1px dashed var(--line-2);
+  font-family:var(--kai);font-size:14px;line-height:1.7;color:var(--ink-80);
+  -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.record-next{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--pink-deep)}
+.records-empty{margin-top:18px;padding:28px 16px;border:2px dashed var(--line-2);font-size:14px;line-height:1.8;color:var(--ink-62)}
+.archive{margin-top:26px}
+@media (max-width:1100px){
+  .records{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .record{grid-template-columns:84px minmax(0,1fr);gap:10px;padding:11px}
+  .record-cover{width:84px;height:108px}
+  .record-title{font-size:15px}
+  .record-comment{font-size:13px;-webkit-line-clamp:2}
+}

@@ -35,7 +35,6 @@ const stats = statsRes.ok ? ((await statsRes.json()) as SiteStats) : null;
 const featured = page === 1 ? (posts[0] ?? null) : null;
 const rest = featured ? posts.slice(1) : posts;
 const latestYear = posts.length > 0 ? yearOf(posts[0]?.publishedAt) : '';
-const lastUpdated = page === 1 ? (posts[0]?.publishedAt ?? null) : null;
 
 const words = stats?.posts.words ?? 0;
 const wordLabel =
@@ -75,11 +74,6 @@ const activeYear = years[0]?.year ?? 'all';
       <div>
         <div class="room-kicker"><span class="sticker">CH.02 目次</span><span class="sticker sticker--paper">CONTENTS</span></div>
         <h1>文章<span class="hl">。</span></h1>
-        <p class="sub">
-          <span class="nb">共 {total} 篇</span>
-          {lastUpdated && <> · 最后更新 {formatDate(lastUpdated)}</>}
-          {page > 1 && <> · 第 {page} 页</>}
-        </p>
       </div>
       <div class="room-stats">
         <div class="stat-box is-pink"><span class="k">篇数 / POSTS</span><span class="v">{total}</span></div>
@@ -89,16 +83,17 @@ const activeYear = years[0]?.year ?? 'all';
       <span class="chapter" aria-hidden="true">02</span>
     </section>
 
-    <div class="toolbar">
-      <div class="tabs" role="group" aria-label="按标签筛选文章">
-        <button class="tab is-on" type="button" data-tag="全部" aria-pressed="true">全部</button>
+    <div class="filterbar" aria-label="文章筛选">
+      <div class="filterbar-tabs" role="group" aria-label="按标签筛选文章">
+        <button class="filterbar-tab is-on" type="button" data-tag="全部" aria-pressed="true">全部</button>
         {categories.map((category) => (
-          <button class="tab" type="button" data-tag={category.name} aria-pressed="false">
+          <button class="filterbar-tab" type="button" data-tag={category.name} aria-pressed="false">
             {category.name}
           </button>
         ))}
       </div>
-      <div class="toolbar-count" aria-live="polite">显示 <b id="shownCount">{posts.length}</b> 篇 <span class="slash">/</span> 共 {total} 篇</div>
+      <div class="filterbar-count" aria-live="polite">显示 <b id="shownCount">{posts.length}</b> / 共 {total} 篇</div>
+      <button class="filterbar-clear" type="button" id="clearFilter" hidden>清除筛选 <span aria-hidden="true">×</span></button>
     </div>
 
     <div class="contents">
@@ -124,14 +119,6 @@ const activeYear = years[0]?.year ?? 'all';
             {total === 0 ? '还没有发布过文章。' : `第 ${page} 页没有文章。`}
           </p>
         )}
-        {
-          years.length > 0 && (
-            <div class="narration">
-              <span class="nk">作者的话 / NOTE</span>
-              <p>目录按年份排。翻旧文像翻旧刊，纸黄了，版式还在。</p>
-            </div>
-          )
-        }
       </aside>
 
       <div class="list-col">
@@ -198,7 +185,7 @@ const activeYear = years[0]?.year ?? 'all';
 
         <div class="empty" id="empty">
           <p>「<b id="emptyTag"></b>」下面还是空的。</p>
-          <button class="btn btn--pink" type="button" id="clearFilter">清除筛选 <span class="ar">×</span></button>
+          <button class="btn btn--pink" type="button" id="clearEmpty">清除筛选 <span class="ar">×</span></button>
         </div>
 
         {posts.length === 0 && (

@@ -4,11 +4,8 @@
 
   var shownNo = document.getElementById('shownNo');
   var shownTotal = document.getElementById('shownTotal');
-  var note = document.getElementById('filterNote');
-  var noteCat = document.getElementById('noteCat');
-  var noteTotal = document.getElementById('noteTotal');
-  var noteClear = document.getElementById('noteClear');
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  var clearFilter = document.getElementById('clearFilter');
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.filterbar-tab'));
   var items = Array.prototype.slice.call(document.querySelectorAll('.ex'));
   // 分母是全柜展示中的件数（来自 /api/v1/stats），翻页不会把它改小。
   var displayedTotal =
@@ -31,16 +28,7 @@
     grid.classList.toggle('is-filtered', cat !== '全部');
     shownNo.textContent = pad(n);
     shownTotal.textContent = pad(displayedTotal);
-    if (cat === '全部') {
-      note.hidden = true;
-    } else {
-      var tab = tabs.filter(function (t) {
-        return t.getAttribute('data-cat') === cat;
-      })[0];
-      noteCat.textContent = cat;
-      noteTotal.textContent = tab ? tab.getAttribute('data-total') : String(n);
-      note.hidden = false;
-    }
+    if (clearFilter) clearFilter.hidden = cat === '全部';
   }
 
   function activate(t) {
@@ -56,8 +44,11 @@
     t.addEventListener('click', function () { activate(t); });
   });
 
-  if (noteClear) {
-    noteClear.addEventListener('click', function () { activate(tabs[0]); });
+  if (clearFilter) {
+    clearFilter.addEventListener('click', function () {
+      activate(tabs[0]);
+      if (tabs[0]) tabs[0].focus();
+    });
   }
 })();
 

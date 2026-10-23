@@ -83,7 +83,6 @@
 .p2 .side{position:relative}
 .p2 .side .frame{aspect-ratio:4/3;transform:rotate(-1.2deg)}
 .p2 .side .frame.two{position:absolute;right:-18px;bottom:-38px;width:56%;aspect-ratio:1/1;transform:rotate(3deg);z-index:2}
-.p2 .narration{margin-top:52px;max-width:320px;transform:rotate(.6deg)}
 .p2 .bgtype{position:absolute;right:-10px;top:-60px;font-family:var(--disp);font-size:120px;line-height:1;color:var(--pink);opacity:.3;pointer-events:none}
 
 /* ================= 03 动态 ================= */
@@ -134,7 +133,6 @@
 .p5 .inner{display:flex;flex-direction:column;gap:26px}
 .p5 .head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;border-bottom:var(--border) solid var(--ink);padding-bottom:14px}
 .p5 h2{font-size:clamp(40px,4.6vw,64px)}
-.p5 .sub{font-size:13px;color:var(--ink-62);margin-top:8px}
 .p5 .onair{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em}
 .p5 .onair .dot{width:10px;height:10px;background:var(--pink);border:2px solid var(--ink);display:inline-block}
 .p5 .programs{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
@@ -259,3 +257,9 @@
   .sitebar .hint{display:none}
   .sheet{inset:8px}
 }
+
+/* 最近文章为空时的兜底 */
+.p2 .rows-empty{padding:28px 0;border-top:2px dashed var(--line-2);font-size:14px;line-height:1.8;color:var(--ink-62)}
+
+/* 首页最近文章：摘要另起一行，避免和标题挤在同一行 */
+.p2 .rows .r .d{display:block;margin-top:4px;font-size:13px;line-height:1.7}

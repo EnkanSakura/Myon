@@ -132,7 +132,6 @@ const pageTitle = item ? item.name : '工具不存在';
                   <span class="sticker sticker--paper" title={item.kind}>{item.kind || 'TOOL'}</span>
                 </div>
                 <h1>{item.name}<span class="hl">。</span></h1>
-                <p class="sub">{item.description || '这个工具还没有写说明。'}</p>
               </div>
               <div class="room-stats">
                 <div class="stat-box is-pink"><span class="k">编号 / NO</span><span class="v">{no}</span></div>
@@ -198,10 +197,8 @@ const pageTitle = item ? item.name : '工具不存在';
                         ))}
                       </div>
                       <div class="alt-foot">
-                        {spec.link ? (
+                        {spec.link && (
                           <a class="arrow-link" href={spec.link.href}>{spec.link.label} <span class="ar" aria-hidden="true">→</span></a>
-                        ) : (
-                          <p class="kai-note">{spec.note}</p>
                         )}
                         <span class="sticker sticker--paper">{spec.drawer}</span>
                       </div>
@@ -218,7 +215,6 @@ const pageTitle = item ? item.name : '工具不存在';
               </div>
             </section>
 
-            <p class="tools-note"><i aria-hidden="true"></i>页面由 Workers 送达 · 换算在浏览器完成</p>
           </>
         ) : (
           <section class="panel-box bench tools-missing" aria-label="工具不存在">

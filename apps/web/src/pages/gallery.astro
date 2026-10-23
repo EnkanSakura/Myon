@@ -40,13 +40,13 @@ const stats = statsRes.ok ? ((await statsRes.json()) as SiteStats) : null;
 const total = stats?.gallery.total ?? pageTotal;
 const displayed = stats?.gallery.displayed ?? pageTotal;
 
-/** 分类与数量：按当前这一页的陈列顺序推导，翻页只影响当页可筛的藏品。 */
-const categoryMap = new Map<string, number>();
-for (const item of items) {
-  categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + 1);
-}
-const categories = [...categoryMap].map(([name, count]) => ({ name, count }));
+/** 分类：按当前这一页的陈列顺序推导，翻页只影响当页可筛的藏品；计数只放筛选栏右侧一次。 */
+const categories = [...new Set(items.map((item) => item.category))];
 const categoryTotal = stats?.gallery.categories?.length ?? categories.length;
+const categoryItems = categories.map((name) => ({
+  name,
+  count: items.filter((item) => item.category === name).length,
+}));
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -68,16 +68,10 @@ const metaOf = (item: GalleryItem) =>
   [item.category, item.era, `入藏 ${formatDate(item.createdAt)}`]
     .filter(Boolean)
     .join(' · ');
-const noteOf = (item: GalleryItem) => item.note?.trim() || '这件还没写展签。';
+/** 展签只为有 note 的展品生成；空 note 不显示任何浮层。 */
+const noteOf = (item: GalleryItem) => item.note?.trim() || '';
 const altOf = (item: GalleryItem) =>
   [item.name, item.category, item.era].filter(Boolean).join('，');
-
-// 最新入藏的一件挂 NEW 贴纸（主展品已有 NEW ARRIVAL，不重复挂）。
-const newest = items.reduce<GalleryItem | null>(
-  (latest, item) =>
-    !latest || item.createdAt > latest.createdAt ? item : latest,
-  null,
-);
 
 const first = items[0] ?? null;
 const firstUrl = first ? mediaUrl(first.mediaKey) : null;
@@ -91,12 +85,9 @@ const cards = items.map((item, index) => {
     span: main ? 'ex-main' : spans[(index - 1) % spans.length],
     rot: main ? '-.8deg' : rots[(index - 1) % rots.length],
     ratio: ratios[(index - 1) % ratios.length],
-    isNewest: !main && newest?.id === item.id,
-    catPin: !main && newest?.id !== item.id && (index - 1) % 4 === 1,
     meta: metaOf(item),
     note: noteOf(item),
     alt: altOf(item),
-    plate: main ? 'PLATE 00 · 主展品' : `PLATE ${pad(index + 1)}`,
   };
 });
 ---
@@ -117,7 +108,6 @@ const cards = items.map((item, index) => {
       <div>
         <div class="room-kicker"><span class="sticker">CH.04 收藏</span><span class="sticker sticker--paper">CATALOGUE</span></div>
         <h1>展柜<span class="hl">。</span></h1>
-        <p class="sub">手办与周边 · {displayed} 件 · 第二层左起第三格</p>
       </div>
       <div class="room-stats" aria-label="展柜统计">
         <div class="stat-box"><span class="k">件数 / ITEMS</span><span class="v">{total}</span></div>
@@ -129,19 +119,15 @@ const cards = items.map((item, index) => {
 
     {items.length > 0 && (
       <>
-        <div class="toolbar">
-          <div class="tabs" role="group" aria-label="按分类筛选展品">
-            <button class="tab is-on" type="button" data-cat="全部" data-total={items.length} aria-pressed="true">全部 <b>{items.length}</b></button>
-            {categories.map((category) => (
-              <button class="tab" type="button" data-cat={category.name} data-total={category.count} aria-pressed="false">{category.name} <b>{category.count}</b></button>
+        <div class="filterbar" aria-label="筛选展品">
+          <div class="filterbar-tabs" role="group" aria-label="按分类筛选展品">
+            <button class="filterbar-tab is-on" type="button" data-cat="全部" aria-pressed="true">全部</button>
+            {categoryItems.map((category) => (
+              <button class="filterbar-tab" type="button" data-cat={category.name} aria-pressed="false">{category.name}</button>
             ))}
           </div>
-          <div class="toolbar-count" aria-live="polite">已陈列 <b id="shownNo">{pad(items.length)}</b><span class="slash">/</span><span id="shownTotal">{pad(displayed)}</span> 件</div>
-        </div>
-
-        <div class="filter-note" id="filterNote" hidden>
-          <span>筛选 · FILTER <b id="noteCat">全部</b> · 馆藏 <span id="noteTotal">{items.length}</span> 件</span>
-          <button class="note-clear" type="button" id="noteClear">显示全部 ×</button>
+          <div class="filterbar-count" aria-live="polite">显示 <b id="shownNo">{pad(items.length)}</b> / 共 <b id="shownTotal">{pad(displayed)}</b> 件</div>
+          <button class="filterbar-clear" type="button" id="clearFilter" hidden>清除筛选 <span aria-hidden="true">×</span></button>
         </div>
       </>
     )}
@@ -159,11 +145,6 @@ const cards = items.map((item, index) => {
             style={card.main ? undefined : `--rot:${card.rot}`}
           >
             {card.main && <span class="halo" aria-hidden="true" />}
-            {card.main && <span class="sticker sticker--ink new">NEW ARRIVAL</span>}
-            {card.isNewest && <span class="sticker pin">NEW</span>}
-            {card.catPin && (
-              <span class="sticker sticker--paper pin pin--left">CAT.04</span>
-            )}
             <button class="ex-open" type="button" aria-label={`放大查看 ${card.item.no}「${card.item.name}」`}>
               <div class:list={['frame', card.main && 'frame--ink']} style={card.main ? undefined : `--ar:${card.ratio}`}>
                 {card.url ? (
@@ -171,38 +152,16 @@ const cards = items.map((item, index) => {
                 ) : (
                   <div class="nofig"><b>未拍摄</b><span>NO IMAGE</span></div>
                 )}
-                <div class="cap"><span>{card.plate}</span><span>{card.main ? 'MYON COLLECTION' : 'MYON'}</span></div>
+                <span class="ex-note">
+                  <span class="ex-note-k">{card.item.no} / {card.item.category}{card.item.era ? ` · ${card.item.era}` : ''}</span>
+                  <span class="ex-note-name">{card.item.name}</span>
+                  {card.note && <span class="ex-note-c">{card.note}</span>}
+                </span>
               </div>
             </button>
-            {card.main && (
-              <div class="main-label">
-                <div class="lk"><span>展签 / LABEL</span><span>NO. {card.item.no}</span></div>
-                <p class="note">{card.note}</p>
-                <div class="lm">{card.meta}<br />柜位：第二层左起第三格</div>
-                <span class="stamp">藏</span>
-              </div>
-            )}
-            <figcaption class="ex-meta">
-              <span class="mno">{card.item.no}</span>
-              <span class="mname">{card.item.name}</span>
-              <span class="mcat">{card.item.category}{card.item.era ? ` · ${card.item.era}` : ''}</span>
-            </figcaption>
           </figure>
         ))}
 
-        <aside class="closing" aria-label="展柜说明">
-          <div class="closing-no">
-            <b>{total}</b>
-            <span class="mono">件 / ITEMS</span>
-          </div>
-          <div class="closing-body">
-            <span class="sticker sticker--paper" style="align-self:flex-start">STOCK / 库存</span>
-            <p class="kai">柜子里一共 {total} 件，<br />分作 {categoryTotal} 类，慢慢添。</p>
-            <div class="closing-row">
-              <span class="mono">陈列中 {displayed} 件 · 共 {total} 件</span>
-            </div>
-          </div>
-        </aside>
       </section>
     ) : (
       <section class="gal-empty" aria-label="展柜空态">

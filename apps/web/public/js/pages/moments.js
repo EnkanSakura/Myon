@@ -3,15 +3,16 @@
 
   var stream = document.getElementById('stream');
   var moments = [].slice.call(stream.querySelectorAll('.moment'));
-  var tabs = [].slice.call(document.querySelectorAll('.tabs .tag'));
+  var tabs = [].slice.call(
+    document.querySelectorAll('.filterbar-tabs .filterbar-tab'),
+  );
   var chips = [].slice.call(document.querySelectorAll('.moment .mf .tag'));
   var shownEl = document.getElementById('shown');
   var emptyBox = document.getElementById('empty');
   var emptyCond = document.getElementById('emptyCond');
   var onlyImg = document.getElementById('only-img');
   var clearBtn = document.getElementById('clear-filter');
-  var subForm = document.querySelector('.sub-box');
-  var subNote = document.getElementById('sub-note');
+  var barClear = document.getElementById('clearFilterBar');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
   var state = { tag: 'all' };
   var timer = null;
@@ -28,6 +29,7 @@
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    if (barClear) barClear.hidden = state.tag === 'all' && !onlyImg.checked;
   }
 
   function commit() {
@@ -58,6 +60,7 @@
     if (count === 0 && emptyCond) {
       emptyCond.textContent = (state.tag === 'all' ? '全部' : state.tag) + (onlyImg.checked ? ' · 只看带图' : '');
     }
+    paint();
   }
 
   function apply() {
@@ -85,6 +88,13 @@
     apply();
   }
 
+  function reset() {
+    onlyImg.checked = false;
+    state.tag = 'all';
+    paint();
+    apply();
+  }
+
   tabs.forEach(function (b) {
     b.addEventListener('click', function () { setTag(b.getAttribute('data-tag')); });
   });
@@ -100,37 +110,17 @@
 
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
-      onlyImg.checked = false;
-      state.tag = 'all';
-      paint();
-      apply();
-      var allTab = document.querySelector('.tabs .tag[data-tag="all"]');
+      reset();
+      var allTab = document.querySelector('.filterbar-tabs .filterbar-tab[data-tag="all"]');
       if (allTab) allTab.focus({ preventScroll: true });
     });
   }
 
-  if (subForm) {
-    var subInput = subForm.querySelector('input');
-    var submitSubscribe = function () {
-      if (!subInput.value || !subInput.checkValidity()) {
-        subNote.textContent = '写一个能收信的邮箱就行。';
-        subNote.classList.add('is-warn');
-        subInput.focus();
-        return;
-      }
-      subNote.classList.remove('is-warn');
-      subNote.textContent = '记下了 · 下一封在周日晚上。';
-      subInput.value = '';
-    };
-    subForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      submitSubscribe();
-    });
-    subInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        submitSubscribe();
-      }
+  if (barClear) {
+    barClear.addEventListener('click', function () {
+      reset();
+      var allTab = document.querySelector('.filterbar-tabs .filterbar-tab[data-tag="all"]');
+      if (allTab) allTab.focus({ preventScroll: true });
     });
   }
 

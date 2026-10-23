@@ -56,15 +56,6 @@ try {
 const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 const hasNext = offset + items.length < total;
 
-// 「最后更新」只取第一页的最新一条；翻页后这个时间没有意义，改用页码。
-const latestAt =
-  page === 1
-    ? items.reduce(
-        (latest, item) => (item.createdAt > latest ? item.createdAt : latest),
-        '',
-      )
-    : '';
-
 // 筛选标签以 D1 的分类计数为准；接口拿不到时退回动态自身的分类。
 const categoryNames =
   categories.moments.length > 0
@@ -106,11 +97,6 @@ function cutNo(value: number): string {
           <span class="sticker sticker--paper sticker--rot">CUTS / {items.length}</span>
         </div>
         <h1>动态<span class="hl">。</span></h1>
-        <p class="sub">
-          <span class="nb">共 {total} 条</span>
-          {latestAt && <> · 最后更新 <span class="nb">{formatDateTime(latestAt)}</span></>}
-          {page > 1 && <> · 第 {page} 页</>}
-        </p>
       </div>
       <div class="room-stats" aria-label="动态统计">
         <div class="stat-box is-pink"><span class="k">条数 / CUTS</span><span class="v">{total}</span></div>
@@ -120,18 +106,16 @@ function cutNo(value: number): string {
       <span class="chapter" aria-hidden="true">03</span>
     </header>
 
-    <section class="toolbar panel-box" aria-label="筛选动态">
-      <span class="panel-tab">FILTER / 筛选</span>
-      <div class="tabs" role="group" aria-label="按分类筛选">
-        <button type="button" class="tag is-on" data-tag="all" aria-pressed="true" aria-controls="stream">全部</button>
+    <section class="filterbar" aria-label="筛选动态">
+      <div class="filterbar-tabs" role="group" aria-label="按分类筛选">
+        <button type="button" class="filterbar-tab is-on" data-tag="all" aria-pressed="true" aria-controls="stream">全部</button>
         {categoryNames.map((name) => (
-          <button type="button" class="tag" data-tag={name} aria-pressed="false" aria-controls="stream">{name}</button>
+          <button type="button" class="filterbar-tab" data-tag={name} aria-pressed="false" aria-controls="stream">{name}</button>
         ))}
       </div>
-      <div class="tb-right">
-        <label class="lens"><input type="checkbox" id="only-img"><span>只看带图</span></label>
-        <span class="viewcount" aria-live="polite">显示 <b id="shown">{items.length}</b> 条 <span class="vc-total">/ 共 {total} 条</span></span>
-      </div>
+      <label class="lens"><input type="checkbox" id="only-img"><span>只看带图</span></label>
+      <div class="filterbar-count" aria-live="polite">显示 <b id="shown">{items.length}</b> / 共 {total} 条</div>
+      <button type="button" class="filterbar-clear" id="clearFilterBar" hidden>清除筛选 <span aria-hidden="true">×</span></button>
     </section>
 
     <div class="cutline" aria-hidden="true"><span class="sq"></span><span>PANELS · 倒序 / NEWEST FIRST</span><span class="ln"></span></div>
@@ -204,9 +188,8 @@ function cutNo(value: number): string {
       </div>
     </div>
 
-    <section class="outro" aria-label="更多动态与订阅">
+    <section class="outro" aria-label="更多动态">
       <div class="outro-left">
-        <div class="narration"><span class="nk">作者的话 / NOTE</span><p>这里没有大纲，想到哪写到哪。翻完了就等下一篇。</p></div>
         <div class="outro-actions">
           {hasNext && (
             <a class="btn" href={`?page=${page + 1}`}>更早的动态 <span class="ar">↓</span></a>
@@ -219,17 +202,6 @@ function cutNo(value: number): string {
           </span>
         </div>
       </div>
-      <form class="sub-box panel-box" novalidate>
-        <span class="panel-tab">SUBSCRIBE</span>
-        <h3>新动态，一周一封<span class="hl">。</span></h3>
-        <p class="mono sub-k">NEW NOTES · EVERY SUNDAY · 不打扰</p>
-        <div class="sub-row">
-          <label class="vh" for="sub-email">邮箱</label>
-          <input id="sub-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>
-          <button type="submit" class="btn btn--pink">订阅</button>
-        </div>
-        <p class="sub-note" id="sub-note" role="status" aria-live="polite"></p>
-      </form>
     </section>
 
   </div>

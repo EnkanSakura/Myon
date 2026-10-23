@@ -8,6 +8,8 @@ import {
   formatPageTitle,
   type HomeLink,
   type HomeStatPreset,
+  type Paginated,
+  type PostListItem,
   type SiteIcon,
   type SiteStats,
   type ToolItem,
@@ -16,11 +18,15 @@ import {
 } from '@myon/shared';
 import SiteBar from '../components/SiteBar.astro';
 import ThemeTokens from '../components/ThemeTokens.astro';
+import { formatDate } from '../lib/format';
 import { mediaUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
+const end = site.end;
 const leadLines = home.lead.split(String.fromCharCode(10));
+const afterwordLines = end.afterword.body.split(String.fromCharCode(10));
+const author = site.author || site.name;
 const year = String(new Date().getFullYear());
 
 const statsRes = await app.request(
@@ -32,6 +38,19 @@ const bindings = env as unknown as AppBindings;
 const siteStats: SiteStats | null = statsRes.ok
   ? ((await statsRes.json()) as SiteStats)
   : null;
+const publishedCount = siteStats?.posts.published ?? 0;
+
+// 首页第 2 页的最近文章来自 D1，按发布时间取最新 3 条。
+let latestPosts: PostListItem[] = [];
+try {
+  const postsRes = await app.request('/api/v1/posts?limit=3', {}, bindings);
+  if (postsRes.ok) {
+    const body = (await postsRes.json()) as Paginated<PostListItem>;
+    latestPosts = body.items ?? [];
+  }
+} catch (error) {
+  console.error('[home] 读取最近文章失败', error);
+}
 
 // 首页第 6 页的工具抽屉来自 D1（只取启用项），不再写死工具名与调用次数。
 let homeTools: ToolItem[] = [];
@@ -264,21 +283,31 @@ function presetValue(preset: HomeStatPreset): string {
           <div class="kicker" style="margin-bottom:12px"><span class="sticker">{home.pages[1]}</span></div>
           <h2>最近写的<span class="hl">。</span></h2>
         </div>
-        <span class="sticker sticker--paper">42 篇 / 12 万字</span>
+        <span class="sticker sticker--paper">{publishedCount} 篇 / {formatWords(siteStats?.posts.words ?? 0)} 字</span>
       </div>
       <div class="reveal" style="--i:1">
-        <div class="rows">
-          <a class="r" href="/article"><span class="no">07</span><span><span class="t">在 Cloudflare Workers 上跑一个博客，我踩过的 7 个坑</span><span class="d">Pages 负责静态，Workers 负责会变的那一半。</span></span><span class="m">2026.09.28<br>12 分钟</span></a>
-          <a class="r" href="/article"><span class="no">06</span><span><span class="t">读完《献给阿尔吉侬的花束》的那个下午</span></span><span class="m">2026.09.14<br>6 分钟</span></a>
-          <a class="r" href="/article"><span class="no">05</span><span><span class="t">我为什么把首页做成一页一屏</span></span><span class="m">2026.08.30<br>8 分钟</span></a>
-        </div>
-        <a class="arrow-link more" href="/articles" style="margin-top:20px">全部 42 篇 <span class="ar">→</span></a>
+        {latestPosts.length > 0 ? (
+          <div class="rows">
+            {latestPosts.map((post, index) => (
+              <a class="r" href={`/articles/${post.slug}`}>
+                <span class="no">{String(Math.max(1, publishedCount - index)).padStart(2, '0')}</span>
+                <span>
+                  <span class="t">{post.title}</span>
+                  {post.excerpt && <span class="d">{post.excerpt}</span>}
+                </span>
+                <span class="m">{formatDate(post.publishedAt)}<br />{post.readingMinutes} 分钟</span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div class="rows-empty">还没有发布文章。</div>
+        )}
+        <a class="arrow-link more" href="/articles" style="margin-top:20px">全部 {publishedCount} 篇 <span class="ar" aria-hidden="true">→</span></a>
       </div>
       </div>
       <div class="side">
         <div class="frame reveal" style="--i:2"><img src="/media/gallery/k1-fuji.jpg" alt="《凯风快晴》，葛饰北斋"><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
         <div class="frame two reveal" style="--i:3"><img src="/media/gallery/k6-print.jpg" alt="江户风俗册页"><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
-        <div class="narration reveal" style="--i:4"><span class="nk">作者的话 / NOTE</span><p>写长文的时候，习惯把参考资料摊一桌。写完再收。</p></div>
       </div>
       <span class="bgtype" aria-hidden="true">ARTICLES</span>
     </div>
@@ -352,7 +381,6 @@ function presetValue(preset: HomeStatPreset): string {
         <div>
           <div class="kicker" style="margin-bottom:10px"><span class="sticker">{home.pages[4]}</span></div>
           <h2>在追<span class="hl">。</span></h2>
-          <p class="sub">数据来自 Bangumi · 每 6 小时同步一次</p>
         </div>
         <div class="onair"><span class="dot"></span><span>ON AIR · 本季 3 部</span><a class="arrow-link" href="/bangumi">全部记录 <span class="ar">→</span></a></div>
       </div>
@@ -432,15 +460,17 @@ function presetValue(preset: HomeStatPreset): string {
     <div class="inner">
       <div class="copy reveal" style="--i:0">
         <div class="label"><span class="sticker">{home.pages[6]}</span><span class="sticker sticker--paper">FIN</span></div>
-        <h2>谢谢翻完<span class="hl">。</span></h2>
-        <p class="after">如果哪一件你也喜欢，或者只是想聊两句——下次漫展见，或者现在写邮件给我。</p>
-        <div class="thank"><span class="t">MYON</span><span class="s">一间只开一盏灯的同人志 · © 2026</span></div>
+        <h2>{end.title}<span class="hl">。</span></h2>
+        <p class="after">{end.lead}</p>
+        <div class="thank"><span class="t">{author.toUpperCase()}</span><span class="s">{site.subtitle} · © {year} {author}</span></div>
       </div>
       <div class="letter reveal" style="--i:2">
         <div class="lt"><span>AFTERWORD / 后记</span><span>P.07</span></div>
-        <p>这一册做到第七页的时候，窗外刚好天亮了。<br>下一册想多放一点动画截图和旅行速写，也可能什么计划都没有，想到哪画到哪。</p>
-        <div class="sign">—— Myon，于 10 月的某个凌晨</div>
-        <span class="nextissue">NEXT ISSUE · ？</span>
+        <p>
+          {afterwordLines.map((line, i) => (<Fragment>{i > 0 && <br />}{line}</Fragment>))}
+        </p>
+        {end.afterword.sign && <div class="sign">{end.afterword.sign}</div>}
+        {end.afterword.next && <span class="nextissue">{end.afterword.next}</span>}
       </div>
     </div>
   </section>
@@ -521,7 +551,7 @@ function presetValue(preset: HomeStatPreset): string {
     p.scrollBy({ top: dir * step, behavior: 'smooth' });
   }
 
-  function bump(dir){
+  function bump(){
     stage.classList.remove('bump');
     void stage.offsetWidth;
     stage.classList.add('bump');
@@ -530,8 +560,8 @@ function presetValue(preset: HomeStatPreset): string {
 
   function go(n){
     if(lock) return;
-    if(n < 0){ bump(-1); return; }
-    if(n > panels.length - 1){ bump(1); return; }
+    if(n < 0){ bump(); return; }
+    if(n > panels.length - 1){ bump(); return; }
     if(n === idx) return;
     lock = true;
     idx = n;

@@ -114,7 +114,6 @@ p{color:var(--ink-80)}
 .room-kicker{display:inline-flex;align-items:center;gap:10px;margin-bottom:16px}
 .room-kicker .sticker{margin-right:4px}
 .room-head h1{position:relative;z-index:1}
-.room-head .sub{margin-top:14px;font-size:var(--fs-5);color:var(--ink-62);letter-spacing:.03em;line-height:1.8}
 .room-stats{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;padding-bottom:4px;position:relative;z-index:1}
 .stat-box{border:2px solid var(--ink);background:var(--paper);padding:10px 14px 9px;min-width:92px;box-shadow:var(--hard-sm)}
 .stat-box .k{font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.14em;color:var(--ink-62);display:block;margin-bottom:4px;white-space:nowrap}
@@ -135,6 +134,35 @@ p{color:var(--ink-80)}
 .sticker--rot{transform:rotate(-2deg)}
 .tag{display:inline-block;border:2px solid var(--ink);padding:3px 8px 2px;font-family:var(--mono);font-size:var(--fs-2);letter-spacing:.12em;background:var(--paper);white-space:nowrap}
 .tag.is-on{background:var(--pink);color:var(--on-pink);box-shadow:2px 2px 0 var(--shade)}
+
+/* ---------- 统一筛选栏 ----------
+   各列表页共用：顺序固定为 筛选 chips → 搜索（可选）→ 排序（可选）→ 计数 → 清除。
+   计数只放右侧一次；清除按钮仅在筛选激活时出现。 */
+.filterbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:24px;padding:10px 12px;
+  border:3px solid var(--ink);background:var(--paper-2);box-shadow:var(--hard-sm)}
+.filterbar-tabs{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.filterbar-tab{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 12px;
+  border:2px solid var(--ink);background:var(--paper);font-size:13px;font-weight:900;letter-spacing:.02em;
+  color:var(--ink);cursor:pointer;white-space:nowrap;
+  transition:background .14s var(--ease),box-shadow .14s var(--ease),transform .14s var(--ease)}
+.filterbar-tab:hover{background:var(--pink-wash);transform:translate(-1px,-1px)}
+.filterbar-tab.is-on,.filterbar-tab[aria-current="page"]{background:var(--pink);box-shadow:3px 3px 0 var(--shade);transform:none}
+.filterbar-tab b{font-family:var(--disp);font-size:11px;font-weight:900;letter-spacing:0;color:var(--ink-62)}
+.filterbar-tab.is-on b,.filterbar-tab[aria-current="page"] b{color:var(--ink)}
+.filterbar-search{position:relative;display:block;flex:1 1 240px;min-width:180px;max-width:420px}
+.filterbar-search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-62);pointer-events:none}
+.filterbar-search input{width:100%;height:40px;padding:0 12px 0 36px;font-size:14px;font-weight:700;letter-spacing:.02em}
+.filterbar-search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.filterbar-sort{display:inline-flex;align-items:center;gap:6px;flex:none;
+  font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.1em;color:var(--ink-62)}
+.filterbar-sort select{height:40px;padding:0 10px;font-family:var(--mono);font-size:var(--fs-2);letter-spacing:.04em;cursor:pointer}
+.filterbar-count{margin-left:auto;font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.1em;color:var(--ink-62);white-space:nowrap}
+.filterbar-count b{font-family:var(--disp);font-size:20px;line-height:1;letter-spacing:0;color:var(--pink-deep);margin:0 3px}
+.filterbar-clear{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 11px;
+  border:2px solid var(--ink);background:var(--paper);box-shadow:2px 2px 0 var(--shade);
+  font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.1em;color:var(--ink);white-space:nowrap}
+.filterbar-clear:hover{background:var(--pink);color:var(--on-pink)}
+.filterbar-clear[hidden]{display:none}
 .btn{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 22px;background:var(--paper);border:3px solid var(--ink);box-shadow:var(--hard-sm);font-weight:900;font-size:14px;letter-spacing:.04em;transition:transform .12s var(--ease),box-shadow .12s var(--ease),background .12s var(--ease)}
 .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--shade)}
 .btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shade)}
@@ -152,10 +180,6 @@ p{color:var(--ink-80)}
 .panel-box--ink{background:var(--ink);color:var(--paper)}
 .panel-box--pink{background:var(--pink)}
 .panel-box .panel-tab{position:absolute;left:-3px;top:-3px;background:var(--pink);border:3px solid var(--ink);border-right:0;border-bottom:0;padding:3px 9px;font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.14em;color:var(--on-pink)}
-.narration{border:2px solid var(--ink);background:var(--paper);padding:14px 16px;box-shadow:var(--hard-sm);position:relative}
-.narration .nk{font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.14em;color:var(--pink-deep);display:block;margin-bottom:6px}
-.narration p{font-size:14px;line-height:1.8;color:var(--ink-80)}
-.narration::after{content:"";position:absolute;left:18px;bottom:-9px;width:14px;height:14px;background:var(--paper);border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(45deg)}
 .tape{position:absolute;background:var(--pink);border:2px solid var(--ink);height:16px;width:78px;transform:rotate(-4deg);opacity:.95;z-index:3}
 .tape::after{content:"";position:absolute;inset:4px 6px;border-top:1px dashed color-mix(in srgb, var(--ink) 50%, transparent)}
 
@@ -253,7 +277,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pink-dee
   .room-head{padding-top:calc(var(--topbar-h) + 16px);padding-bottom:24px}
   .room-head h1{font-size:34px}
   .room-head .chapter{font-size:84px;top:calc(var(--topbar-h));opacity:.2}
-  .room-head .sub{font-size:13px}
+  /* 筛选栏：chips 单行横向滚动，搜索独占一行，触控高度 ≥40px */
+  .filterbar{padding:9px;gap:10px}
+  .filterbar-tabs{flex-wrap:nowrap;width:100%;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .filterbar-tabs::-webkit-scrollbar{display:none}
+  .filterbar-tab{flex:none;min-height:42px;padding:9px 12px;font-size:12px}
+  .filterbar-search{flex:1 0 100%;min-width:0;max-width:none}
+  .filterbar-search input{height:44px}
+  .filterbar-sort{min-height:42px}
+  .filterbar-count{margin-left:0}
+  .filterbar-clear{margin-left:auto;min-height:42px}
   .stat-box{padding:8px 10px;min-width:78px}
   .stat-box .v{font-size:19px}
   .rows .r{grid-template-columns:34px 1fr;row-gap:4px}
@@ -305,7 +338,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pink-dee
   --line-2:rgba(241,234,230,.32);
   --pink-deep:#F3A8D1;
   --pink-wash:color-mix(in srgb, var(--pink) 16%, transparent);
-  --shade:#000000;
+  /* 深色下投影翻成纸白色，保留硬边的「贴纸感」 */
+  --shade:#F1EAE6;
   --tone:#3A3240;
   --on-pink:#17131A;
 }
@@ -352,8 +386,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pink-dee
 [data-theme="dark"] .toc a:hover{color:var(--ink)}
 /* 深色下所有「粉底」元素统一用墨字，避免浅字压粉 */
 [data-theme="dark"] .nav a[aria-current="page"],
-[data-theme="dark"] .tab.is-on,
-[data-theme="dark"] .tab.is-on b,
+[data-theme="dark"] .filterbar-tab.is-on,
+[data-theme="dark"] .filterbar-tab[aria-current="page"],
+[data-theme="dark"] .filterbar-tab.is-on b,
+[data-theme="dark"] .filterbar-tab[aria-current="page"] b,
 [data-theme="dark"] .year.is-on,
 [data-theme="dark"] .year.is-on b,
 [data-theme="dark"] .tool[aria-current="true"],
@@ -376,7 +412,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pink-dee
 [data-theme="dark"] .moment--pink .panel-tab,
 [data-theme="dark"] .seasons a[aria-current="true"],
 [data-theme="dark"] .seasons a[aria-current="true"] *,
-[data-theme="dark"] .syncbar.is-fresh .sync-state b,
 [data-theme="dark"] .copy-note.is-on,
 [data-theme="dark"] .search-empty .q,
 [data-theme="dark"] .moment--ink .mf .tag:hover,
