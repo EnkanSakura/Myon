@@ -1,8 +1,6 @@
 import {
   aboutKey,
   aboutPatchSchema,
-  bangumiInputSchema,
-  bangumiPatchSchema,
   galleryInputSchema,
   galleryPatchSchema,
   momentInputSchema,
@@ -18,10 +16,9 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { requireAdmin } from '../../auth';
-import { isBangumiSubjectType, syncBangumi } from '../../bangumi';
+import { syncBangumi } from '../../bangumi';
 import { getDb } from '../../db/client';
 import {
-  bangumiShows,
   galleryItems,
   moments,
   posts,
@@ -396,83 +393,9 @@ admin.delete('/gallery/:id', async (c) => {
 // 追番
 // ---------------------------------------------------------------------------
 
-admin.get('/bangumi', async (c) => {
-  const type = c.req.query('type');
-  if (type && !isBangumiSubjectType(type)) {
-    return c.json({ error: 'invalid_subject_type' }, 400);
-  }
+// 后台追番只读；条目由 Bangumi 同步维护，不再提供编辑/删除 API。
 
-  const db = getDb(c.env.DB);
-  const items = await db
-    .select()
-    .from(bangumiShows)
-    .where(type ? eq(bangumiShows.subjectType, type) : undefined)
-    .orderBy(bangumiShows.title);
-  return c.json({ items });
-});
-
-admin.post('/bangumi', async (c) => {
-  const payload = await readJson(c);
-  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
-
-  const parsed = bangumiInputSchema.safeParse(payload);
-  if (!parsed.success) return validationError(c, parsed.error);
-  const input = parsed.data;
-
-  const item = {
-    id: input.bangumiId ? `bg_${input.bangumiId}` : `bg_${crypto.randomUUID()}`,
-    subjectType: input.subjectType,
-    bangumiId: input.bangumiId ?? null,
-    title: input.title,
-    status: input.status,
-    totalEps: input.totalEps,
-    watchedEps: input.watchedEps,
-    score: input.score ?? null,
-    comment: input.comment ?? null,
-    nextAirAt: input.nextAirAt ?? null,
-    coverKey: input.coverKey ?? null,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await getDb(c.env.DB).insert(bangumiShows).values(item);
-  return c.json({ item }, 201);
-});
-
-admin.patch('/bangumi/:id', async (c) => {
-  const payload = await readJson(c);
-  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
-
-  const parsed = bangumiPatchSchema.safeParse(payload);
-  if (!parsed.success) return validationError(c, parsed.error);
-
-  const id = c.req.param('id');
-  const db = getDb(c.env.DB);
-  const current = await db
-    .select()
-    .from(bangumiShows)
-    .where(eq(bangumiShows.id, id))
-    .get();
-  if (!current) return c.json({ error: 'not_found' }, 404);
-  if (Object.keys(parsed.data).length === 0) return c.json({ item: current });
-
-  const next = {
-    ...current,
-    ...parsed.data,
-    updatedAt: new Date().toISOString(),
-  };
-  await db
-    .update(bangumiShows)
-    .set({ ...parsed.data, updatedAt: next.updatedAt })
-    .where(eq(bangumiShows.id, id));
-  return c.json({ item: next });
-});
-
-admin.delete('/bangumi/:id', async (c) => {
-  const db = getDb(c.env.DB);
-  await db.delete(bangumiShows).where(eq(bangumiShows.id, c.req.param('id')));
-  return c.json({ ok: true });
-});
-
+/** 手动触发一次 Bangumi 同步；未配置令牌时返回 skipped。 */
 /** 手动触发一次 Bangumi 同步；未配置令牌时返回 skipped。 */
 admin.post('/bangumi/sync', async (c) => {
   const result = await syncBangumi(c.env);

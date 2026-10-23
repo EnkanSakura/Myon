@@ -1,15 +1,17 @@
 (function () {
   "use strict";
 
-  /* ---------------- 常量 ---------------- */
+  /* ==========================================================================
+     后台追番：只读列表。条目由 Bangumi 同步维护，页面不提供任何编辑操作。
+     数据走公开 GET /api/v1/bangumi；手动同步仍需要管理令牌。
+     ========================================================================== */
+
   var TOKEN_KEY = "myon-admin-token";
-  var MAX_EPS = 9999;
-  var STATUS_ORDER = ["watching", "watched", "wish", "paused"];
   var STATUS = {
-    watching: { label: "在追" },
-    watched: { label: "看过" },
-    wish: { label: "想看" },
-    paused: { label: "暂缓" }
+    watching: "进行中",
+    watched: "已完成",
+    wish: "想看",
+    paused: "暂缓"
   };
   var SUBJECT_TYPE = {
     anime: "动画",
@@ -18,26 +20,48 @@
     game: "游戏",
     real: "三次元"
   };
-  var SUBJECT_TYPE_ORDER = ["anime", "book", "music", "game", "real"];
 
-  /* ---------------- 小工具 ---------------- */
+  var page = document.querySelector(".page[data-api]");
+  if (!page) return;
+  var apiBase = page.getAttribute("data-api") || "";
+  var coverBase = apiBase.replace(/\/bangumi$/, "/bangumi/cover");
+  var syncApi = page.getAttribute("data-sync-api") || "";
+  var listEl = document.getElementById("watchList");
+  var syncBtn = document.getElementById("syncMain");
+  var syncLabel = document.getElementById("syncMainLabel");
+  var exportBtn = document.getElementById("exportBtn");
+  var banner = document.getElementById("tbanner");
+  var bannerK = document.getElementById("tbannerK");
+  var bannerTitle = document.getElementById("tbannerTitle");
+  var bannerText = document.getElementById("tbannerText");
+  var bannerToken = document.getElementById("tbannerLink");
+  var toastEl = document.getElementById("toast");
+  var typeChips = document.querySelectorAll(".filterbar .chip[data-type]");
+  var clearBtn = document.getElementById("clearFilters");
+
+  var state = {
+    items: [],
+    typeFilter: "all",
+    loading: false,
+    syncing: false
+  };
+  var toastTimer = null;
+
   function $(id) { return document.getElementById(id); }
-  function each(list, fn) { Array.prototype.forEach.call(list, fn); }
-  function pad2(n) { return String(n).padStart(2, "0"); }
-  function readStore(key) {
-    try { return localStorage.getItem(key); } catch (e) { return null; }
-  }
-  function clockNow() {
-    var d = new Date();
-    return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
-  }
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
   }
-  function setText(node, text) { if (node) node.textContent = text; }
+  function setText(id, text) {
+    var node = $(id);
+    if (node) node.textContent = text;
+  }
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function readToken() {
+    try { return (localStorage.getItem(TOKEN_KEY) || "").trim(); } catch (e) { return ""; }
+  }
 
   function formatDate(value) {
     if (!value) return "—";
@@ -50,7 +74,9 @@
     return time ? date + " " + time : date;
   }
   function scoreText(score) {
-    return typeof score === "number" && isFinite(score) ? Number(score).toFixed(1) : "—";
+    return typeof score === "number" && isFinite(score)
+      ? "我的评分 " + Number(score).toFixed(0)
+      : "未评分";
   }
 
   var AIR_FORMAT = new Intl.DateTimeFormat("zh-CN", {
@@ -62,13 +88,12 @@
     minute: "2-digit",
     hourCycle: "h23"
   });
-  /** 下次放送按 UTC+8 展示；解析失败或为空都返回“待定”。 */
   function nextAirText(value) {
     if (!value) return "待定";
     var date = new Date(value);
     if (Number.isNaN(date.getTime())) return "待定";
     var parts = {};
-    each(AIR_FORMAT.formatToParts(date), function (part) {
+    Array.prototype.forEach.call(AIR_FORMAT.formatToParts(date), function (part) {
       if (part.type !== "literal") parts[part.type] = part.value;
     });
     return (parts.month || "--") + "." + (parts.day || "--") + " " +
@@ -78,306 +103,163 @@
   /** mediaKey → /media/<key>；外链与站内绝对路径原样返回。 */
   function mediaUrl(key) {
     if (!key) return "";
-    var value = String(key);
-    if (/^(https?:)?\/\//.test(value) || value.charAt(0) === "/") return value;
-    return "/media/" + value.replace(/^\/+/, "");
+    if (/^(https?:)?\/\//.test(key) || key.charAt(0) === "/") return key;
+    return "/media/" + key.replace(/^\/+/, "");
   }
 
-  /** 进度口径：总集数未知时不计算百分比，已看不截断显示但进度条按总数封顶。 */
+  /** 封面优先走站内代理 + 边缘缓存；没有源图时退回已有 R2/手填封面。 */
+  function coverUrl(item) {
+    var source = String(item.coverSource || "").trim();
+    if (source) {
+      return coverBase + "?src=" + encodeURIComponent(source);
+    }
+    return mediaUrl(item.coverKey);
+  }
+
+  /** 各类型进度单位不同；书籍按卷、音乐按曲、游戏按百分比。 */
   function progressOf(item) {
-    var total = Math.max(0, Number(item.totalEps) || 0);
-    var watched = Math.max(0, Number(item.watchedEps) || 0);
-    var shown = total > 0 ? Math.min(watched, total) : watched;
-    var pct = total > 0 ? Math.min(100, Math.round((shown / total) * 100)) : 0;
-    return {
-      total: total,
-      watched: watched,
-      shown: shown,
-      pct: pct,
-      epText: total > 0 ? "EP." + pad2(shown) + " / " + total : "EP." + pad2(shown),
-      label: total > 0 ? "已看 " + shown + " 话，共 " + total + " 话" : "已看 " + shown + " 话，总集数未定"
-    };
+    var total = Math.max(0, item.totalEps || 0);
+    var watchedRaw = Math.max(0, item.watchedEps || 0);
+    var watched = total > 0 ? Math.min(watchedRaw, total) : watchedRaw;
+    var pct = total > 0 ? Math.min(100, Math.round((watched / total) * 100)) : 0;
+    var text = "";
+    if (item.subjectType === "book") {
+      text = total > 0 ? "第 " + watched + " 卷 / 共 " + total + " 卷" : "已读 " + watched + " 卷";
+    } else if (item.subjectType === "music") {
+      text = total > 0 ? "第 " + watched + " 曲 / 共 " + total + " 曲" : "已听 " + watched + " 曲";
+    } else if (item.subjectType === "game") {
+      text = total > 0 ? "进度 " + pct + "%" : "进度待定";
+    } else {
+      text = total > 0 ? "EP." + pad2(watched) + " / " + total : "已看 " + watched + " 集";
+    }
+    return { pct: pct, text: text };
   }
 
-  /* ---------------- 元素与状态 ---------------- */
-  var pageEl = document.querySelector(".page[data-api]");
-  var API_URL = pageEl ? pageEl.getAttribute("data-api") : "";
+  function hideBanner() {
+    if (banner) banner.hidden = true;
+  }
 
-  var listEl = $("watchList");
-  var pageState = $("pageState");
-  var banner = $("tbanner");
-  var tbannerK = $("tbannerK");
-  var tbannerTitle = $("tbannerTitle");
-  var tbannerText = $("tbannerText");
-  var tbannerLink = $("tbannerLink");
-  var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
+  function showBanner(tone, title, text, withToken) {
+    if (!banner) return;
+    banner.hidden = false;
+    banner.className = "notice notice--" + tone;
+    if (bannerK) bannerK.textContent = tone === "error" ? "ERROR" : tone === "warn" ? "WARN" : "INFO";
+    if (bannerTitle) bannerTitle.textContent = title;
+    if (bannerText) bannerText.textContent = text;
+    if (bannerToken) bannerToken.hidden = !withToken;
+  }
 
-  var syncMain = $("syncMain");
-  var syncMainLabel = $("syncMainLabel");
-
-  var exportBtn = $("exportBtn");
-  var latestUpdated = $("latestUpdated");
-  var secEn = $("secEn");
-  var railBangumi = $("railBangumi");
-  var fbCount = $("fbCount");
-  var clearFilters = $("clearFilters");
-  var typeChips = Array.prototype.slice.call(document.querySelectorAll(".filterbar .chip"));
-
-  var toastEl = $("toast");
-  var toastTimer = null;
-
-  var cfmDlg = $("cfmDlg");
-  var cfmText = $("cfmText");
-  var cfmCancel = $("cfmCancel");
-  var cfmOk = $("cfmOk");
-  var pendingDeleteId = null;
-
-  var state = {
-    token: (readStore(TOKEN_KEY) || "").trim(),
-    items: [],
-    loading: true,
-    authorized: false,
-    syncing: false,
-    typeFilter: "all",
-    busy: {}
-  };
-
-  /* ---------------- 提示 ---------------- */
   function toast(text) {
     if (!toastEl) return;
     toastEl.textContent = text;
     toastEl.classList.add("is-on");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toastEl.classList.remove("is-on"); }, 3200);
+    toastTimer = setTimeout(function () {
+      toastEl.classList.remove("is-on");
+    }, 2600);
   }
 
-  function setNoticeTone(tone) {
-    each(NOTICE_TONES, function (name) { banner.classList.remove(name); });
-    banner.classList.add("notice--" + tone);
+  function readJson(response) {
+    return response.json().catch(function () { return {}; });
   }
 
-  function showBanner(tone, title, text, showLink) {
-    if (!banner) return;
-    banner.hidden = false;
-    setNoticeTone(tone);
-    setText(tbannerK, tone === "error" ? "ERR" : tone === "warn" ? "WARN" : "INFO");
-    setText(tbannerTitle, title);
-    setText(tbannerText, text || "");
-    if (tbannerText) tbannerText.hidden = !text;
-    if (tbannerLink) tbannerLink.hidden = !showLink;
-  }
-  function hideBanner() {
-    if (banner) banner.hidden = true;
-  }
-  function setPageState(text) {
-    setText(pageState, text);
-  }
+  function loadItems() {
+    if (state.loading) return;
+    state.loading = true;
+    if (listEl) listEl.setAttribute("aria-busy", "true");
+    setText("pageState", "正在读取…");
 
-  /* ---------------- 接口请求 ---------------- */
-  function api(method, path, body) {
-    var headers = { accept: "application/json", "x-admin-token": state.token };
-    var init = { method: method, headers: headers, cache: "no-store" };
-    if (body !== undefined) {
-      headers["content-type"] = "application/json";
-      init.body = JSON.stringify(body);
+    var all = [];
+    function next(offset) {
+      return fetch(apiBase + "?limit=100&offset=" + offset, {
+        headers: { accept: "application/json" },
+        cache: "no-store"
+      }).then(function (response) {
+        return readJson(response).then(function (body) {
+          if (!response.ok) throw new Error("读取失败");
+          var items = Array.isArray(body.items) ? body.items : [];
+          all = all.concat(items);
+          var total = Number(body.total) || all.length;
+          if (items.length > 0 && all.length < total && all.length < 1000) {
+            return next(all.length);
+          }
+          return all;
+        });
+      });
     }
-    return fetch(API_URL + path, init);
-  }
-  function readJson(res) {
-    return res.json().catch(function () { return {}; });
+
+    next(0)
+      .then(function (items) {
+        state.items = items.sort(function (a, b) {
+          return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+        });
+        renderAll();
+        showBanner("info", "只读列表", "条目由 Bangumi 同步维护；修改评分、评论或进度请到 Bangumi，之后点「同步 Bangumi」。", false);
+        setText("pageState", "已加载 · " + new Date().toTimeString().slice(0, 5));
+      })
+      .catch(function (error) {
+        console.error("[admin-bangumi] 读取失败", error);
+        if (listEl) {
+          listEl.innerHTML = "";
+          var empty = el("div", "empty");
+          var content = el("div", "empty-c");
+          content.appendChild(el("p", "empty-t", "追番记录读取失败"));
+          content.appendChild(el("p", "empty-d", "检查网络后刷新页面重试。"));
+          empty.appendChild(content);
+          listEl.appendChild(empty);
+        }
+        showBanner("error", "读取失败", "公开追番接口没有返回数据，请刷新页面重试。", false);
+        setText("pageState", "读取失败");
+      })
+      .finally(function () {
+        state.loading = false;
+        if (listEl) listEl.setAttribute("aria-busy", "false");
+      });
   }
 
-  /** 401 / 503 的处理；返回 true 表示已经被拦下。 */
-  function authFailure(status) {
-    if (status === 401) {
-      state.authorized = false;
-      showBanner("error", "管理令牌无效", "令牌与后台不一致。点右上角「管理令牌」更新后重新加载本页。", true);
-      setPageState("未授权 · 令牌无效");
-      return true;
-    }
-    if (status === 503) {
-      state.authorized = false;
-      showBanner("warn", "服务端未配置管理令牌，当前只读", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。", false);
-      setPageState("只读 · 服务端未配置管理令牌");
-      return true;
-    }
-    return false;
-  }
-
-  function canWrite() {
-    if (!state.token) {
-      showBanner("info", "尚未连接后台", "追番记录需要管理令牌才能读写。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。", true);
-      toast("未填写管理令牌 · 无法写入");
-      return false;
-    }
-    if (!state.authorized) {
-      showBanner("error", "尚未连接后台接口", "请先在右上角「管理令牌」里校验令牌，再回到本页操作。", true);
-      toast("尚未连接后台接口");
-      return false;
-    }
-    return true;
-  }
-
-  /* ---------------- 查找与局部更新 ---------------- */
-  function findItem(id) {
-    for (var i = 0; i < state.items.length; i += 1) {
-      if (state.items[i].id === id) return state.items[i];
-    }
-    return null;
-  }
-  function findRow(id) {
-    if (!listEl) return null;
-    var rows = listEl.querySelectorAll(".wrow");
-    for (var i = 0; i < rows.length; i += 1) {
-      if (rows[i].getAttribute("data-id") === id) return rows[i];
-    }
-    return null;
-  }
-  function lockRow(id) {
-    var row = findRow(id);
-    if (!row) return;
-    row.classList.add("is-busy");
-    row.setAttribute("aria-busy", "true");
-    each(row.querySelectorAll("button, input, select"), function (control) {
-      control.disabled = true;
-    });
-  }
-  function updateItem(item) {
-    for (var i = 0; i < state.items.length; i += 1) {
-      if (state.items[i].id === item.id) {
-        state.items[i] = item;
-        return;
-      }
-    }
-  }
-
-  /* ---------------- 渲染：统计 / 列表 ---------------- */
-  function countByStatus(status) {
-    var count = 0;
-    each(state.items, function (item) {
-      if (item.status === status) count += 1;
-    });
-    return count;
-  }
-  function latestUpdatedAt() {
-    var latest = "";
-    each(state.items, function (item) {
-      if (item.updatedAt && String(item.updatedAt) > latest) latest = String(item.updatedAt);
-    });
-    return latest;
-  }
-  function subjectLabel(type) {
-    return SUBJECT_TYPE[type] || "动画";
-  }
-
-  function renderStats() {
-    var watched = countByStatus("watched");
-    var watching = countByStatus("watching");
-    var wish = countByStatus("wish");
-    var latest = latestUpdatedAt();
-
-    setText($("pTotal"), state.authorized ? String(state.items.length) : "—");
-    setText($("mWatched"), state.authorized ? String(watched) : "—");
-    setText($("mWatching"), state.authorized ? String(watching) : "—");
-    setText($("mWish"), state.authorized ? String(wish) : "—");
-    setText($("mWatchedNote"), state.authorized ? "条 · 已看完" : "未连接");
-    setText($("mWatchingNote"), state.authorized ? "条 · 正在追" : "未连接");
-    setText($("mWishNote"), state.authorized ? "条 · 待补" : "未连接");
-    setText(latestUpdated, latest ? formatDateTime(latest) : "—");
-    setText(secEn, "ALL / " + (state.authorized ? pad2(state.items.length) : "—"));
-    setText(railBangumi, state.authorized ? String(state.items.length) : "—");
-  }
-
-  function listStateNode(title, text) {
-    var node = el("div", "empty");
-    var copy = el("div", "empty-c");
-    copy.appendChild(el("b", "empty-t", title));
-    if (text) copy.appendChild(el("p", "empty-d", text));
-    node.appendChild(copy);
-    return node;
-  }
-
-  function wBtn(action, label) {
-    var button = el("button", "w-btn", label);
-    button.type = "button";
-    button.setAttribute("data-act", action);
-    return button;
-  }
+  function typeLabel(type) { return SUBJECT_TYPE[type] || type; }
+  function statusLabel(status) { return STATUS[status] || status; }
 
   function renderRow(item) {
     var progress = progressOf(item);
-    var busy = !!state.busy[item.id];
     var row = el("article", "wrow");
     row.setAttribute("data-id", item.id);
     row.setAttribute("data-status", item.status);
-    row.setAttribute("data-type", subjectLabel(item.subjectType));
-    if (busy) {
-      row.classList.add("is-busy");
-      row.setAttribute("aria-busy", "true");
-    }
+    row.setAttribute("data-type", typeLabel(item.subjectType));
 
-    /* 封面 */
     var frame = el("span", "mini-frame");
-    var cover = mediaUrl(item.coverKey);
+    var cover = coverUrl(item);
     if (cover) {
       var img = document.createElement("img");
       img.src = cover;
       img.alt = "《" + item.title + "》封面";
       img.loading = "lazy";
       img.decoding = "async";
+      img.addEventListener("error", function () {
+        img.remove();
+        frame.classList.add("is-missing");
+      }, { once: true });
       frame.appendChild(img);
     } else {
       frame.appendChild(el("span", "mini-empty", "NO COVER"));
     }
     row.appendChild(frame);
 
-    /* 标题 / 状态 */
     var main = el("div", "w-main");
     var top = el("div", "w-top");
     top.appendChild(el("span", "w-title", item.title));
     var chip = el("span", "w-state");
     chip.appendChild(el("i", "sq"));
-    chip.appendChild(el("span", "w-st", STATUS[item.status] ? STATUS[item.status].label : item.status));
+    chip.appendChild(el("span", "w-st", statusLabel(item.status)));
     top.appendChild(chip);
     if (item.bangumiId) top.appendChild(el("span", "w-bgm", "BGM #" + item.bangumiId));
     main.appendChild(top);
 
-    /* 类型 / 评分（可编辑）/ 下次放送 / 更新时间 */
     var meta = el("div", "w-meta");
     meta.appendChild(el("span", "w-meta-k", "类型"));
-    var typeSelect = document.createElement("select");
-    typeSelect.className = "w-type";
-    typeSelect.setAttribute("aria-label", "《" + item.title + "》类型");
-    each(SUBJECT_TYPE_ORDER, function (type) {
-      var option = document.createElement("option");
-      option.value = type;
-      option.textContent = SUBJECT_TYPE[type];
-      if (type === (item.subjectType || "anime")) option.selected = true;
-      typeSelect.appendChild(option);
-    });
-    meta.appendChild(typeSelect);
+    meta.appendChild(el("span", "w-meta-v", typeLabel(item.subjectType)));
     meta.appendChild(el("span", "msep", "·"));
-    meta.appendChild(el("span", "w-meta-k", "评分"));
-    var scoreInput = document.createElement("input");
-    scoreInput.className = "w-score";
-    scoreInput.type = "number";
-    scoreInput.min = "0";
-    scoreInput.max = "10";
-    scoreInput.step = "1";
-    scoreInput.value = typeof item.score === "number" ? String(item.score) : "";
-    scoreInput.placeholder = "—";
-    scoreInput.setAttribute("aria-label", "《" + item.title + "》评分");
-    meta.appendChild(scoreInput);
-    meta.appendChild(el("span", "msep", "·"));
-    meta.appendChild(el("span", "w-meta-k", "简评"));
-    var commentInput = document.createElement("input");
-    commentInput.className = "w-comment";
-    commentInput.type = "text";
-    commentInput.maxLength = 500;
-    commentInput.value = item.comment || "";
-    commentInput.placeholder = "写一句…";
-    commentInput.setAttribute("aria-label", "《" + item.title + "》简评");
-    meta.appendChild(commentInput);
+    meta.appendChild(el("span", "w-meta-v", scoreText(item.score)));
     meta.appendChild(el("span", "msep", "·"));
     meta.appendChild(el("span", "w-meta-k", "下次放送"));
     meta.appendChild(el("span", "w-meta-v", nextAirText(item.nextAirAt)));
@@ -386,447 +268,127 @@
     meta.appendChild(el("span", "w-meta-v", formatDateTime(item.updatedAt)));
     main.appendChild(meta);
 
-    /* 进度条 + 集数输入 */
+    if (item.comment) {
+      main.appendChild(el("p", "w-comment-read", item.comment));
+    }
+
     var prog = el("div", "w-prog");
     var bar = el("span", "w-bar");
     bar.setAttribute("role", "img");
-    bar.setAttribute("aria-label", progress.label);
+    bar.setAttribute("aria-label", progress.text);
     var fill = el("i");
     fill.style.width = progress.pct + "%";
     bar.appendChild(fill);
     prog.appendChild(bar);
-    prog.appendChild(el("span", "w-ep", progress.epText));
-    var inputLabel = el("label", "w-eps");
-    inputLabel.appendChild(el("span", "sr-only", "已看集数"));
-    var epsInput = document.createElement("input");
-    epsInput.className = "w-input";
-    epsInput.type = "number";
-    epsInput.min = "0";
-    epsInput.step = "1";
-    if (progress.total > 0) epsInput.max = String(progress.total);
-    epsInput.value = String(progress.shown);
-    epsInput.setAttribute("aria-label", "《" + item.title + "》已看集数");
-    inputLabel.appendChild(epsInput);
-    if (progress.total > 0) inputLabel.appendChild(el("span", "w-eps-total", "/ " + progress.total));
-    prog.appendChild(inputLabel);
-    prog.appendChild(el("span", "w-pct", progress.pct + "%"));
+    prog.appendChild(el("span", "w-ep", progress.text));
     main.appendChild(prog);
     row.appendChild(main);
-
-    /* 操作：±1 / 状态 / 删除 */
-    var acts = el("div", "w-acts");
-    acts.appendChild(wBtn("minus", "−1 话"));
-    acts.appendChild(wBtn("plus", "+1 话"));
-    var select = document.createElement("select");
-    select.className = "w-select";
-    select.setAttribute("aria-label", "《" + item.title + "》状态");
-    each(STATUS_ORDER, function (status) {
-      var option = document.createElement("option");
-      option.value = status;
-      option.textContent = STATUS[status].label;
-      if (status === item.status) option.selected = true;
-      select.appendChild(option);
-    });
-    acts.appendChild(select);
-    var del = wBtn("delete", "删除");
-    del.classList.add("w-btn--danger");
-    acts.appendChild(del);
-    row.appendChild(acts);
-
-    if (busy) {
-      each(row.querySelectorAll("button, input, select"), function (control) {
-        control.disabled = true;
-      });
-    }
     return row;
-  }
-
-  function filteredItems() {
-    if (state.typeFilter === "all") return state.items;
-    return state.items.filter(function (item) {
-      return (item.subjectType || "anime") === state.typeFilter;
-    });
   }
 
   function renderList() {
     if (!listEl) return;
-    listEl.textContent = "";
-    listEl.setAttribute("aria-busy", state.loading ? "true" : "false");
-
-    if (state.loading) {
-      listEl.appendChild(listStateNode("正在读取追番记录…", "读完会显示在这里。"));
-      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
-      return;
-    }
-    if (!state.token) {
-      listEl.appendChild(listStateNode("未连接：尚未填写管理令牌。", "点右上角「管理令牌」填入后页面会自动刷新。"));
-      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
-      return;
-    }
-    if (!state.authorized) {
-      listEl.appendChild(listStateNode("未连接：令牌无效或服务端未配置管理令牌。", "按上方提示修正后刷新本页。"));
-      setText(fbCount, "显示 — 条 · 筛选只作用于本页");
-      return;
-    }
-    if (state.items.length === 0) {
-      listEl.appendChild(listStateNode("还没有追番记录。", "点右上角「同步 Bangumi」把收藏拉进来。"));
-      setText(fbCount, "显示 0 条 · 筛选只作用于本页");
-      return;
-    }
-
-    var list = filteredItems();
-    if (list.length === 0) {
-      listEl.appendChild(listStateNode("该类型下没有记录。", "点筛选栏的「清除」看全部记录。"));
-      setText(fbCount, "显示 0 条 · 筛选只作用于本页");
-      return;
-    }
-
-    var fragment = document.createDocumentFragment();
-    each(list, function (item) {
-      fragment.appendChild(renderRow(item));
+    var filtered = state.items.filter(function (item) {
+      return state.typeFilter === "all" || (item.subjectType || "anime") === state.typeFilter;
     });
-    listEl.appendChild(fragment);
-    setText(fbCount, "显示 " + list.length + " 条 · 筛选只作用于本页");
+    listEl.innerHTML = "";
+    if (filtered.length === 0) {
+      var empty = el("div", "empty");
+      var content = el("div", "empty-c");
+      content.appendChild(el("p", "empty-t", "这一栏还没有记录"));
+      content.appendChild(el("p", "empty-d", "等 Bangumi 同步完成，或点「清除」看全部记录。"));
+      empty.appendChild(content);
+      listEl.appendChild(empty);
+    } else {
+      filtered.forEach(function (item) { listEl.appendChild(renderRow(item)); });
+    }
+    setText("secEn", (state.typeFilter === "all" ? "ALL" : state.typeFilter.toUpperCase()) + " / " + filtered.length);
+    setText("fbCount", "显示 " + filtered.length + " 条 · 只读列表");
   }
 
-  function paintTypeChips() {
-    each(typeChips, function (btn) {
-      var on = btn.getAttribute("data-type") === state.typeFilter;
-      btn.classList.toggle("is-on", on);
-      btn.setAttribute("aria-pressed", String(on));
+  function renderMetrics() {
+    var counts = { watched: 0, watching: 0, wish: 0, paused: 0 };
+    state.items.forEach(function (item) {
+      if (counts[item.status] === undefined) counts[item.status] = 0;
+      counts[item.status] += 1;
     });
+    setText("mWatched", String(counts.watched));
+    setText("mWatching", String(counts.watching));
+    setText("mWish", String(counts.wish));
+    setText("mWatchedNote", counts.watched > 0 ? "条 · 已看完" : "暂无");
+    setText("mWatchingNote", counts.watching > 0 ? "条 · 正在追" : "暂无");
+    setText("mWishNote", counts.wish > 0 ? "条 · 待补" : "暂无");
+    setText("pTotal", String(state.items.length));
+    setText("fbCount", "显示 " + state.items.length + " 条 · 只读列表");
+    var latest = state.items.reduce(function (result, item) {
+      if (!item.updatedAt) return result;
+      if (!result || item.updatedAt > result) return item.updatedAt;
+      return result;
+    }, "");
+    setText("latestUpdated", latest ? formatDateTime(latest) : "—");
   }
 
   function renderAll() {
-    renderStats();
+    renderMetrics();
     renderList();
   }
 
-  /* ---------------- 写入：进度 / 状态 / 评分 ---------------- */
-  function restoreFocus(focus) {
-    if (!focus || !listEl) return;
-    var row = findRow(focus.id);
-    if (!row) return;
-    var selector =
-      focus.type === "select" ? ".w-select" :
-      focus.type === "input" ? ".w-input" :
-      focus.type === "score" ? ".w-score" :
-      focus.type === "comment" ? ".w-comment" :
-      focus.type === "type" ? ".w-type" :
-      '[data-act="' + focus.act + '"]';
-    var node = row.querySelector(selector);
-    if (node) node.focus();
-  }
-
-  /** 完整记录 + 本次改动；PATCH 带上全部字段，避免 patch schema 的默认值覆盖未提交字段。 */
-  function patchBody(item, changes) {
-    var body = {
-      subjectType: item.subjectType || "anime",
-      bangumiId: item.bangumiId === undefined ? null : item.bangumiId,
-      title: item.title,
-      status: item.status,
-      totalEps: item.totalEps,
-      watchedEps: item.watchedEps,
-      score: item.score === undefined ? null : item.score,
-      comment: item.comment === undefined ? null : item.comment,
-      nextAirAt: item.nextAirAt === undefined ? null : item.nextAirAt,
-      coverKey: item.coverKey === undefined ? null : item.coverKey
-    };
-    for (var key in changes) {
-      if (Object.prototype.hasOwnProperty.call(changes, key)) body[key] = changes[key];
-    }
-    return body;
-  }
-
-  function mutate(id, payload, successText, focus) {
-    if (state.busy[id]) return;
-    var current = findItem(id);
-    if (!current) return;
-    state.busy[id] = true;
-    lockRow(id);
-
-    // 带上完整记录：后端 patch schema 只认识传进来的键，完整记录能保证没改的字段不被重置。
-    api("PATCH", "/" + encodeURIComponent(id), patchBody(current, payload)).then(function (res) {
-      return readJson(res).then(function (body) { return { res: res, body: body }; });
-    }).then(function (result) {
-      if (authFailure(result.res.status)) return;
-      if (!result.res.ok) {
-        var message = "HTTP " + result.res.status;
-        if (result.res.status === 400 && result.body && result.body.issues && result.body.issues.length > 0) {
-          message = result.body.issues[0].path + "：" + result.body.issues[0].message;
-        }
-        toast("保存失败 · " + message);
-        return;
-      }
-      var item = result.body ? result.body.item : null;
-      if (!item) throw new Error("missing_item");
-      updateItem(item);
-      toast(successText(item));
-      hideBanner();
-    }).catch(function (error) {
-      if (error && error.message === "missing_item") toast("保存失败 · 接口响应缺少 item");
-      else toast("保存失败 · 网络或服务异常");
-    }).then(function () {
-      state.busy[id] = false;
-      renderAll();
-      restoreFocus(focus);
+  function paintTypeChips() {
+    Array.prototype.forEach.call(typeChips, function (chip) {
+      var on = (chip.getAttribute("data-type") || "all") === state.typeFilter;
+      chip.classList.toggle("is-on", on);
+      chip.setAttribute("aria-pressed", on ? "true" : "false");
     });
   }
 
-  function stepEps(id, delta) {
-    var item = findItem(id);
-    if (!item) return;
-    var progress = progressOf(item);
-    var max = progress.total > 0 ? progress.total : MAX_EPS;
-    var next = Math.min(max, Math.max(0, progress.watched + delta));
-    if (next === progress.watched) {
-      toast(delta > 0 ? "已经是最后一话" : "已经是最前面一话");
-      return;
-    }
-    mutate(id, { watchedEps: next }, function (updated) {
-      var after = progressOf(updated);
-      return "《" + updated.title + "》进度已更新 · " + after.epText;
-    }, { id: id, type: "act", act: delta > 0 ? "plus" : "minus" });
-  }
-
-  function saveEps(id, raw) {
-    var item = findItem(id);
-    if (!item) return;
-    var progress = progressOf(item);
-    var value = Number(raw);
-    var invalid =
-      raw === "" ||
-      !Number.isInteger(value) ||
-      value < 0 ||
-      (progress.total > 0 && value > progress.total);
-    if (invalid) {
-      toast(progress.total > 0 ? "已看集数需要是 0 到 " + progress.total + " 的整数" : "已看集数需要是非负整数");
-      renderAll();
-      return;
-    }
-    if (value === progress.watched) {
-      renderAll();
-      return;
-    }
-    mutate(id, { watchedEps: value }, function (updated) {
-      return "《" + updated.title + "》进度已保存 · " + progressOf(updated).epText;
-    }, { id: id, type: "input" });
-  }
-
-  function saveStatus(id, status) {
-    var item = findItem(id);
-    if (!item || !STATUS[status]) return;
-    if (status === item.status) {
-      renderAll();
-      return;
-    }
-    mutate(id, { status: status }, function (updated) {
-      return "《" + updated.title + "》状态改为 " + STATUS[updated.status].label;
-    }, { id: id, type: "select" });
-  }
-
-  function saveSubjectType(id, type) {
-    var item = findItem(id);
-    if (!item || !SUBJECT_TYPE[type]) return;
-    if (type === (item.subjectType || "anime")) {
-      renderAll();
-      return;
-    }
-    mutate(id, { subjectType: type }, function (updated) {
-      return "《" + updated.title + "》类型改为 " + subjectLabel(updated.subjectType);
-    }, { id: id, type: "type" });
-  }
-
-  function saveScore(id, raw) {
-    var item = findItem(id);
-    if (!item) return;
-    if (raw === "") {
-      if (item.score === null) {
-        renderAll();
-        return;
-      }
-      mutate(id, { score: null }, function (updated) {
-        return "《" + updated.title + "》评分已清空";
-      }, { id: id, type: "score" });
-      return;
-    }
-    var value = Number(raw);
-    if (!Number.isInteger(value) || value < 0 || value > 10) {
-      toast("评分需要是 0 到 10 的整数");
-      renderAll();
-      return;
-    }
-    if (item.score === value) {
-      renderAll();
-      return;
-    }
-    mutate(id, { score: value }, function (updated) {
-      return "《" + updated.title + "》评分改为 " + scoreText(updated.score);
-    }, { id: id, type: "score" });
-  }
-
-  function saveComment(id, raw) {
-    var item = findItem(id);
-    if (!item) return;
-    var value = String(raw || "").trim();
-    var next = value ? value.slice(0, 500) : null;
-    if ((item.comment || null) === next) {
-      renderAll();
-      return;
-    }
-    mutate(id, { comment: next }, function (updated) {
-      return "《" + updated.title + "》简评已更新";
-    }, { id: id, type: "comment" });
-  }
-
-  /* ---------------- 删除 ---------------- */
-  function askDelete(id) {
-    var item = findItem(id);
-    if (!item) return;
-    if (!canWrite()) return;
-    pendingDeleteId = id;
-    setText(cfmText, "确定删除《" + item.title + "》？记录会立即删除，前台 /bangumi 不再显示，且不可撤销。");
-    if (cfmDlg && typeof cfmDlg.showModal === "function") {
-      cfmDlg.showModal();
-    } else if (window.confirm("确定删除《" + item.title + "》？删除后不可撤销。")) {
-      deleteItem(id);
-    }
-  }
-
-  function deleteItem(id) {
-    var item = findItem(id);
-    if (!item || state.busy[id]) return;
-    state.busy[id] = true;
-    lockRow(id);
-    api("DELETE", "/" + encodeURIComponent(id)).then(function (res) {
-      return readJson(res).then(function (body) { return { res: res, body: body }; });
-    }).then(function (result) {
-      if (authFailure(result.res.status)) return;
-      if (!result.res.ok) {
-        toast("删除失败 · HTTP " + result.res.status);
-        return;
-      }
-      state.items = state.items.filter(function (row) { return row.id !== id; });
-      toast("已删除《" + item.title + "》");
-    }).catch(function () {
-      toast("删除失败 · 网络或服务异常");
-    }).then(function () {
-      state.busy[id] = false;
-      renderAll();
-    });
-  }
-
-  /* ---------------- 同步 ---------------- */
-  function setSyncBusy(busy) {
-    state.syncing = busy;
-    if (syncMain) {
-      syncMain.disabled = busy;
-      if (busy) syncMain.setAttribute("aria-busy", "true");
-      else syncMain.removeAttribute("aria-busy");
-    }
-    setText(syncMainLabel, busy ? "同步中…" : "同步 Bangumi");
-  }
-
-  function sync() {
+  function syncBangumi() {
     if (state.syncing) return;
-    if (!canWrite()) return;
-    setSyncBusy(true);
-
-    api("POST", "/sync").then(function (res) {
-      return readJson(res).then(function (body) { return { res: res, body: body }; });
-    }).then(function (result) {
-      if (authFailure(result.res.status)) return;
-      var body = result.body || {};
-      if (!result.res.ok || body.ok !== true) {
-        var reason = body.reason || "HTTP " + result.res.status;
-        toast("同步失败 · " + reason);
-        return;
-      }
-      if (body.reason === "not_configured") {
-        toast("未配置 Bangumi 令牌，已跳过同步");
-        return;
-      }
-      var synced = typeof body.synced === "number" ? body.synced : 0;
-      toast("同步完成 · " + synced + " 条记录已更新");
-      hideBanner();
-      loadItems(true);
-    }).catch(function () {
-      toast("同步失败 · 网络异常");
-    }).then(function () {
-      setSyncBusy(false);
-    });
-  }
-
-  /* ---------------- 加载列表 ---------------- */
-  function loadItems(quiet) {
-    if (!API_URL) {
-      state.loading = false;
-      state.authorized = false;
-      showBanner("error", "页面缺少后台接口地址", "后台页面需要通过 data-api 传入接口地址。", false);
-      setPageState("配置错误 · 缺少接口地址");
-      renderAll();
+    var token = readToken();
+    if (!token) {
+      showBanner("warn", "需要管理令牌", "同步会请求 Bangumi 并写入 D1，请先在右上角填写管理令牌。", true);
       return;
     }
-    if (!state.token) {
-      state.loading = false;
-      state.authorized = false;
-      if (!quiet) {
-        showBanner("info", "尚未连接后台", "追番记录需要管理令牌才能读取。点右上角「管理令牌」填入后页面会自动刷新。", true);
-        setPageState("未连接 · 未填写管理令牌");
-      }
-      renderAll();
-      return;
-    }
+    state.syncing = true;
+    if (syncBtn) syncBtn.disabled = true;
+    if (syncLabel) syncLabel.textContent = "同步中…";
 
-    if (!quiet) {
-      state.loading = true;
-      setPageState("正在读取追番记录…");
-      renderAll();
-    }
-
-    api("GET", "").then(function (res) {
-      return readJson(res).then(function (body) { return { res: res, body: body }; });
-    }).then(function (result) {
-      state.loading = false;
-      if (authFailure(result.res.status)) {
-        state.items = [];
-        renderAll();
-        return;
-      }
-      if (!result.res.ok) {
-        state.authorized = false;
-        state.items = [];
-        showBanner("error", "读取追番记录失败（HTTP " + result.res.status + "）", "稍后重试；问题持续时查看 Worker 日志。", false);
-        setPageState("读取失败 · HTTP " + result.res.status);
-        renderAll();
-        return;
-      }
-      state.items = result.body && Array.isArray(result.body.items) ? result.body.items : [];
-      state.authorized = true;
-      hideBanner();
-      setPageState("已连接 · 最近读取 " + clockNow());
-      renderAll();
-    }).catch(function () {
-      state.loading = false;
-      state.authorized = false;
-      state.items = [];
-      showBanner("error", "无法连接后台接口", "网络或服务端异常，请稍后重试。", false);
-      setPageState("连接失败");
-      renderAll();
-    });
+    fetch(syncApi, {
+      method: "POST",
+      headers: { accept: "application/json", "x-admin-token": token }
+    })
+      .then(function (response) {
+        return readJson(response).then(function (body) { return { response: response, body: body }; });
+      })
+      .then(function (result) {
+        if (result.response.status === 401) {
+          showBanner("warn", "令牌无效", "右上角的管理令牌未通过校验，请重新填写。", true);
+          return;
+        }
+        if (result.response.status === 503) {
+          showBanner("warn", "服务端只读", "服务端没有配置管理令牌，暂时不能同步。", false);
+          return;
+        }
+        if (!result.response.ok || !result.body.ok) {
+          showBanner("error", "同步失败", result.body.reason ? "Bangumi 返回：" + result.body.reason : "同步没有完成，请稍后重试。", false);
+          return;
+        }
+        toast("同步 " + (result.body.synced || 0) + " 条记录");
+        return loadItems();
+      })
+      .catch(function (error) {
+        console.error("[admin-bangumi] 同步失败", error);
+        showBanner("error", "同步失败", "网络请求没有完成，请稍后重试。", false);
+      })
+      .finally(function () {
+        state.syncing = false;
+        if (syncBtn) syncBtn.disabled = false;
+        if (syncLabel) syncLabel.textContent = "同步 Bangumi";
+      });
   }
 
-  /* ---------------- 导出 ---------------- */
   function exportRecords() {
-    if (!state.authorized || state.items.length === 0) {
-      toast("没有可导出的记录");
-      return;
-    }
-    var payload = {
-      exportedAt: new Date().toISOString(),
-      items: state.items
-    };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var payload = JSON.stringify(state.items, null, 2);
+    var blob = new Blob([payload], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
@@ -838,67 +400,23 @@
     toast("已导出 · myon-bangumi.json");
   }
 
-  /* ---------------- 事件 ---------------- */
-  if (!listEl) return;
-
-  listEl.addEventListener("click", function (event) {
-    var target = event.target;
-    if (!target || !target.closest) return;
-    var button = target.closest("button[data-act]");
-    if (!button || !listEl.contains(button)) return;
-    var row = button.closest(".wrow");
-    if (!row) return;
-    var id = row.getAttribute("data-id");
-    var action = button.getAttribute("data-act");
-    if (action === "minus") stepEps(id, -1);
-    else if (action === "plus") stepEps(id, 1);
-    else if (action === "delete") askDelete(id);
-  });
-
-  listEl.addEventListener("change", function (event) {
-    var target = event.target;
-    if (!target || !target.closest) return;
-    var row = target.closest(".wrow");
-    if (!row) return;
-    var id = row.getAttribute("data-id");
-    if (target.classList.contains("w-input")) saveEps(id, target.value);
-    else if (target.classList.contains("w-score")) saveScore(id, target.value);
-    else if (target.classList.contains("w-comment")) saveComment(id, target.value);
-    else if (target.classList.contains("w-select")) saveStatus(id, target.value);
-    else if (target.classList.contains("w-type")) saveSubjectType(id, target.value);
-  });
-
-  each(typeChips, function (chip) {
+  Array.prototype.forEach.call(typeChips, function (chip) {
     chip.addEventListener("click", function () {
       state.typeFilter = chip.getAttribute("data-type") || "all";
       paintTypeChips();
       renderList();
     });
   });
-  if (clearFilters) {
-    clearFilters.addEventListener("click", function () {
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
       state.typeFilter = "all";
       paintTypeChips();
       renderList();
     });
   }
-
-  if (syncMain) syncMain.addEventListener("click", sync);
+  if (syncBtn) syncBtn.addEventListener("click", syncBangumi);
   if (exportBtn) exportBtn.addEventListener("click", exportRecords);
 
-  if (cfmCancel) cfmCancel.addEventListener("click", function () { cfmDlg.close(); });
-  if (cfmDlg) cfmDlg.addEventListener("click", function (event) {
-    if (event.target === cfmDlg) cfmDlg.close();
-  });
-  if (cfmOk) cfmOk.addEventListener("click", function () {
-    var id = pendingDeleteId;
-    pendingDeleteId = null;
-    cfmDlg.close();
-    if (id) deleteItem(id);
-  });
-
-  /* ---------------- 初始化 ---------------- */
   paintTypeChips();
-  renderAll();
-  loadItems(false);
+  loadItems();
 })();

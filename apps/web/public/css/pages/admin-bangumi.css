@@ -117,7 +117,11 @@
   .w-bar{flex:1 1 100%;max-width:100%;order:-1}
 }
 
-/* 简评：评分旁的窄输入，宽屏占满剩余行 */
-.w-meta .w-comment{flex:1 1 220px;min-width:160px;height:26px;padding:2px 7px;border:2px solid var(--pline-2);
-  background:var(--desk);color:var(--pp);font-family:var(--mono);font-size:11px;letter-spacing:.02em}
-.w-meta .w-comment:focus{border-color:var(--pp)}
+/* 只读简评展示 */
+.w-comment-read{margin:6px 0 0;font-family:var(--kai);font-size:14px;line-height:1.7;color:var(--pp-70);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+
+/* 代理封面加载失败时的占位，避免破图 */
+.mini-frame.is-missing{position:relative}
+.mini-frame.is-missing::after{content:"NO COVER";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--pp-55);text-align:center}

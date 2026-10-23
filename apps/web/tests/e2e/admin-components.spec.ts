@@ -96,6 +96,20 @@ test.describe('后台共享组件', () => {
     await expect(page.locator('.lamp .switch').first()).toBeVisible();
   });
 
+  test('后台追番只读：没有行内编辑控件', async ({ page }) => {
+    await page.goto('/admin/bangumi');
+    await expect(page.locator('#watchList .wrow').first()).toBeVisible();
+    expect(
+      await page
+        .locator(
+          '#watchList input, #watchList select, #watchList textarea, #watchList button',
+        )
+        .count(),
+    ).toBe(0);
+    await expect(page.locator('#cfmDlg')).toHaveCount(0);
+    await expect(page.locator('.notice')).toContainText('只读');
+  });
+
   test('空状态、分页、提示条在媒体库是同一套结构', async ({ page }) => {
     await page.goto('/admin/media');
     await expect(page.locator('.notice.notice--info').first()).toBeVisible();

@@ -1,15 +1,14 @@
 ---
 /**
- * 后台追番：列表来自 D1（GET /api/v1/admin/bangumi），
- * 进度 / 状态 / 评分回写 PATCH，删除走 DELETE，手动同步走 POST /sync。
- * 接口需要 x-admin-token，令牌只存在浏览器 localStorage，
- * 所以首屏数据由页面脚本带令牌请求，不在 SSR 里读取后台接口。
+ * 后台追番：只读列表，数据来自公开 GET /api/v1/bangumi。
+ * 条目由 Bangumi 同步维护，后台不再提供编辑/删除；只保留手动同步与导出。
  * 样式：public/css/pages/admin-bangumi.css；脚本：public/js/pages/admin-bangumi.js
  */
 import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 
-const bangumiApi = `${apiBasePath}/admin/bangumi`;
+const bangumiApi = `${apiBasePath}/bangumi`;
+const syncApi = `${apiBasePath}/admin/bangumi/sync`;
 ---
 
 <AdminLayout
@@ -21,7 +20,7 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
     <link rel="stylesheet" href="/css/pages/admin-bangumi.css" />
   </Fragment>
 
-<div class="page" data-api={bangumiApi}>
+<div class="page" data-api={bangumiApi} data-sync-api={syncApi}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -33,7 +32,7 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
           <span class="sticker sticker--paper">BANGUMI SYNC</span>
         </div>
         <h1>追番<span class="dot">。</span></h1>
-        <p class="pdate">共 <span id="pTotal">—</span> 条记录 <span class="sep">·</span> 按类型筛选与维护进度</p>
+        <p class="pdate">共 <span id="pTotal">—</span> 条记录 <span class="sep">·</span> 只读 · 由 Bangumi 同步维护</p>
       </div>
 
       <div class="ph-r">
@@ -46,12 +45,12 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
       </div>
     </header>
 
-    <!-- ---------- 唯一的页面级提示 ---------- -->
-    <div class="notice notice--info" id="tbanner" role="status" aria-live="polite" hidden>
-      <span class="notice-k" id="tbannerK">INFO</span>
+    <!-- ---------- 唯一的页面级提示：只读说明，同时承接同步错误 ---------- -->
+    <div class="notice notice--info" id="tbanner" role="status" aria-live="polite">
+      <span class="notice-k" id="tbannerK">READONLY</span>
       <div class="notice-c">
-        <b id="tbannerTitle"></b>
-        <p id="tbannerText"></p>
+        <b id="tbannerTitle">只读列表</b>
+        <p id="tbannerText">条目由 Bangumi 同步维护；修改评分、评论或进度请到 Bangumi，之后点「同步 Bangumi」。</p>
       </div>
       <button class="notice-btn" id="tbannerLink" type="button" data-token-open hidden>管理令牌</button>
     </div>
@@ -82,7 +81,7 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
         <h2 id="h-records">追番记录</h2>
         <span class="sec-en" id="secEn">ALL / —</span>
         <div class="sec-r">
-          <span class="sec-note" id="pageState" aria-live="polite">正在连接…</span>
+          <span class="sec-note" id="pageState" aria-live="polite">正在读取…</span>
           <span class="sec-note">最近更新 <b id="latestUpdated">—</b></span>
         </div>
       </div>
@@ -97,9 +96,10 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
           <button class="chip" type="button" data-type="real" aria-pressed="false">三次元</button>
         </div>
 
-        <span class="fb-count" id="fbCount" aria-live="polite">显示 — 条 · 筛选只作用于本页</span>
+        <span class="fb-count" id="fbCount" aria-live="polite">显示 — 条 · 只读列表</span>
         <button class="fb-clear" id="clearFilters" type="button">清除</button>
       </div>
+
 
       <div class="watch-list" id="watchList" aria-live="polite" aria-busy="true">
         <div class="empty">
@@ -109,22 +109,6 @@ const bangumiApi = `${apiBasePath}/admin/bangumi`;
     </section>
 
   </div>
-
-
-<!-- ---------- 删除确认 ---------- -->
-<dialog class="dlg" id="cfmDlg" aria-labelledby="cfmTitle">
-  <div class="dlg-box">
-    <div class="dlg-h"><span id="cfmTitle">删除追番记录</span><span>DELETE / 不可撤销</span></div>
-    <p class="cfm-text" id="cfmText"></p>
-    <div class="dlg-f">
-      <span class="dlg-c">删除后前台 /bangumi 立即消失</span>
-      <div class="dlg-a">
-        <button class="p-btn" type="button" id="cfmCancel">取消</button>
-        <button class="p-btn p-btn--pub" type="button" id="cfmOk">删除</button>
-      </div>
-    </div>
-  </div>
-</dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
