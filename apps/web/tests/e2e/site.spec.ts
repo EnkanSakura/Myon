@@ -96,7 +96,7 @@ test.describe('站点配置与订阅', () => {
       .join(' ');
 
     await page.goto('/articles');
-    await expect(page).toHaveTitle('文章 · ' + expectedTitle);
+    await expect(page).toHaveTitle(`文章 · ${expectedTitle}`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       'content',
       settings.description,
@@ -104,7 +104,7 @@ test.describe('站点配置与订阅', () => {
 
     // 首页也是同一套规则
     await page.goto('/');
-    await expect(page).toHaveTitle('首页 · ' + expectedTitle);
+    await expect(page).toHaveTitle(`首页 · ${expectedTitle}`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       'content',
       settings.description,

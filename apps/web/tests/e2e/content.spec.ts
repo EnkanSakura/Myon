@@ -81,6 +81,14 @@ test.describe('展柜', () => {
 });
 
 test.describe('追番', () => {
+  test('状态存档标题不被面板标签遮挡', async ({ page }) => {
+    await page.goto('/bangumi');
+    const tab = await page.locator('.archive .panel-tab').boundingBox();
+    const title = await page.locator('#archiveTitle').boundingBox();
+    if (!tab || !title) throw new Error('状态存档缺少面板标签或标题');
+    expect(title.y).toBeGreaterThanOrEqual(tab.y + tab.height);
+  });
+
   test('渲染总览、分类筛选与记录', async ({ page }) => {
     await page.goto('/bangumi');
     await expect(page.locator('h1').first()).toContainText('追番');
