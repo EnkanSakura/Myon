@@ -1,6 +1,10 @@
 import { bangumiSubjectTypes } from '@myon/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { mapBangumiCollections, syncBangumi } from '../../src/bangumi';
+import {
+  mapBangumiCollections,
+  nextAirAtForWeekday,
+  syncBangumi,
+} from '../../src/bangumi';
 import type { AppBindings } from '../../src/types';
 
 /** 够用的 D1 桩：只记录 prepare 过的 SQL，够同步的写入路径跑完。 */
@@ -169,6 +173,82 @@ describe('mapBangumiCollections', () => {
     expect(rows[0]?.status).toBe('wish');
     expect(rows[0]?.title).toBe('未命名');
   });
+
+  it('fills nextAirAt for watching anime from the airing calendar', () => {
+    // 2026-10-26 08:30（上海，周一）
+    const now = new Date('2026-10-26T00:30:00.000Z');
+    const airWeekdays = new Map<number, number>([
+      [400602, 1],
+      [463733, 6],
+    ]);
+    const rows = mapBangumiCollections(
+      [
+        {
+          subject_id: 400602,
+          subject_type: 2,
+          subject: { name: '周一档' },
+          type: 3,
+        },
+        {
+          subject_id: 463733,
+          subject_type: 2,
+          subject: { name: '周六档' },
+          type: 3,
+        },
+        {
+          subject_id: 999,
+          subject_type: 2,
+          subject: { name: '已完结' },
+          type: 2,
+        },
+      ],
+      'anime',
+      { airWeekdays, now },
+    );
+
+    expect(rows[0]?.nextAirAt).toBe('2026-10-25T16:00:00.000Z');
+    expect(rows[1]?.nextAirAt).toBe('2026-10-30T16:00:00.000Z');
+    // 已看过的动画不再需要下一话时间
+    expect(rows[2]?.nextAirAt).toBeNull();
+  });
+
+  it('leaves nextAirAt undefined when the calendar is unavailable', () => {
+    const rows = mapBangumiCollections([
+      { subject_id: 1, subject_type: 2, subject: { name: '番' }, type: 3 },
+    ]);
+    expect(rows[0]?.nextAirAt).toBeUndefined();
+  });
+
+  it('only enriches anime rows in the calendar', () => {
+    const rows = mapBangumiCollections(
+      [{ subject_id: 2, subject_type: 1, subject: { name: '书' }, type: 3 }],
+      'book',
+      {
+        airWeekdays: new Map([[2, 3]]),
+        now: new Date('2026-10-26T00:30:00.000Z'),
+      },
+    );
+    expect(rows[0]?.subjectType).toBe('book');
+    expect(rows[0]?.nextAirAt).toBeUndefined();
+  });
+});
+
+describe('nextAirAtForWeekday', () => {
+  const now = new Date('2026-10-26T00:30:00.000Z'); // 上海 2026-10-26 周一 08:30
+
+  it('picks the same day for today', () => {
+    expect(nextAirAtForWeekday(1, now)).toBe('2026-10-25T16:00:00.000Z');
+  });
+
+  it('picks the next occurrence for later weekdays', () => {
+    expect(nextAirAtForWeekday(6, now)).toBe('2026-10-30T16:00:00.000Z');
+    expect(nextAirAtForWeekday(7, now)).toBe('2026-10-31T16:00:00.000Z');
+  });
+
+  it('returns null for unknown weekday ids', () => {
+    expect(nextAirAtForWeekday(0, now)).toBeNull();
+    expect(nextAirAtForWeekday(9, now)).toBeNull();
+  });
 });
 
 describe('syncBangumi', () => {
@@ -184,6 +264,12 @@ describe('syncBangumi', () => {
   it('fetches all collections once and classifies them locally', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
+      if (url.pathname.endsWith('/calendar')) {
+        return new Response(
+          JSON.stringify([{ weekday: { id: 3 }, items: [{ id: 2 }] }]),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      }
       expect(url.searchParams.get('subject_type')).toBeNull();
       const entries = [
         {
@@ -232,12 +318,48 @@ describe('syncBangumi', () => {
 
     try {
       const result = await syncBangumi(createEnv());
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // 收藏 + 放送日历各一次
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         ok: true,
         synced: 5,
         byType: { anime: 1, book: 1, music: 1, game: 1, real: 1 },
       });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('still syncs metadata when the airing calendar fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/calendar')) {
+        return new Response('', { status: 500 });
+      }
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              subject_id: 2,
+              subject_type: 2,
+              subject: { name: '番', eps: 12 },
+              type: 3,
+              ep_status: 3,
+            },
+          ],
+          total: 1,
+          limit: 100,
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const result = await syncBangumi(createEnv());
+      expect(result.ok).toBe(true);
+      expect(result.synced).toBe(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -250,7 +372,7 @@ describe('syncBangumi', () => {
     try {
       const result = await syncBangumi(createEnv());
       expect(result).toEqual({ ok: false, synced: 0, reason: 'bgm_500' });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     } finally {
       vi.unstubAllGlobals();
     }

@@ -57,6 +57,12 @@ const SUBJECT_TYPE_BY_ID: Record<number, BangumiSubjectType> = {
   6: 'real',
 };
 
+/** Bangumi 放送日历（legacy `/calendar`）：只用来知道条目在星期几放送。 */
+interface BangumiCalendarDay {
+  weekday?: { id?: number; cn?: string };
+  items?: Array<{ id?: number }>;
+}
+
 /** 判断查询参数里的字符串是不是本站支持的追番类型。 */
 export function isBangumiSubjectType(
   value: string,
@@ -76,7 +82,53 @@ export interface BangumiUpsertRow {
   comment: string | null;
   /** Bangumi 原图 URL；没有封面时为空。 */
   coverSource: string | null;
+  /**
+   * 下一话放送时间（ISO，UTC）。
+   * 只有拿到放送星期时才知道「哪一天」，时间记当天 00:00（UTC+8）；
+   * undefined 表示这次同步没拿到日历数据，写入时保留数据库里的旧值。
+   */
+  nextAirAt?: string | null;
   updatedAt: string;
+}
+
+export interface BangumiMapOptions {
+  /** Bangumi subject id → 放送星期（1 周一 … 7 周日）。整份日历都没取到时传 undefined。 */
+  airWeekdays?: Map<number, number>;
+  /** 计算下一话日期用的「当前时间」，测试可注入。 */
+  now?: Date;
+}
+
+/** Bangumi 的星期编号（1 周一 … 7 周日）→ 与 UTC 对齐的 JS 星期（0 周日 … 6 周六）。 */
+const WEEKDAY_TO_UTC_DAY: Record<number, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+  7: 0,
+};
+
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * 按放送星期算「下一话」的日期：取今天或之后最近的该星期几，
+ * 时间未知，统一记当天 00:00（UTC+8）。
+ */
+export function nextAirAtForWeekday(
+  weekday: number,
+  now: Date = new Date(),
+): string | null {
+  const utcDay = WEEKDAY_TO_UTC_DAY[weekday];
+  if (utcDay === undefined) return null;
+  const shanghaiNow = new Date(now.getTime() + SHANGHAI_OFFSET_MS);
+  const daysAhead = (utcDay - shanghaiNow.getUTCDay() + 7) % 7;
+  const targetMidnightUtc = Date.UTC(
+    shanghaiNow.getUTCFullYear(),
+    shanghaiNow.getUTCMonth(),
+    shanghaiNow.getUTCDate() + daysAhead,
+  );
+  return new Date(targetMidnightUtc - SHANGHAI_OFFSET_MS).toISOString();
 }
 
 /**
@@ -89,7 +141,10 @@ export interface BangumiUpsertRow {
 export function mapBangumiCollections(
   entries: BangumiCollectionEntry[],
   fallbackSubjectType: BangumiSubjectType = 'anime',
+  options: BangumiMapOptions = {},
 ): BangumiUpsertRow[] {
+  const airWeekdays = options.airWeekdays;
+  const now = options.now ?? new Date();
   const rows: BangumiUpsertRow[] = [];
   for (const entry of entries) {
     const subjectType =
@@ -110,12 +165,23 @@ export function mapBangumiCollections(
         ? entry.vol_status
         : entry.ep_status;
     const watched = typeof progress === 'number' ? Math.max(0, progress) : 0;
+    const status = STATUS_BY_TYPE[entry.type ?? 0] ?? 'wish';
+    // 放送日程只有动画能对上 Bangumi 日历：命中的在追条目填下一话日期，
+    // 其余动画条目清空旧值；日历整份缺失时保持 undefined，写入时保留数据库旧值。
+    let nextAirAt: string | null | undefined;
+    if (subjectType === 'anime' && airWeekdays) {
+      const weekday = airWeekdays.get(entry.subject_id);
+      nextAirAt =
+        status === 'watching' && weekday !== undefined
+          ? nextAirAtForWeekday(weekday, now)
+          : null;
+    }
     rows.push({
       id: `bg_${entry.subject_id}`,
       subjectType,
       bangumiId: entry.subject_id,
       title: (subject.name_cn || subject.name || '未命名').slice(0, 200),
-      status: STATUS_BY_TYPE[entry.type ?? 0] ?? 'wish',
+      status,
       totalEps,
       watchedEps: totalEps > 0 ? Math.min(watched, totalEps) : watched,
       score:
@@ -131,6 +197,7 @@ export function mapBangumiCollections(
         subject.images?.medium ||
         subject.images?.common ||
         null,
+      nextAirAt,
       updatedAt: entry.updated_at || new Date().toISOString(),
     });
   }
@@ -222,14 +289,21 @@ async function fetchCollections(
 /** 一行 11 列，按 8 行一批写入，确保不超过 D1 的 100 个绑定参数。 */
 const INSERT_CHUNK = 8;
 
-async function upsertBangumiRows(
+async function writeBangumiRows(
   env: AppBindings,
   rows: BangumiUpsertRow[],
+  withNextAirAt: boolean,
 ): Promise<void> {
   if (rows.length === 0) return;
   const db = getDb(env.DB);
   for (let index = 0; index < rows.length; index += INSERT_CHUNK) {
-    const chunk = rows.slice(index, index + INSERT_CHUNK);
+    const chunk = rows.slice(index, index + INSERT_CHUNK).map((row) => {
+      const { nextAirAt, ...rest } = row;
+      return {
+        ...rest,
+        nextAirAt: withNextAirAt ? (nextAirAt ?? null) : null,
+      };
+    });
     await db
       .insert(bangumiShows)
       .values(chunk)
@@ -244,9 +318,67 @@ async function upsertBangumiRows(
           score: sql`excluded.score`,
           comment: sql`excluded.comment`,
           coverSource: sql`excluded.cover_source`,
+          ...(withNextAirAt ? { nextAirAt: sql`excluded.next_air_at` } : {}),
           updatedAt: sql`excluded.updated_at`,
         },
       });
+  }
+}
+
+/**
+ * 拿到放送日历的那批行才更新 next_air_at（包含「清空」）；没有日历数据时保留旧值，
+ * 避免 Bangumi 日历临时失败把已有的下一话时间抹掉。
+ */
+async function upsertBangumiRows(
+  env: AppBindings,
+  rows: BangumiUpsertRow[],
+): Promise<void> {
+  await writeBangumiRows(
+    env,
+    rows.filter((row) => row.nextAirAt !== undefined),
+    true,
+  );
+  await writeBangumiRows(
+    env,
+    rows.filter((row) => row.nextAirAt === undefined),
+    false,
+  );
+}
+
+/** Bangumi 放送日历：用来知道在追动画在星期几放送（不含具体时刻）。 */
+const CALENDAR_URL = 'https://api.bgm.tv/calendar';
+
+/**
+ * 拉取 Bangumi 放送日历，得到「subject id → 放送星期」。
+ * 只用于补 next_air_at 的日期；失败时返回 null，同步继续并保留数据库旧值。
+ */
+async function fetchAiringWeekdays(): Promise<Map<number, number> | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(CALENDAR_URL, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'myon-blog/1.0 (https://myon.top)',
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as BangumiCalendarDay[];
+    if (!Array.isArray(payload)) return null;
+    const weekdays = new Map<number, number>();
+    for (const day of payload) {
+      const weekday = day?.weekday?.id;
+      if (typeof weekday !== 'number') continue;
+      for (const item of day.items ?? []) {
+        if (typeof item?.id === 'number') weekdays.set(item.id, weekday);
+      }
+    }
+    return weekdays;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -261,12 +393,17 @@ export async function syncBangumi(env: AppBindings): Promise<SyncResult> {
     return { ok: true, synced: 0, reason: 'not_configured' };
   }
 
-  const fetched = await fetchCollections(username, token);
+  const [fetched, airWeekdays] = await Promise.all([
+    fetchCollections(username, token),
+    fetchAiringWeekdays(),
+  ]);
   if (!fetched.ok) {
     return { ok: false, synced: 0, reason: fetched.reason };
   }
 
-  const rows = mapBangumiCollections(fetched.entries);
+  const rows = mapBangumiCollections(fetched.entries, 'anime', {
+    airWeekdays: airWeekdays ?? undefined,
+  });
   await upsertBangumiRows(env, rows);
   const byType: Record<BangumiSubjectType, number> = {
     anime: 0,
@@ -296,6 +433,8 @@ export async function markBangumiWatched(
     .set({
       status: 'watched',
       watchedEps: row.totalEps,
+      // 改成「看过」后不再需要下一话时间，清掉旧的放送日程。
+      nextAirAt: null,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(bangumiShows.id, id));

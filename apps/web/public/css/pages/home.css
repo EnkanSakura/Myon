@@ -125,6 +125,11 @@
 .p4 .collage .sticker{position:absolute;z-index:6}
 .p4 .collage .s1{left:-10px;top:14px;transform:rotate(-4deg)}
 .p4 .collage .s2{right:-8px;top:-12px;transform:rotate(3deg)}
+/* 真实藏品不足 3 件时的拼贴变体：1 件铺满、2 件并排 */
+.p4 .collage--one{grid-template-columns:1fr;grid-template-rows:1fr;height:min(56vh,520px)}
+.p4 .collage--one .f1{grid-row:1/2;grid-column:auto}
+.p4 .collage--two{grid-template-columns:1fr 1fr;grid-template-rows:1fr;height:min(54vh,500px)}
+.p4 .collage--two .f1{grid-row:1/2;grid-column:auto}
 .p4 .halo{position:absolute;right:2%;top:2%;width:340px;height:340px;border-radius:50%;
   background:radial-gradient(circle,var(--pink) 0%,var(--pink) 52%,transparent 53%);opacity:.25;z-index:-1;filter:blur(.4px)}
 .p4 .halo::after{content:"";position:absolute;inset:14%;border:3px solid var(--pink-deep);border-radius:50%;opacity:.5}
@@ -133,7 +138,7 @@
 .p5 .inner{display:flex;flex-direction:column;gap:26px}
 .p5 .head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;border-bottom:var(--border) solid var(--ink);padding-bottom:14px}
 .p5 h2{font-size:clamp(40px,4.6vw,64px)}
-.p5 .onair{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em}
+.p5 .onair{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em}
 .p5 .onair .dot{width:10px;height:10px;background:var(--pink);border:2px solid var(--ink);display:inline-block}
 .p5 .programs{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .program{border:var(--border) solid var(--ink);background:var(--paper);box-shadow:var(--hard);padding:18px 18px 16px;position:relative;overflow:hidden;transition:transform .16s var(--ease),box-shadow .16s var(--ease)}
@@ -141,18 +146,18 @@
 .program::before{content:"";position:absolute;right:-24px;top:-24px;width:110px;height:110px;background:var(--pink);border:3px solid var(--ink);transform:rotate(18deg);opacity:.85}
 .program .ptop{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1}
 .program .pno{font-family:var(--disp);font-size:58px;line-height:.8;letter-spacing:-.04em}
-.program .ep{font-family:var(--mono);font-size:11px;letter-spacing:.12em;background:var(--paper);border:2px solid var(--ink);padding:2px 6px}
-.program h3{margin:26px 0 4px;font-size:24px;line-height:1.35;font-weight:900;position:relative;z-index:1;max-width:12ch}
-.program .meta{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62);position:relative;z-index:1}
+.program .ep{font-family:var(--mono);font-size:11px;letter-spacing:.12em;background:var(--paper);border:2px solid var(--ink);padding:2px 6px;white-space:nowrap}
+.program h3{margin:26px 0 4px;font-size:24px;line-height:1.35;font-weight:900;position:relative;z-index:1;max-width:12ch;overflow-wrap:anywhere}
+.program .meta{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62);position:relative;z-index:1;line-height:1.8;overflow-wrap:anywhere}
 .program .prog{display:flex;gap:3px;margin-top:18px;position:relative;z-index:1}
 .program .prog i{display:block;flex:1;height:10px;border:1px solid var(--ink);background:var(--paper)}
 .program .prog i.on{background:var(--pink)}
-.program .next{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink-62);margin-top:10px;position:relative;z-index:1}
+.program .next{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink-62);margin-top:10px;position:relative;z-index:1}
 .schedule{display:grid;grid-template-columns:repeat(7,1fr);border:var(--border) solid var(--ink);background:var(--paper);box-shadow:var(--hard-sm)}
 .schedule .d{border-left:2px solid var(--ink);padding:10px 10px 12px}
 .schedule .d:first-child{border-left:0}
 .schedule .d b{display:block;font-size:12px;font-weight:900;margin-bottom:4px}
-.schedule .d span{display:block;font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-62)}
+.schedule .d span{display:block;font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-62);overflow-wrap:anywhere}
 .schedule .d.is-today{background:var(--pink)}
 .schedule .d.is-today span{color:var(--ink)}
 
@@ -255,6 +260,13 @@
   .p4 .collage{height:auto;grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
   .p4 .collage .f1{grid-row:auto;grid-column:1/3;aspect-ratio:16/10}
   .p4 .collage .f2,.p4 .collage .f3{aspect-ratio:4/3}
+  .p4 .collage--one{grid-template-columns:1fr;height:auto}
+  .p4 .collage--one .f1{grid-column:auto;aspect-ratio:16/10}
+  .p4 .collage--two{grid-template-columns:1fr 1fr;grid-template-rows:auto;height:auto}
+  .p4 .collage--two .f1{grid-row:auto;grid-column:auto;aspect-ratio:4/3}
+  .home-empty{grid-column:1/-1}
+  .p5 .head{flex-wrap:wrap;align-items:flex-start;gap:14px}
+  .p5 .onair{justify-content:flex-start}
   .p3 .inner{grid-template-columns:1fr;gap:24px}
   .p3 .grid4{grid-template-columns:1fr 1fr}
   .p6 .drawers{grid-template-columns:repeat(2,1fr)}
@@ -275,6 +287,8 @@
   .p1 h1{font-size:clamp(32px,9vw,48px);line-height:1.15}
   .p4 .collage{grid-template-columns:1fr;grid-template-rows:auto}
   .p4 .collage .f1{grid-column:auto}
+  .p4 .collage--two{grid-template-columns:1fr}
+  .p4 .collage--two .f1{grid-column:auto}
   .p5 .programs{grid-template-columns:1fr}
   .schedule{grid-template-columns:repeat(2,1fr)}
   .p6 .drawers{grid-template-columns:1fr 1fr}
@@ -284,8 +298,13 @@
   .sheet{inset:8px}
 }
 
-/* 最近文章为空时的兜底 */
-.p2 .rows-empty{padding:28px 0;border-top:2px dashed var(--line-2);font-size:14px;line-height:1.8;color:var(--ink-62)}
+/* ================= 空态（P2/P3/P4/P5/P6 共用） =================
+   条目为空时只给提示与入口，不渲染内容图或封面装饰图。 */
+.home-empty{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:26px 2px;margin-top:6px;border-top:2px dashed var(--line-2);font-size:14px;line-height:1.8;color:var(--ink-62)}
+.home-empty p{margin:0}
+.home-empty .arrow-link{font-size:13px}
+/* 没有文章时不保留第 2 页右侧图位 */
+.p2 .inner--no-side{grid-template-columns:1fr}
 
 /* 首页最近文章：摘要另起一行，避免和标题挤在同一行 */
 .p2 .rows .r .d{display:block;margin-top:4px;font-size:13px;line-height:1.7}

@@ -5,15 +5,17 @@ import app from '@myon/back';
 import { renderMarkdown } from '@myon/back/markdown';
 import type { AppBindings } from '@myon/back/types';
 import {
+  type BangumiShow,
   defaultSiteSettings,
   formatPageTitle,
+  type GalleryItem,
   type HomeLink,
   type HomeStatPreset,
+  type MomentListItem,
   type Paginated,
   type PostListItem,
   type SiteIcon,
   type SiteStats,
-  type ToolItem,
   type ToolListResponse,
   toPublicSiteSettings,
 } from '@myon/shared';
@@ -25,8 +27,8 @@ import { mediaUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
-// 首页所有插图（封面与第 2/3/4 页的装饰框）统一用后台「封面图」设置的那张图，
-// 不再硬编码 /media 下的设计占位路径，避免指向 R2 里不存在的对象。
+// 第 2 页右侧装饰框统一用后台「封面图」设置（详见 AGENTS 首页约定）；
+// 第 3/4 页只展示真实条目自带的图片，条目为空时不渲染任何图片，改为空态提示。
 const homeCoverImage = mediaUrl(home.cover.image);
 const end = site.end;
 const leadLines = home.lead.split(String.fromCharCode(10));
@@ -34,53 +36,18 @@ const afterwordLines = end.afterword.body.split(String.fromCharCode(10));
 const author = site.author || site.name;
 const year = String(new Date().getFullYear());
 
-const statsRes = await app.request(
-  '/api/v1/stats',
-  {},
-  env as unknown as AppBindings,
-);
 const bindings = env as unknown as AppBindings;
-const siteStats: SiteStats | null = statsRes.ok
-  ? ((await statsRes.json()) as SiteStats)
-  : null;
-const publishedCount = siteStats?.posts.published ?? 0;
 
-// 封面「关于」纸卡：直接用服务端渲染好的 HTML（与正文同一套 Markdown 渲染器），
-// 不再由前端迷你渲染器二次解析，删除线/表格/代码块等格式才不会丢。
-let aboutHtml = '';
-try {
-  const aboutRes = await app.request('/api/v1/about', {}, bindings);
-  if (aboutRes.ok) {
-    const about = (await aboutRes.json()) as { html?: string };
-    aboutHtml = about.html?.trim() ?? '';
+/** 首页各面板都走进程内 API；某个面板读取失败时只让该面板退回空态。 */
+async function readHomeApi<T>(path: string): Promise<T | null> {
+  try {
+    const response = await app.request(path, {}, bindings);
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error('[home] 读取失败', path, error);
+    return null;
   }
-} catch (error) {
-  console.error('[home] 读取关于页失败', error);
-}
-if (!aboutHtml) aboutHtml = renderMarkdown(defaultAboutMarkdown);
-
-// 首页第 2 页的最近文章来自 D1，按发布时间取最新 3 条。
-let latestPosts: PostListItem[] = [];
-try {
-  const postsRes = await app.request('/api/v1/posts?limit=3', {}, bindings);
-  if (postsRes.ok) {
-    const body = (await postsRes.json()) as Paginated<PostListItem>;
-    latestPosts = body.items ?? [];
-  }
-} catch (error) {
-  console.error('[home] 读取最近文章失败', error);
-}
-
-// 首页第 6 页的工具抽屉来自 D1（只取启用项），不再写死工具名与调用次数。
-let homeTools: ToolItem[] = [];
-try {
-  const toolsRes = await app.request('/api/v1/tools', {}, bindings);
-  if (toolsRes.ok) {
-    const body = (await toolsRes.json()) as ToolListResponse;
-    homeTools = body.items ?? [];
-  }
-} catch (error) {
-  console.error('home tools request failed', error);
 }
 
 // 联系方式配置的是 Iconify 名称，这里批量换成可内联的 SVG；取不到就退回内置线稿图标。
@@ -91,22 +58,85 @@ const iconNames = [
       .filter((icon): icon is string => typeof icon === 'string'),
   ),
 ];
-const iconSvgs = new Map<string, string>();
-if (iconNames.length > 0) {
-  try {
-    const iconsRes = await app.request(
-      `/api/v1/icons?names=${encodeURIComponent(iconNames.join(','))}`,
-      {},
-      env as unknown as AppBindings,
-    );
-    if (iconsRes.ok) {
-      const body = (await iconsRes.json()) as { icons: SiteIcon[] };
-      for (const icon of body.icons) iconSvgs.set(icon.name, icon.svg);
+
+// 一次并发取齐七页的数据，避免串行等待；只读公开接口，不新增 API 契约。
+const [
+  statsData,
+  aboutData,
+  postsData,
+  toolsData,
+  momentsData,
+  galleryData,
+  bangumiData,
+  iconData,
+] = await Promise.all([
+  readHomeApi<SiteStats>('/api/v1/stats'),
+  readHomeApi<{ html?: string }>('/api/v1/about'),
+  readHomeApi<Paginated<PostListItem>>('/api/v1/posts?limit=3'),
+  readHomeApi<ToolListResponse>('/api/v1/tools'),
+  readHomeApi<Paginated<MomentListItem>>('/api/v1/moments?limit=4'),
+  readHomeApi<Paginated<GalleryItem>>('/api/v1/gallery?limit=3'),
+  // 第 5 页是动画放送：只取动画，limit 放到上限用于生成本周放送表。
+  readHomeApi<Paginated<BangumiShow>>('/api/v1/bangumi?type=anime&limit=100'),
+  iconNames.length > 0
+    ? readHomeApi<{ icons: SiteIcon[] }>(
+        `/api/v1/icons?names=${encodeURIComponent(iconNames.join(','))}`,
+      )
+    : Promise.resolve(null),
+]);
+
+const siteStats = statsData;
+const publishedCount = siteStats?.posts.published ?? 0;
+
+// 封面「关于」纸卡：直接用服务端渲染好的 HTML（与正文同一套 Markdown 渲染器），
+// 不再由前端迷你渲染器二次解析，删除线/表格/代码块等格式才不会丢。
+const aboutHtml =
+  aboutData?.html?.trim() || renderMarkdown(defaultAboutMarkdown);
+
+// 第 2 页：最近文章（按发布时间倒序，取最新 3 条）。
+const latestPosts = postsData?.items ?? [];
+
+// 第 3 页：最近动态（接口已按置顶 + 时间倒序，只返回公开动态）。
+const latestMoments = momentsData?.items ?? [];
+const momentsTotal = momentsData?.total ?? siteStats?.moments.total ?? 0;
+
+// 第 4 页：展柜里已展示的藏品；没有图的条目不占图位。
+const galleryCards = (galleryData?.items ?? [])
+  .filter((item) => item.mediaKey)
+  .slice(0, 3)
+  .map((item) => ({ ...item, image: mediaUrl(item.mediaKey) ?? '' }));
+const galleryTotal = siteStats?.gallery.displayed ?? galleryData?.total ?? 0;
+const galleryCategories = siteStats?.gallery.categories ?? [];
+const galleryCategoryRows = galleryCategories.slice(0, 4);
+const galleryOtherCount = galleryCategories
+  .slice(4)
+  .reduce((sum, entry) => sum + entry.count, 0);
+
+// 第 5 页：动画在追。nextAirAt 只有同步数据带回来时才显示放送信息，不自行推算。
+const animeShows = (bangumiData?.items ?? []).filter(
+  (item) => item.status === 'watching',
+);
+const animeWatchingCount =
+  siteStats?.bangumi.byType.anime.watching ?? animeShows.length;
+const bangumiWatchingCount = siteStats?.bangumi.watching ?? animeWatchingCount;
+const watchedShows = animeShows
+  .slice()
+  .sort((a, b) => {
+    // 有放送日期的排在前面（更有可能是正在更新的一季），其次按最近更新。
+    if (!!a.nextAirAt !== !!b.nextAirAt) return a.nextAirAt ? -1 : 1;
+    if (a.nextAirAt && b.nextAirAt) {
+      return a.nextAirAt.localeCompare(b.nextAirAt);
     }
-  } catch (error) {
-    console.error('icon request failed', error);
-  }
-}
+    return b.updatedAt.localeCompare(a.updatedAt);
+  })
+  .slice(0, 3);
+const airingShows = animeShows.filter((item) => item.nextAirAt);
+
+// 第 6 页：工具抽屉来自 D1（只取启用项），不再写死工具名与调用次数。
+const homeTools = toolsData?.items ?? [];
+
+const iconSvgs = new Map<string, string>();
+for (const icon of iconData?.icons ?? []) iconSvgs.set(icon.name, icon.svg);
 
 function formatLatest(value: string | null | undefined): string {
   if (!value) return '—';
@@ -120,6 +150,137 @@ function formatLatest(value: string | null | undefined): string {
 function formatWords(value: number): string {
   return value >= 10000 ? `${(value / 10000).toFixed(1)} 万` : String(value);
 }
+
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** 固定按 UTC+8 拆日期，不依赖运行时 Intl 时区数据。 */
+function shanghaiParts(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const shifted = new Date(date.getTime() + SHANGHAI_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    weekday: shifted.getUTCDay(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+  };
+}
+
+/** 动态面板的时间：刚刚 / N 分钟前 / 今天 / 昨天 / 周X / 完整日期。 */
+function formatRelativeTime(value: string): string {
+  const parts = shanghaiParts(value);
+  if (!parts) return '—';
+  const diffMinutes = Math.floor(
+    (Date.now() - new Date(value).getTime()) / 60000,
+  );
+  if (diffMinutes < 1) return '刚刚';
+  if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
+  const now = shanghaiParts(new Date().toISOString());
+  if (!now) return `${parts.year}.${pad2(parts.month)}.${pad2(parts.day)}`;
+  if (
+    parts.year === now.year &&
+    parts.month === now.month &&
+    parts.day === now.day
+  ) {
+    return `今天 ${pad2(parts.hour)}:${pad2(parts.minute)}`;
+  }
+  const dayDiff = Math.round(
+    (Date.UTC(now.year, now.month - 1, now.day) -
+      Date.UTC(parts.year, parts.month - 1, parts.day)) /
+      86400000,
+  );
+  if (dayDiff === 1) return `昨天 ${pad2(parts.hour)}:${pad2(parts.minute)}`;
+  if (dayDiff > 1 && dayDiff <= 6) {
+    return `${WEEKDAY_LABELS[parts.weekday]} ${pad2(parts.hour)}:${pad2(parts.minute)}`;
+  }
+  return `${parts.year}.${pad2(parts.month)}.${pad2(parts.day)}`;
+}
+
+/** 放送时间同步自 Bangumi 日历时只有「星期几」，当天 00:00（UTC+8）视为时刻未知。 */
+function hasAirTime(value: string): boolean {
+  const parts = shanghaiParts(value);
+  return !!parts && (parts.hour !== 0 || parts.minute !== 0);
+}
+
+/** 放送信息：有具体时刻显示「周X HH:mm」，只有日期时只显示星期。 */
+function formatAirAt(value: string): string {
+  const parts = shanghaiParts(value);
+  if (!parts) return '';
+  const day = WEEKDAY_LABELS[parts.weekday];
+  return hasAirTime(value)
+    ? `${day} ${pad2(parts.hour)}:${pad2(parts.minute)}`
+    : day;
+}
+
+/** 放送时刻（HH:mm）；只有日期时返回空串，由调用方省略这一行。 */
+function formatAirClock(value: string): string {
+  if (!hasAirTime(value)) return '';
+  const parts = shanghaiParts(value);
+  if (!parts) return '';
+  return `${pad2(parts.hour)}:${pad2(parts.minute)}`;
+}
+
+/** 距离下一话还有多久：小时 / 天。 */
+function formatCountdown(value: string): string {
+  const target = new Date(value).getTime();
+  if (Number.isNaN(target)) return '';
+  const diffMs = target - Date.now();
+  if (diffMs <= 0) return '即将更新';
+  const hours = Math.ceil(diffMs / 3600000);
+  return hours <= 24
+    ? `还有 ${hours} 小时`
+    : `还有 ${Math.ceil(diffMs / 86400000)} 天`;
+}
+
+/** 摘要文字：压掉换行，超长截断。 */
+function brief(text: string, max = 90): string {
+  const plain = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > max ? `${plain.slice(0, max)}…` : plain;
+}
+
+/** 追番卡进度条：总集数不超过 12 时按真实集数，否则固定 12 格按比例填充。 */
+function progressTicks(watched: number, total: number): boolean[] {
+  const segments = total > 0 && total <= 12 ? total : 12;
+  const filled = total > 0 ? Math.round((watched / total) * segments) : 0;
+  return Array.from({ length: segments }, (_, index) => index < filled);
+}
+
+/** 本周放送表：只聚合同步数据带 nextAirAt 的在追动画（周一到周日）。 */
+const airingSchedule = (() => {
+  const today = shanghaiParts(new Date().toISOString());
+  const weekOrder = [1, 2, 3, 4, 5, 6, 0];
+  const days = weekOrder.map((weekday) => ({
+    label: WEEKDAY_LABELS[weekday],
+    weekday,
+    isToday: today?.weekday === weekday,
+    shows: [] as { title: string; time: string }[],
+  }));
+  const byWeekday = new Map(days.map((day) => [day.weekday, day]));
+  for (const show of airingShows) {
+    if (!show.nextAirAt) continue;
+    const parts = shanghaiParts(show.nextAirAt);
+    const day = parts ? byWeekday.get(parts.weekday) : undefined;
+    if (!parts || !day) continue;
+    day.shows.push({
+      title: show.title,
+      time: formatAirClock(show.nextAirAt),
+    });
+  }
+  for (const day of days)
+    day.shows.sort((a, b) =>
+      (a.time || '99:99').localeCompare(b.time || '99:99'),
+    );
+  return days;
+})();
 
 const contactIcons: Record<string, string> = {
   mail: '<svg class="ic-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14"/><path d="m3 7 9 6 9-6"/></svg>',
@@ -295,7 +456,7 @@ function presetValue(preset: HomeStatPreset): string {
 
   <!-- 02 文章 -->
   <section class="panel p2" data-room="文章" data-no="02" aria-label="第 2 页，文章">
-    <div class="inner">
+    <div class:list={['inner', latestPosts.length === 0 && 'inner--no-side']}>
       <div class="p2-left">
       <div class="head reveal" style="--i:0">
         <div>
@@ -317,83 +478,110 @@ function presetValue(preset: HomeStatPreset): string {
                 <span class="m">{formatDate(post.publishedAt)}<br />{post.readingMinutes} 分钟</span>
               </a>
             ))}
+            <a class="arrow-link more" href="/articles" style="margin-top:20px">全部 {publishedCount} 篇 <span class="ar" aria-hidden="true">→</span></a>
           </div>
         ) : (
-          <div class="rows-empty">还没有发布文章。</div>
+          <div class="home-empty">
+            <p>还没有发布文章。</p>
+            <a class="arrow-link" href="/articles">去看全部文章 <span class="ar" aria-hidden="true">→</span></a>
+          </div>
         )}
-        <a class="arrow-link more" href="/articles" style="margin-top:20px">全部 {publishedCount} 篇 <span class="ar" aria-hidden="true">→</span></a>
       </div>
       </div>
-      <div class="side">
-        <div class="frame reveal" style="--i:2"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
-        <div class="frame two reveal" style="--i:3"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
-      </div>
+      {latestPosts.length > 0 && (
+        <div class="side">
+          <div class="frame reveal" style="--i:2"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
+          <div class="frame two reveal" style="--i:3"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
+        </div>
+      )}
       <span class="bgtype" aria-hidden="true">ARTICLES</span>
     </div>
   </section>
 
-  <!-- 03 动态 -->
+  <!-- 03 动态：最近 4 条公开动态 -->
   <section class="panel p3" data-room="动态" data-no="03" aria-label="第 3 页，动态">
     <div class="inner">
       <div class="head reveal" style="--i:0">
         <span class="sticker">{home.pages[2]}</span>
         <h2 style="margin-top:12px">最近发生的<span class="hl">。</span></h2>
         <p>写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。</p>
-        <div class="count"><b>186</b><span class="mono">条 / NOTES</span></div>
-        <a class="arrow-link" href="/moments" style="margin-top:18px">全部动态 <span class="ar">→</span></a>
+        <div class="count"><b>{momentsTotal}</b><span class="mono">条 / NOTES</span></div>
+        {latestMoments.length > 0 && (
+          <a class="arrow-link" href="/moments" style="margin-top:18px">全部动态 <span class="ar">→</span></a>
+        )}
       </div>
-      <div class="grid4">
-        <div class="mini-panel m1 reveal" style="--i:1">
-          <div class="pm"><span>2 小时前</span><span>N°186</span></div>
-          <p>凌晨一点，Worker 的冷启动终于稳定在 40ms 以内。值了。</p>
-          <div class="pf"><span>12 回复 · 48 喜欢</span><span>#技术</span></div>
+      {latestMoments.length > 0 ? (
+        <div class="grid4">
+          {latestMoments.map((moment, index) => (
+            <div class:list={['mini-panel', 'reveal', `m${index + 1}`, { 'is-pink': index === 1 }]} style={`--i:${index + 1}`}>
+              <div class="pm">
+                <span>{formatRelativeTime(moment.createdAt)}</span>
+                <span>N°{String(Math.max(1, momentsTotal - index)).padStart(3, '0')}</span>
+              </div>
+              <p>{brief(moment.body)}</p>
+              {moment.mediaKey && (
+                <div class="frame">
+                  <img src={mediaUrl(moment.mediaKey) ?? ''} alt={`动态配图 · ${moment.category}`} loading="lazy" />
+                  <div class="cap"><span>{moment.category}</span><span>P.03</span></div>
+                </div>
+              )}
+              <div class="pf">
+                <span>{moment.pinned ? '置顶' : '动态'}</span>
+                <span>#{moment.tag || moment.category}</span>
+              </div>
+            </div>
+          ))}
         </div>
-        <div class="mini-panel m2 is-pink reveal" style="--i:2">
-          <div class="pm"><span>昨天 22:41</span><span>N°185</span></div>
-          <p>神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。</p>
-          <div class="frame"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE</span><span>册页</span></div></div>
+      ) : (
+        <div class="home-empty">
+          <p>还没有发布动态。</p>
+          <a class="arrow-link" href="/moments">去看全部动态 <span class="ar" aria-hidden="true">→</span></a>
         </div>
-        <div class="mini-panel m3 reveal" style="--i:3">
-          <div class="pm"><span>周二 18:03</span><span>N°184</span></div>
-          <p>把追番页面重写了。现在从 Bangumi 拉数据，每 6 小时同步一次，进度在下班路上就能看到。</p>
-          <div class="pf"><span>9 回复 · 34 喜欢</span><span>#技术</span></div>
-        </div>
-        <div class="mini-panel m4 reveal" style="--i:4">
-          <div class="pm"><span>上周六</span><span>N°182</span></div>
-          <p>去看了个小的浮世绘展，回来把首页的粉调亮了一格。</p>
-          <div class="frame"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE</span><span>展场</span></div></div>
-        </div>
-      </div>
+      )}
     </div>
   </section>
 
-  <!-- 04 展柜 -->
+  <!-- 04 展柜：统计与拼贴都来自 D1 已展示的藏品 -->
   <section class="panel p4" data-room="展柜" data-no="04" aria-label="第 4 页，展柜">
     <div class="inner">
       <div class="head reveal" style="--i:0">
         <div class="kicker"><span class="sticker">{home.pages[3]}</span></div>
         <h2>收藏<span class="hl">。</span></h2>
-        <div class="big"><b>57</b><span class="u">件 / 4 类</span></div>
-        <div class="cat-list">
-          <span>手办 <b>21</b></span>
-          <span>画集 <b>14</b></span>
-          <span>纸品 <b>12</b></span>
-          <span>小物 <b>10</b></span>
+        <div class="big"><b>{galleryTotal}</b><span class="u">件 / {galleryCategories.length} 类</span></div>
+        {galleryCategoryRows.length > 0 && (
+          <div class="cat-list">
+            {galleryCategoryRows.map((category) => (
+              <span>{category.name} <b>{category.count}</b></span>
+            ))}
+            {galleryOtherCount > 0 && <span>其他 <b>{galleryOtherCount}</b></span>}
+          </div>
+        )}
+        {galleryTotal > 0 && (
+          <a class="arrow-link" href="/gallery" style="margin-top:20px">走进展柜 <span class="ar">→</span></a>
+        )}
+      </div>
+      {galleryCards.length > 0 ? (
+        <div class:list={['collage', 'reveal', galleryCards.length === 1 && 'collage--one', galleryCards.length === 2 && 'collage--two']} style="--i:1">
+          <span class="halo" aria-hidden="true"></span>
+          {galleryCards.map((item, index) => (
+            <div class:list={['frame', `f${index + 1}`]}>
+              <img src={item.image} alt={item.name} loading="lazy" />
+              <div class="cap"><span>{item.no} {item.name}</span><span>{item.category}</span></div>
+            </div>
+          ))}
+          <span class="sticker s1" style="background:var(--ink);color:var(--pink)">NEW ARRIVAL</span>
+          <span class="sticker s2 sticker--paper">CAT.04</span>
         </div>
-        <a class="arrow-link" href="/gallery" style="margin-top:20px">走进展柜 <span class="ar">→</span></a>
-      </div>
-      <div class="collage reveal" style="--i:1">
-        <span class="halo" aria-hidden="true"></span>
-        <div class="frame f1"><img src={homeCoverImage} alt=""><div class="cap"><span>C-001 鬼之根付</span><span>手办</span></div></div>
-        <div class="frame f2"><img src={homeCoverImage} alt=""><div class="cap"><span>E-007 莳绘文箱</span><span>小物</span></div></div>
-        <div class="frame f3"><img src={homeCoverImage} alt=""><div class="cap"><span>H-019 笑面根付</span><span>手办</span></div></div>
-        <span class="sticker s1" style="background:var(--ink);color:var(--pink)">NEW ARRIVAL</span>
-        <span class="sticker s2 sticker--paper">CAT.04</span>
-      </div>
+      ) : (
+        <div class="home-empty">
+          <p>{galleryTotal > 0 ? '藏品的图片还在整理。' : '展柜里还没有展出藏品。'}</p>
+          <a class="arrow-link" href="/gallery">走进展柜 <span class="ar" aria-hidden="true">→</span></a>
+        </div>
+      )}
     </div>
   </section>
 
-  <!-- 05 追番 -->
+  <!-- 05 追番：动画在追与本周放送都来自 Bangumi 同步到 D1 的数据 -->
   <section class="panel p5" data-room="追番" data-no="05" aria-label="第 5 页，追番">
     <div class="inner">
       <div class="head reveal" style="--i:0">
@@ -401,40 +589,61 @@ function presetValue(preset: HomeStatPreset): string {
           <div class="kicker" style="margin-bottom:10px"><span class="sticker">{home.pages[4]}</span></div>
           <h2>在追<span class="hl">。</span></h2>
         </div>
-        <div class="onair"><span class="dot"></span><span>ON AIR · 本季 3 部</span><a class="arrow-link" href="/bangumi">全部记录 <span class="ar">→</span></a></div>
+        <div class="onair">
+          <span class="dot"></span>
+          <span>{watchedShows.length > 0 ? `ON AIR · 动画在追 ${animeWatchingCount} 部${bangumiWatchingCount > animeWatchingCount ? ` · 全部在追 ${bangumiWatchingCount}` : ''}` : 'ON AIR · 还没有在追的动画'}</span>
+          {watchedShows.length > 0 && (
+            <a class="arrow-link" href="/bangumi">全部记录 <span class="ar">→</span></a>
+          )}
+        </div>
       </div>
-      <div class="programs reveal" style="--i:1">
-        <a class="program" href="/bangumi">
-          <div class="ptop"><span class="pno">01</span><span class="ep">EP.07 / 12</span></div>
-          <h3>葬送的芙莉莲<br>第二季</h3>
-          <div class="meta">2026 · 每周五 23:00</div>
-          <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="next"><span>下一话 · 周五</span><span>还有 2 天</span></div>
-        </a>
-        <a class="program" href="/bangumi">
-          <div class="ptop"><span class="pno">02</span><span class="ep">EP.03 / 12</span></div>
-          <h3>胆大党<br>第二季</h3>
-          <div class="meta">2026 · 每周二 01:00</div>
-          <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="next"><span>下一话 · 周二</span><span>还有 5 天</span></div>
-        </a>
-        <a class="program" href="/bangumi">
-          <div class="ptop"><span class="pno">03</span><span class="ep">EP.12 / 26</span></div>
-          <h3>虫师</h3>
-          <div class="meta">补番 · 无固定更新</div>
-          <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="next"><span>下一话 · 随缘</span><span>12 / 26</span></div>
-        </a>
-      </div>
-      <div class="schedule reveal" style="--i:2" aria-label="本周更新">
-        <div class="d"><b>周一</b><span>—</span></div>
-        <div class="d is-today"><b>周二</b><span>胆大党 S2<br>01:00</span></div>
-        <div class="d"><b>周三</b><span>—</span></div>
-        <div class="d"><b>周四</b><span>—</span></div>
-        <div class="d"><b>周五</b><span>芙莉莲 S2<br>23:00</span></div>
-        <div class="d"><b>周六</b><span>—</span></div>
-        <div class="d"><b>周日</b><span>虫师<br>补番</span></div>
-      </div>
+      {watchedShows.length > 0 ? (
+        <div class="programs reveal" style="--i:1">
+          {watchedShows.map((show, index) => (
+            <a class="program" href="/bangumi">
+              <div class="ptop">
+                <span class="pno">{String(index + 1).padStart(2, '0')}</span>
+                <span class="ep">{show.totalEps > 0 ? `EP.${show.watchedEps} / ${show.totalEps}` : `EP.${show.watchedEps}`}</span>
+              </div>
+              <h3>{show.title}</h3>
+              <div class="meta">{show.score ? `评分 ${show.score}` : '动画 · 在追'}{show.nextAirAt ? ` · 下回 ${formatAirAt(show.nextAirAt)}` : ' · 更新未定'}</div>
+              <div class="prog">
+                {progressTicks(show.watchedEps, show.totalEps).map((on) => (
+                  <i class:list={[{ on }]}></i>
+                ))}
+              </div>
+              <div class="next">
+                <span>{show.nextAirAt ? `下一话 · ${formatAirAt(show.nextAirAt)}` : '进度'}</span>
+                <span>{show.nextAirAt && hasAirTime(show.nextAirAt) ? formatCountdown(show.nextAirAt) : `${show.watchedEps} / ${show.totalEps}`}</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div class="home-empty">
+          <p>还没有在追的动画。</p>
+          <a class="arrow-link" href="/bangumi">全部记录 <span class="ar" aria-hidden="true">→</span></a>
+        </div>
+      )}
+      {airingShows.length > 0 && (
+        <div class="schedule reveal" style="--i:2" aria-label="本周更新">
+          {airingSchedule.map((day) => (
+            <div class:list={['d', { 'is-today': day.isToday }]}>
+              <b>{day.label}</b>
+              {day.shows.length > 0 ? (
+                <span>
+                  {day.shows.slice(0, 2).map((show, index) => (
+                    <Fragment>{index > 0 && <br />}{show.title}{show.time && <br />}{show.time}</Fragment>
+                  ))}
+                  {day.shows.length > 2 && <Fragment><br />等 {day.shows.length - 2} 部</Fragment>}
+                </span>
+              ) : (
+                <span>—</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   </section>
 
@@ -444,9 +653,11 @@ function presetValue(preset: HomeStatPreset): string {
       <div class="head reveal" style="--i:0">
         <div class="kicker"><span class="sticker">{home.pages[5]}</span></div>
         <h2>工具箱<span class="hl">。</span></h2>
-        <p>{homeTools.length} 个自己会用的东西，顺手放在部室的抽屉里。</p>
+        <p>{homeTools.length > 0 ? `${homeTools.length} 个自己会用的东西，顺手放在部室的抽屉里。` : '抽屉还空着，等登记了工具再打开。'}</p>
         <div class="open"><b>{String(homeTools.length).padStart(2, '0')}</b><span>个 / TOOLS</span></div>
-        <a class="arrow-link" href="/tools" style="margin-top:12px">打开工具台 <span class="ar">→</span></a>
+        {homeTools.length > 0 && (
+          <a class="arrow-link" href="/tools" style="margin-top:12px">打开工具台 <span class="ar">→</span></a>
+        )}
       </div>
       <div class="reveal" style="--i:1">
         {homeTools.length > 0 ? (
@@ -461,12 +672,9 @@ function presetValue(preset: HomeStatPreset): string {
             <a class="drawer drawer--more" href="/tools"><span class="dno">→</span><span class="dn">打开工具台</span><span class="dd"><span>ALL TOOLS</span><span>↗</span></span></a>
           </div>
         ) : (
-          <div class="drawers">
-            <a class="drawer is-open" href="/tools">
-              <span class="dno">—</span>
-              <span class="dn">工具还在整理</span>
-              <span class="dd"><span>去后台登记后出现在这里</span><span>→</span></span>
-            </a>
+          <div class="home-empty">
+            <p>还没有登记工具。</p>
+            <a class="arrow-link" href="/tools">打开工具台 <span class="ar" aria-hidden="true">→</span></a>
           </div>
         )}
         <div class="note"><span>{homeTools.length} 个工具 · 页面由 Workers 送达</span><span>换算在浏览器完成 · 不写入 D1</span></div>

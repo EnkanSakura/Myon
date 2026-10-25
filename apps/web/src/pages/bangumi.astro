@@ -160,9 +160,11 @@ function nextAirFor(show: BangumiShow, today: DateParts) {
   const progress = progressOf(show);
   if (!air) return { left: '下一话 · 待定', right: progress.short };
   const diff = daysBetween(today, air);
+  // 同步只拿到放送星期时记当天 00:00（UTC+8）：只显示星期，不显示时刻。
+  const timeKnown = air.hour !== 0 || air.minute !== 0;
   const time = `${pad2(air.hour)}:${pad2(air.minute)}`;
   return {
-    left: `下一话 · ${WEEKDAYS[weekdayOf(air)]} ${time}`,
+    left: `下一话 · ${WEEKDAYS[weekdayOf(air)]}${timeKnown ? ` ${time}` : ''}`,
     right:
       diff < 0
         ? '已放送 · 待更新'
@@ -282,7 +284,10 @@ for (const show of scheduleItems) {
   const index = weekIndex.get(dateKey(air));
   if (index === undefined) continue;
   week[index].shows.push({
-    time: `${pad2(air.hour)}:${pad2(air.minute)}`,
+    time:
+      air.hour !== 0 || air.minute !== 0
+        ? `${pad2(air.hour)}:${pad2(air.minute)}`
+        : '',
     title: show.title,
   });
 }
@@ -519,7 +524,7 @@ const links = [
                       {day.shows.length > 0 ? (
                         day.shows.map((show) => (
                           <div class="show">
-                            <span class="st">{show.time} · 放送</span>
+                            <span class="st">{show.time ? `${show.time} · 放送` : '本日放送'}</span>
                             <span class="sn">{show.title}</span>
                           </div>
                         ))

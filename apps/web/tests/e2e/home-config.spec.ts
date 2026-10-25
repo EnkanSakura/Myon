@@ -48,18 +48,36 @@ test.describe('首页封面配置', () => {
     await expect(page.locator('.p1 .frame-wrap .sticker')).toContainText(
       home.cover.badge,
     );
-    // 第 2/3/4 页的装饰框也统一用后台配置的封面图，不再引用写死的 /media 路径
-    for (const selector of [
-      '.p2 .side .frame img',
-      '.p3 .mini-panel .frame img',
-      '.p4 .collage .frame img',
-    ]) {
-      const images = page.locator(selector);
-      const count = await images.count();
-      expect(count).toBeGreaterThan(0);
-      for (let i = 0; i < count; i += 1) {
-        await expect(images.nth(i)).toHaveAttribute('src', home.cover.image);
-      }
+    // 第 2 页右侧装饰框仍用后台配置的封面图
+    const p2Frames = page.locator('.p2 .side .frame img');
+    expect(await p2Frames.count()).toBeGreaterThan(0);
+    for (let i = 0; i < (await p2Frames.count()); i += 1) {
+      await expect(p2Frames.nth(i)).toHaveAttribute('src', home.cover.image);
+    }
+    // 第 3/4 页的图位只展示 D1 真实条目自带的图片，不再复用封面图
+    const momentsBody = (await (
+      await request.get('/api/v1/moments?limit=4')
+    ).json()) as { items: { mediaKey: string | null }[] };
+    const momentSrcs = new Set(
+      momentsBody.items
+        .filter((item) => item.mediaKey)
+        .map((item) => `/media/${item.mediaKey}`),
+    );
+    for (const img of await page.locator('.p3 .mini-panel .frame img').all()) {
+      expect(momentSrcs.has((await img.getAttribute('src')) ?? '')).toBe(true);
+    }
+    const galleryBody = (await (
+      await request.get('/api/v1/gallery?limit=3')
+    ).json()) as {
+      items: { mediaKey: string | null }[];
+    };
+    const gallerySrcs = new Set(
+      galleryBody.items
+        .filter((item) => item.mediaKey)
+        .map((item) => `/media/${item.mediaKey}`),
+    );
+    for (const img of await page.locator('.p4 .collage .frame img').all()) {
+      expect(gallerySrcs.has((await img.getAttribute('src')) ?? '')).toBe(true);
     }
 
     // 七页主标签都来自配置

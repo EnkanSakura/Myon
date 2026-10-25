@@ -96,8 +96,10 @@
     Array.prototype.forEach.call(AIR_FORMAT.formatToParts(date), function (part) {
       if (part.type !== "literal") parts[part.type] = part.value;
     });
+    // 同步只拿到放送星期时记当天 00:00（UTC+8）：只显示日期与星期，不显示时刻。
+    var timeKnown = !(parts.hour === "00" && parts.minute === "00");
     return (parts.month || "--") + "." + (parts.day || "--") + " " +
-      (parts.weekday || "") + " " + (parts.hour || "--") + ":" + (parts.minute || "--");
+      (parts.weekday || "") + (timeKnown ? " " + (parts.hour || "--") + ":" + (parts.minute || "--") : "");
   }
 
   /** mediaKey → /media/<key>；外链与站内绝对路径原样返回。 */

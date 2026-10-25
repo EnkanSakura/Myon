@@ -30,6 +30,7 @@ export interface BangumiShow {
   comment: string | null;
   /** Bangumi 原图 URL；同步封面时用来判断是否需要更新。 */
   coverSource: string | null;
+  /** 下一话放送时间（ISO）。同步从 Bangumi 放送日历只拿到星期几时，记当天 00:00（UTC+8），前端只显示星期。 */
   nextAirAt: string | null;
   coverKey: string | null;
   updatedAt: string;
