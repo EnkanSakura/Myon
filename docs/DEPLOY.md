@@ -100,7 +100,7 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 ### 3.1 Secrets
 
-前 4 个是部署流程自己使用的 Secret；`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 是 **Worker 运行时密钥**，
+前 4 个是部署流程自己使用的 Secret；`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*`、`IMG2WEBP_TOKEN` 是 **Worker 运行时密钥**，
 同样配在仓库 `Settings → Secrets and variables → Actions`。Deploy workflow 会在部署时用
 `wrangler deploy --secrets-file` 把它们一并同步到 Worker（见 3.3）；未配置的项自动跳过。
 
@@ -117,6 +117,7 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 | `CF_ACCESS_CLIENT_SECRET` | 否 | GitHub Secret | 与上一项成对配置；用于让 CI 的 smoke test 通过 Access 保护 |
 | `BANGUMI_ACCESS_TOKEN` | 否 | GitHub Secret → Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
 | `BANGUMI_USERNAME` | 否 | GitHub Secret → Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
+| `IMG2WEBP_TOKEN` | 否 | GitHub Secret → Worker secret | GIF → animated WebP 外部服务的 Bearer token；未配置时后台 GIF 上传返回 503 |
 
 `CLOUDFLARE_API_TOKEN` 建议权限：
 
@@ -138,7 +139,7 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 ### 3.3 Worker 的运行时密钥（Deploy workflow 自动同步）
 
-`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*` 属于 Worker 运行时密钥，不在 wrangler 配置模板里。
+`ADMIN_TOKEN`、`ACCESS_*`、`BANGUMI_*`、`IMG2WEBP_TOKEN` 属于 Worker 运行时密钥，不在 wrangler 配置模板里。
 把值配到仓库 `Settings → Secrets and variables → Actions`（Repository secrets）即可：
 Deploy workflow 会读取这些 Secret，生成一份临时 JSON 并随 `pnpm exec wrangler deploy --secrets-file`
 一起上传到 Worker；未配置的项自动跳过，密钥值不会打印到日志，部署结束后临时文件立即删除。
@@ -165,6 +166,7 @@ pnpm exec wrangler secret put ACCESS_AUD
 # Bangumi 同步
 pnpm exec wrangler secret put BANGUMI_ACCESS_TOKEN
 pnpm exec wrangler secret put BANGUMI_USERNAME
+pnpm exec wrangler secret put IMG2WEBP_TOKEN
 ```
 
 也可以在 Cloudflare Dashboard 的 Worker → Settings → Variables and Secrets 里查看或临时修改；
@@ -250,7 +252,7 @@ push main
 2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空；
 3. `pnpm wrangler:config`（同上，另外注入 `KV_SETTINGS_ID` 生成 `SETTINGS` 绑定）；
 4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
-5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*` 写成临时 JSON（未配置的项跳过，值不会打印）；
+5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`/`IMG2WEBP_TOKEN` 写成临时 JSON（未配置的项跳过，值不会打印）；
 6. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
 7. 删除临时密钥文件。
 

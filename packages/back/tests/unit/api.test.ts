@@ -516,11 +516,11 @@ describe('admin content write API', () => {
 
   it('uploads an image to R2 and registers it', async () => {
     const form = new FormData();
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    const webp = Buffer.from(
+      'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJQBOgCHwAP7+4AAAAA==',
       'base64',
     );
-    form.set('file', new File([png], 'pixel.png', { type: 'image/png' }));
+    form.set('file', new File([webp], 'pixel.webp', { type: 'image/webp' }));
 
     const res = await app.request(
       '/api/v1/admin/media',
@@ -530,7 +530,7 @@ describe('admin content write API', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { item: { key: string; mime: string } };
     expect(body.item.key).toMatch(/^uploads\//);
-    expect(body.item.mime).toBe('image/png');
+    expect(body.item.mime).toBe('image/webp');
   });
 
   it('rejects an unsupported upload type', async () => {
@@ -563,6 +563,82 @@ describe('admin content write API', () => {
       synced: 0,
       reason: 'not_configured',
     });
+  });
+});
+
+describe('admin GIF to WebP proxy', () => {
+  const auth = { 'x-admin-token': 'secret-token' };
+  const gifWebpEnv = {
+    ...createEnv('test', 'secret-token'),
+    IMG2WEBP_TOKEN: 'img2webp-secret',
+  } as AppBindings;
+
+  function gifForm() {
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([Buffer.from('GIF89a', 'ascii')], 'anim.gif', {
+        type: 'image/gif',
+      }),
+    );
+    return form;
+  }
+
+  it('forwards the GIF to img2webp with the server secret and returns WebP', async () => {
+    const webp = Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0x00]);
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(webp, { headers: { 'content-type': 'image/webp' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await app.request(
+        '/api/v1/admin/media/gif-webp',
+        { method: 'POST', headers: auth, body: gifForm() },
+        gifWebpEnv,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/webp');
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(webp);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://api.myon.top/img2webp');
+      expect((init as RequestInit).headers).toMatchObject({
+        authorization: 'Bearer img2webp-secret',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns 503 when the img2webp secret is missing', async () => {
+    const res = await app.request(
+      '/api/v1/admin/media/gif-webp',
+      { method: 'POST', headers: auth, body: gifForm() },
+      createEnv('test', 'secret-token'),
+    );
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'img2webp_not_configured',
+    );
+  });
+
+  it('rejects non-GIF uploads', async () => {
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([Buffer.from('x')], 'a.png', { type: 'image/png' }),
+    );
+    const res = await app.request(
+      '/api/v1/admin/media/gif-webp',
+      { method: 'POST', headers: auth, body: form },
+      gifWebpEnv,
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'gif_required',
+    );
   });
 });
 

@@ -14,4 +14,6 @@ export interface AppBindings {
   /** Bangumi 同步所需的个人令牌与用户名；未配置时同步直接跳过。 */
   BANGUMI_ACCESS_TOKEN?: string;
   BANGUMI_USERNAME?: string;
+  /** GIF → animated WebP 外部服务的 Bearer token；未配置时该接口返回 503。 */
+  IMG2WEBP_TOKEN?: string;
 }

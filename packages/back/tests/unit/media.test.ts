@@ -149,14 +149,14 @@ describe('storeMedia', () => {
 
     const item = await storeMedia(
       env,
-      new File([new Uint8Array([1, 2, 3])], '封面.png', {
-        type: 'image/png',
+      new File([new Uint8Array([1, 2, 3])], '封面.webp', {
+        type: 'image/webp',
       }),
     );
     expect(item.key).toMatch(/^uploads\/\d{6}\//);
-    expect(item.filename).toBe('封面.png');
+    expect(item.filename).toBe('封面.webp');
     expect(objects.get(item.key)?.customMetadata?.filename).toBe(
-      encodeURIComponent('封面.png'),
+      encodeURIComponent('封面.webp'),
     );
     expect(kvData.has('media:count')).toBe(false);
   });
@@ -164,7 +164,7 @@ describe('storeMedia', () => {
   it('rejects empty, unsupported and oversized files', async () => {
     const { env } = createMediaEnv();
     await expect(
-      storeMedia(env, new File([], 'empty.png', { type: 'image/png' })),
+      storeMedia(env, new File([], 'empty.webp', { type: 'image/webp' })),
     ).rejects.toMatchObject({
       code: 'empty_file',
     } satisfies Partial<MediaError>);
@@ -173,10 +173,20 @@ describe('storeMedia', () => {
     ).rejects.toMatchObject({
       code: 'unsupported_type',
     } satisfies Partial<MediaError>);
+    await expect(
+      storeMedia(env, new File(['x'], 'photo.jpg', { type: 'image/jpeg' })),
+    ).rejects.toMatchObject({
+      code: 'unsupported_type',
+    } satisfies Partial<MediaError>);
+    await expect(
+      storeMedia(env, new File(['x'], 'anim.gif', { type: 'image/gif' })),
+    ).rejects.toMatchObject({
+      code: 'unsupported_type',
+    } satisfies Partial<MediaError>);
 
     const huge = new Uint8Array(MAX_UPLOAD_BYTES + 1);
     await expect(
-      storeMedia(env, new File([huge], 'huge.jpg', { type: 'image/jpeg' })),
+      storeMedia(env, new File([huge], 'huge.webp', { type: 'image/webp' })),
     ).rejects.toMatchObject({
       code: 'too_large',
     } satisfies Partial<MediaError>);

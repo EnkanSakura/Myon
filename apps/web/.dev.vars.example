@@ -16,3 +16,7 @@ ADMIN_TOKEN=dev-admin-token
 # 生产环境同样配到仓库 Repository Secrets。
 # BANGUMI_ACCESS_TOKEN=
 # BANGUMI_USERNAME=
+
+# 可选：GIF → animated WebP 外部服务的 Bearer token。
+# 只配在 Worker 端，浏览器不会拿到；生产环境配到 Repository Secrets。
+# IMG2WEBP_TOKEN=

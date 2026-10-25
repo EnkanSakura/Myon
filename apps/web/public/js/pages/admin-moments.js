@@ -6,6 +6,7 @@
   var PAGE_LIMIT = 20;
   var MAX_BODY = 2000;
   var MAX_UPLOAD = 8 * 1024 * 1024;
+  var MAX_SOURCE_UPLOAD = 20 * 1024 * 1024;
 
   /* ================= 工具 ================= */
   function $(id) { return document.getElementById(id); }
@@ -71,6 +72,7 @@
   var pageEl = document.querySelector(".page[data-api-moments]");
   var MOMENTS_API = pageEl ? pageEl.getAttribute("data-api-moments") || "" : "";
   var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
+  var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
 
   /* ================= 元素 ================= */
@@ -744,8 +746,8 @@
   /* ================= 媒体库 ================= */
   function mediaErrorText(code) {
     var map = {
-      unsupported_type: "不支持的图片类型",
-      too_large: "图片超过 8MB",
+      unsupported_type: "仅支持 WebP / AVIF / SVG 最终文件",
+      too_large: "转换后超过 8MB",
       empty_file: "文件为空",
       upload_failed: "服务端上传失败"
     };
@@ -808,36 +810,57 @@
   }
 
   function uploadMedia(file) {
+    var uploader = window.MyonImageUpload;
     state.busy = true;
     btnUpload.disabled = true;
-    if (mediaHint) mediaHint.textContent = "上传中 · " + file.name;
-    var form = new FormData();
-    form.append("file", file);
-    api("POST", MEDIA_API, form).then(function (res) {
-      if (handleAuth(res)) return;
-      var data = res.data || {};
-      if (!res.ok) {
-        var message = mediaErrorText(data.error) || ("HTTP " + res.status);
-        toast("上传失败 · " + message);
-        if (mediaHint) mediaHint.textContent = "上传失败 · " + message;
-        return;
-      }
-      if (!data.item || !data.item.key) {
-        toast("上传失败 · 响应缺少 key");
-        return;
-      }
-      state.mediaLoaded = false;
-      selectMedia(data.item.key, data.item.filename || file.name);
-      if (mediaHint) mediaHint.textContent = "已上传 · " + data.item.key;
-      toast("图片已上传 · key 已填入");
-    }).catch(function (err) {
-      toast("上传失败 · " + ((err && err.message) || "请重试"));
-      if (mediaHint) mediaHint.textContent = "上传失败 · 请重试";
-    }).then(function () {
+    if (mediaHint) mediaHint.textContent = "转换中 · " + file.name;
+    if (!uploader) {
       state.busy = false;
       btnUpload.disabled = false;
-      if (mediaFile) mediaFile.value = "";
-    });
+      if (mediaHint) mediaHint.textContent = "上传组件未加载";
+      toast("上传组件未加载，请刷新页面");
+      return;
+    }
+
+    uploader
+      .prepareImage(file, { gifApi: GIF_API })
+      .then(function (prepared) {
+        if (prepared.size > MAX_UPLOAD) {
+          throw new Error("转换后超过 8MB 上限");
+        }
+        if (mediaHint) mediaHint.textContent = "上传中 · " + prepared.name;
+        var form = new FormData();
+        form.append("file", prepared, prepared.name);
+        return api("POST", MEDIA_API, form);
+      })
+      .then(function (res) {
+        if (handleAuth(res)) return;
+        var data = res.data || {};
+        if (!res.ok) {
+          var message = mediaErrorText(data.error) || ("HTTP " + res.status);
+          toast("上传失败 · " + message);
+          if (mediaHint) mediaHint.textContent = "上传失败 · " + message;
+          return;
+        }
+        if (!data.item || !data.item.key) {
+          toast("上传失败 · 响应缺少 key");
+          return;
+        }
+        state.mediaLoaded = false;
+        selectMedia(data.item.key, data.item.filename || "image.webp");
+        if (mediaHint) mediaHint.textContent = "已上传 · " + data.item.key;
+        toast("图片已上传 · key 已填入");
+      })
+      .catch(function (err) {
+        var message = (err && err.message) || "请重试";
+        toast("上传失败 · " + message);
+        if (mediaHint) mediaHint.textContent = "上传失败 · " + message;
+      })
+      .then(function () {
+        state.busy = false;
+        btnUpload.disabled = false;
+        if (mediaFile) mediaFile.value = "";
+      });
   }
 
   /* ================= 事件绑定 ================= */
@@ -885,8 +908,8 @@
       mediaFile.value = "";
       return;
     }
-    if (file.size > MAX_UPLOAD) {
-      toast("图片超过 8MB");
+    if (file.size > MAX_SOURCE_UPLOAD) {
+      toast("源图片超过 20MB");
       mediaFile.value = "";
       return;
     }

@@ -13,9 +13,9 @@ import { type APIRequestContext, expect, test } from '@playwright/test';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
 const ADMIN_HEADERS = { 'x-admin-token': ADMIN_TOKEN };
 
-// 1x1 透明 PNG：用 Buffer 直接构造，避免测试依赖仓库里的图片素材。
-const PNG_1PX = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+// 1x1 WebP：后端现在只接受最终 WebP / AVIF / SVG，用 Buffer 直接构造。
+const WEBP_1PX = Buffer.from(
+  'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJQBOgCHwAP7+4AAAAA==',
   'base64',
 );
 
@@ -186,10 +186,8 @@ test.describe('后台动态 CRUD', () => {
 });
 
 test.describe('后台媒体上传', () => {
-  test('上传 1x1 PNG → /media/<key> 可访问 → 删除后 404', async ({
-    request,
-  }) => {
-    const filename = `e2e-pixel-${uniqueSuffix()}.png`;
+  test('上传 WebP → /media/<key> 可访问 → 删除后 404', async ({ request }) => {
+    const filename = `e2e-pixel-${uniqueSuffix()}.webp`;
     let id: string | undefined;
     let key: string | undefined;
     let deleted = false;
@@ -198,20 +196,24 @@ test.describe('后台媒体上传', () => {
       const uploaded = await request.post('/api/v1/admin/media', {
         headers: ADMIN_HEADERS,
         multipart: {
-          file: { name: filename, mimeType: 'image/png', buffer: PNG_1PX },
+          file: {
+            name: filename,
+            mimeType: 'image/webp',
+            buffer: WEBP_1PX,
+          },
         },
       });
       expect(uploaded.status()).toBe(201);
       const uploadedBody = (await uploaded.json()) as { item: MediaItem };
       id = uploadedBody.item.id;
       key = uploadedBody.item.key;
-      expect(uploadedBody.item.mime).toBe('image/png');
-      expect(uploadedBody.item.size).toBe(PNG_1PX.byteLength);
+      expect(uploadedBody.item.mime).toBe('image/webp');
+      expect(uploadedBody.item.size).toBe(WEBP_1PX.byteLength);
       expect(key).toMatch(/^uploads\//);
 
       const fetched = await request.get(`/media/${key}`);
       expect(fetched.status()).toBe(200);
-      expect(fetched.headers()['content-type']).toContain('image/png');
+      expect(fetched.headers()['content-type']).toContain('image/webp');
 
       const removed = await request.delete(`/api/v1/admin/media/${id}`, {
         headers: ADMIN_HEADERS,

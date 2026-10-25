@@ -74,17 +74,17 @@ describe('maintenance mode', () => {
   it('renders a standalone page with the site name and author', () => {
     const page = renderMaintenancePage({
       name: 'Myon',
-      author: '小画手',
+      author: 'EnkanSakura',
       themeColor: '#EC88C2',
     });
     expect(page).toContain('<!doctype html>');
     expect(page).toContain('维护中');
     expect(page).toContain('Myon');
-    expect(page).toContain('小画手');
+    expect(page).toContain('EnkanSakura');
     expect(page).toContain('#EC88C2');
     expect(page).not.toContain('<script');
     expect(page).not.toContain('/css/');
-    expect(page).toContain('rel="icon" href="/assets/favicon.svg"');
+    expect(page).toContain('rel="icon" href="/favicon.svg"');
     expect(page).toContain('rel="icon" href="/favicon.ico"');
   });
 

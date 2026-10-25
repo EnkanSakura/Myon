@@ -526,4 +526,82 @@ admin.delete('/media/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------------------------------------------------------------------------
+// GIF → animated WebP（外部服务）
+// ---------------------------------------------------------------------------
+
+const GIF_TO_WEBP_URL = 'https://api.myon.top/img2webp';
+const MAX_GIF_SOURCE_BYTES = 20 * 1024 * 1024;
+const MAX_GIF_WEBP_BYTES = 8 * 1024 * 1024;
+const GIF_TO_WEBP_TIMEOUT_MS = 30000;
+
+/**
+ * 浏览器把 GIF 发到这里，Worker 带 Bearer token 调外部 img2webp，
+ * 再把 animated WebP 二进制返回给浏览器；secret 不下发到前端。
+ */
+admin.post('/media/gif-webp', async (c) => {
+  const token = c.env.IMG2WEBP_TOKEN;
+  if (!token) {
+    return c.json({ error: 'img2webp_not_configured' }, 503);
+  }
+
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: 'invalid_form' }, 400);
+  }
+  const file = form.get('file');
+  if (!(file instanceof File) || file.type !== 'image/gif') {
+    return c.json({ error: 'gif_required' }, 400);
+  }
+  if (file.size > MAX_GIF_SOURCE_BYTES) {
+    return c.json({ error: 'gif_too_large' }, 413);
+  }
+
+  const upstreamForm = new FormData();
+  upstreamForm.append('file', file, file.name || 'image.gif');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GIF_TO_WEBP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GIF_TO_WEBP_URL, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'image/webp',
+      },
+      body: upstreamForm,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      console.error('[media] img2webp failed', response.status);
+      return c.json({ error: 'img2webp_failed' }, 502);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType && !/^image\/webp\b/i.test(contentType)) {
+      return c.json({ error: 'img2webp_invalid_content_type' }, 502);
+    }
+
+    const body = await response.arrayBuffer();
+    if (body.byteLength > MAX_GIF_WEBP_BYTES) {
+      return c.json({ error: 'gif_webp_too_large' }, 413);
+    }
+
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': 'image/webp',
+        'cache-control': 'no-store',
+      },
+    });
+  } catch (error) {
+    console.error('[media] img2webp request failed', error);
+    return c.json({ error: 'img2webp_failed' }, 502);
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 export default admin;

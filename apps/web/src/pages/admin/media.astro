@@ -5,6 +5,7 @@ import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 
 const mediaApi = `${apiBasePath}/admin/media`;
+const gifWebpApi = `${mediaApi}/gif-webp`;
 const statsApi = `${apiBasePath}/stats`;
 const mediaBase = '/media/';
 ---
@@ -18,7 +19,7 @@ const mediaBase = '/media/';
     <link rel="stylesheet" href="/css/pages/admin-media.css" />
   </Fragment>
 
-<div class="page" data-api={mediaApi} data-stats-api={statsApi} data-media-base={mediaBase}>
+<div class="page" data-api={mediaApi} data-gif-api={gifWebpApi} data-stats-api={statsApi} data-media-base={mediaBase}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -135,7 +136,7 @@ const mediaBase = '/media/';
 
     <div class="page-mark">
       <span>P.08 / MEDIA — 媒体文件</span>
-      <span>图片上限 8MB · JPG / PNG / WebP / GIF / AVIF / SVG</span>
+      <span>JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 上限 8MB</span>
     </div>
 
   </div>
@@ -158,5 +159,6 @@ const mediaBase = '/media/';
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/pages/admin-media.js"></script>
 </AdminLayout>

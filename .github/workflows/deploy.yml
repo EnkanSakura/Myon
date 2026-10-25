@@ -68,6 +68,7 @@ jobs:
           ACCESS_AUD: ${{ secrets.ACCESS_AUD }}
           BANGUMI_ACCESS_TOKEN: ${{ secrets.BANGUMI_ACCESS_TOKEN }}
           BANGUMI_USERNAME: ${{ secrets.BANGUMI_USERNAME }}
+          IMG2WEBP_TOKEN: ${{ secrets.IMG2WEBP_TOKEN }}
         run: |
           set -euo pipefail
           node <<'JS'
@@ -80,6 +81,7 @@ jobs:
             'ACCESS_AUD',
             'BANGUMI_ACCESS_TOKEN',
             'BANGUMI_USERNAME',
+            'IMG2WEBP_TOKEN',
           ];
 
           const secrets = {};

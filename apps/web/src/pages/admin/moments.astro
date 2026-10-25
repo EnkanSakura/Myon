@@ -15,6 +15,7 @@ const binding = env as unknown as AppBindings;
 // 接口地址由服务端渲染给页面脚本，public/js 里不硬编码路径。
 const momentsApi = `${apiBasePath}/admin/moments`;
 const mediaApi = `${apiBasePath}/admin/media`;
+const gifWebpApi = `${mediaApi}/gif-webp`;
 
 // 分类建议来自公开的分类计数（/categories 不需要令牌）；取不到就用一组默认值。
 let momentCategories: string[] = [];
@@ -49,7 +50,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <link rel="stylesheet" href="/css/pages/admin-moments.css" />
   </Fragment>
 
-<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-media-base={mediaBase}>
+<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -101,9 +102,9 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
           <div class="c-thumbs" id="thumbs" aria-label="从媒体库选择配图"></div>
 
           <div class="c-media-row">
-            <input class="c-file" id="mediaFile" type="file" accept="image/*" hidden>
+            <input class="c-file" id="mediaFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml" hidden>
             <button class="c-act" id="btnUpload" type="button">上传图片 <span aria-hidden="true">＋</span></button>
-            <span class="c-media-hint" id="mediaHint">jpg / png / webp / gif / avif，最大 8MB</span>
+            <span class="c-media-hint" id="mediaHint">JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传</span>
           </div>
 
           <div class="c-attach" id="attachBox">
@@ -236,5 +237,6 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/pages/admin-moments.js"></script>
 </AdminLayout>

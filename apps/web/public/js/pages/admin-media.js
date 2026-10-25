@@ -3,18 +3,10 @@
 
   /* ---------------- 常量与工具 ---------------- */
   var TOKEN_KEY = "myon-admin-token";
-  var ALLOWED_MIME = {
-    "image/jpeg": 1,
-    "image/png": 1,
-    "image/webp": 1,
-    "image/gif": 1,
-    "image/avif": 1,
-    "image/svg+xml": 1
-  };
   var MAX_BYTES = 8 * 1024 * 1024;
   var UPLOAD_ERRORS = {
-    unsupported_type: "类型不支持，仅接受 JPG / PNG / WebP / GIF / AVIF / SVG",
-    too_large: "超过 8MB 上限",
+    unsupported_type: "仅支持 JPEG / PNG / GIF / WebP / AVIF / SVG",
+    too_large: "转换后超过 8MB 上限",
     empty_file: "文件是空的",
     file_required: "没有选择文件",
     invalid_form: "上传表单无效",
@@ -25,6 +17,7 @@
 
   var pageEl = document.querySelector(".page[data-api]");
   var API = pageEl ? pageEl.getAttribute("data-api") : "";
+  var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") : "";
   var STATS_API = pageEl ? pageEl.getAttribute("data-stats-api") : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/";
 
@@ -607,6 +600,7 @@
     var ok = 0;
     var failed = 0;
     var authStopped = false;
+    var uploader = window.MyonImageUpload;
 
     function finish() {
       state.busy = false;
@@ -630,38 +624,59 @@
         return;
       }
       var row = addUploadRow(file);
-      if (!ALLOWED_MIME[file.type]) {
-        failed++;
-        setRow(row, "失败 · " + UPLOAD_ERRORS.unsupported_type, "is-err", 0);
-        next();
-        return;
-      }
       if (!file.size) {
         failed++;
         setRow(row, "失败 · " + UPLOAD_ERRORS.empty_file, "is-err", 0);
         next();
         return;
       }
-      if (file.size > MAX_BYTES) {
+      if (file.size > 20 * 1024 * 1024) {
         failed++;
-        setRow(row, "失败 · " + UPLOAD_ERRORS.too_large, "is-err", 0);
+        setRow(row, "失败 · 源文件超过 20MB", "is-err", 0);
         next();
         return;
       }
-      setRow(row, "上传中 0%", null, 0);
-      xhrUpload(file, function (pct) {
-        setRow(row, "上传中 " + pct + "%", null, pct);
-      }, function (error) {
-        if (error) {
-          failed++;
-          setRow(row, "失败 · " + error, "is-err", 100);
-          if (error === AUTH_401 || error === AUTH_503) authStopped = true;
-        } else {
-          ok++;
-          setRow(row, "完成", "is-ok", 100);
-        }
+      if (!uploader) {
+        failed++;
+        setRow(row, "失败 · 上传组件未加载", "is-err", 0);
         next();
-      });
+        return;
+      }
+
+      setRow(row, "转换中…", null, 0);
+      uploader
+        .prepareImage(file, { gifApi: GIF_API })
+        .then(function (prepared) {
+          if (prepared.size > MAX_BYTES) {
+            throw new Error(UPLOAD_ERRORS.too_large);
+          }
+          setRow(row, "上传中 0%", null, 0);
+          return new Promise(function (resolve) {
+            xhrUpload(prepared, function (pct) {
+              setRow(row, "上传中 " + pct + "%", null, pct);
+            }, function (error) {
+              if (error) {
+                failed++;
+                setRow(row, "失败 · " + error, "is-err", 100);
+                if (error === AUTH_401 || error === AUTH_503) authStopped = true;
+              } else {
+                ok++;
+                setRow(row, "完成", "is-ok", 100);
+              }
+              resolve();
+            });
+          });
+        })
+        .catch(function (error) {
+          failed++;
+          setRow(
+            row,
+            "失败 · " + ((error && error.message) || "转换失败"),
+            "is-err",
+            0,
+          );
+        })
+        .then(next);
     }
     next();
   }
