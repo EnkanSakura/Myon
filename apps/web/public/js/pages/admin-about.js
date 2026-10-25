@@ -13,6 +13,12 @@
   var pageEl = document.querySelector(".page[data-api]");
   var SAVE_API = pageEl ? pageEl.getAttribute("data-api") || "" : "";
   var READ_API = pageEl ? pageEl.getAttribute("data-read-api") || "" : "";
+  // 工具栏「图片」按钮复用共享媒体选择器，接口地址由服务端渲染在 .page 上。
+  var mediaConfig = {
+    api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
+    gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
+    base: pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/"
+  };
 
   var input = document.getElementById("mdInput");
   var preview = document.getElementById("mdPreview");
@@ -87,9 +93,22 @@
     return chars.toLocaleString("en-US") + " 字 · " + paras + " 段 · " + heads + " 个标题";
   }
 
+  /* 共享 Markdown 编辑器：工具栏 + 预览都由它负责；页面只保留字数与保存状态。 */
+  var editor = null;
+  if (window.MyonMarkdownEditor) {
+    editor = window.MyonMarkdownEditor.mount({
+      textarea: input,
+      preview: preview,
+      mode: "about",
+      media: mediaConfig
+    });
+  }
+
   function render() {
     var md = input.value;
-    if (window.MyonMarkdown) {
+    if (editor) {
+      editor.render();
+    } else if (window.MyonMarkdown) {
       preview.innerHTML = window.MyonMarkdown.render(md);
     } else {
       preview.textContent = md;
@@ -243,7 +262,10 @@
 
   input.addEventListener("input", function () {
     markDirty();
-    render();
+    counts.textContent = stats(input.value);
+    if (!editor && window.MyonMarkdown) {
+      preview.innerHTML = window.MyonMarkdown.render(input.value);
+    }
   });
   saveBtn.addEventListener("click", save);
   reloadBtn.addEventListener("click", reload);

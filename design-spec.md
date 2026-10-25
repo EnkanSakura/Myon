@@ -217,6 +217,8 @@
 | 分页 | `.pager` + `.pager-info` + `.pager-btns` + `.pager-nums` / `.pager-gap` + `.pager-btn` | `.is-on` 当前页、`disabled` 禁用 |
 | 提示条 | `.notice` + `.notice-k` + `.notice-c` + `.notice-issues` + `.notice-a` / `.notice-btn`；变体 `.notice--info / --warn / --ok / --error` | 语气用修饰类切换；浮层 `.toast` 不是提示条，别混用 |
 | 筛选栏 | `.filterbar` + `.filterbar-tabs` + `.filterbar-tab` + `.filterbar-search` + `.filterbar-sort` + `.filterbar-count` + `.filterbar-clear` | chips 用 `is-on` / `aria-pressed`；清除仅激活时出现 |
+| Markdown 编辑器 | `.md-split` 两栏 + `.md-panel`（`.md-panel-head` / `.md-panel-body--editor` + `.md-input` / `.md-panel-body--preview` + 纸面 / `.md-panel-foot`）；快捷工具栏 `.md-toolbar` + `.md-tool`（`data-md-act`）由 `public/js/markdown-editor.js` 插入 | 页面只写布局（`.md-split` 高度、断点、弹窗宽度）；文章预览纸面用 `.md-paper` + `article.css` 的 `.body`，关于页预览沿用 `.about-card` 纸卡 |
+| 图片选择器 | `#mediaPickerDlg`（`public/js/media-picker.js` 生成）：`.mp-tabs` + `.mp-grid`/`.mp-item` + `.mp-up-*` 上传进度 + `.mp-notice` 令牌提示 | `MyonMediaPicker.open({mode:'insert'|'pick', api, gifApi, base, selectedKey, onPick})`；图片处理复用 `image-upload.js`，令牌仍走顶栏 |
 | 管理令牌 | `AdminLayout` 顶栏按钮 + 弹窗（`public/js/admin-token.js`） | 全后台唯一入口；页面只放 `[data-token-open]` 引导，不重复输入框 |
 
 页面 CSS 里**不得**再为这些共享组件写样式，也不要另造同义类名（如 `.tsw` / `.pager2` / `.list-banner` / `.tabs2`）；

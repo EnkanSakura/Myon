@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 test('七页封面、翻页与深浅色切换', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.p1 .copy h1')).toContainText('灯下的一格');
-  await expect(page.locator('#aboutBody h1').first()).toContainText('关于');
+  // 关于卡由服务端渲染；内容来自 D1（可能是任意真实文案），这里只校验有结构化内容。
+  expect(await page.locator('#aboutBody > *').count()).toBeGreaterThan(0);
 
   await page.locator('.pager button').nth(1).click();
   await expect(page.locator('#pageSticker')).toContainText('PAGE 02');

@@ -1,11 +1,19 @@
 ---
 // 后台 · 关于 / README：读取 GET /api/v1/about，保存 PUT /api/v1/admin/about。
+// 编辑器 + 预览复用共享 Markdown 组件（public/js/markdown-editor.js），
+// 工具栏里的「图片」走媒体选择器（public/js/media-picker.js）。
 // 样式：public/css/pages/admin-about.css；脚本：public/js/pages/admin-about.js
 import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import { mediaUrl } from '../../lib/media';
 
 const aboutReadApi = `${apiBasePath}/about`;
 const aboutApi = `${apiBasePath}/admin/about`;
+const mediaApi = `${apiBasePath}/admin/media`;
+const gifWebpApi = `${mediaApi}/gif-webp`;
+// 图片地址规则由 mediaUrl() 决定，脚本只负责把 key 拼回去。
+const mediaSample = mediaUrl('__KEY__');
+const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '/media/';
 ---
 
 <AdminLayout
@@ -17,7 +25,14 @@ const aboutApi = `${apiBasePath}/admin/about`;
     <link rel="stylesheet" href="/css/pages/admin-about.css" />
   </Fragment>
 
-  <div class="page" data-api={aboutApi} data-read-api={aboutReadApi}>
+  <div
+    class="page"
+    data-api={aboutApi}
+    data-read-api={aboutReadApi}
+    data-api-media={mediaApi}
+    data-gif-api={gifWebpApi}
+    data-media-base={mediaBase}
+  >
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -50,39 +65,39 @@ const aboutApi = `${apiBasePath}/admin/about`;
       <button class="notice-btn" id="abRetry" type="button" hidden>重试</button>
     </div>
 
-    <!-- ---------- 编辑器 + 预览 ---------- -->
-    <div class="ab-grid">
-      <section class="ab-panel" aria-labelledby="ab-editor">
-        <div class="ab-head">
+    <!-- ---------- 编辑器 + 预览（共享 .md-split 布局） ---------- -->
+    <div class="md-split about-md">
+      <section class="md-panel" aria-labelledby="ab-editor">
+        <div class="md-panel-head">
           <span class="sec-num">01</span>
           <h2 id="ab-editor">编辑器</h2>
-          <span class="ab-en">MARKDOWN</span>
-          <span class="ab-file">README.md</span>
+          <span class="md-panel-en">MARKDOWN</span>
+          <span class="md-panel-file">README.md</span>
         </div>
-        <div class="ab-body ab-body--editor">
+        <div class="md-panel-body md-panel-body--editor">
           <label class="sr-only" for="mdInput">README Markdown 内容</label>
           <textarea class="md-input" id="mdInput" spellcheck="false" disabled placeholder="# 关于 Myon&#10;&#10;在这里写一段关于自己的话。"></textarea>
         </div>
-        <div class="ab-foot">
-          <span>标题 / 列表 / 任务列表 / 引用 / 粗斜体 / 删除线 / 代码块 / 链接 / 图片 / 表格</span>
+        <div class="md-panel-foot">
+          <span>工具栏可插入标题 / 列表 / 引用 / 代码 / 链接 / 图片</span>
           <span id="mdCounts">—</span>
         </div>
       </section>
 
-      <section class="ab-panel" aria-labelledby="ab-preview">
-        <div class="ab-head">
+      <section class="md-panel" aria-labelledby="ab-preview">
+        <div class="md-panel-head">
           <span class="sec-num">02</span>
           <h2 id="ab-preview">预览</h2>
-          <span class="ab-en">LIVE</span>
-          <span class="ab-file">首页 01 封面 · 纸卡</span>
+          <span class="md-panel-en">LIVE</span>
+          <span class="md-panel-file">首页 01 封面 · 纸卡</span>
         </div>
-        <div class="ab-body ab-body--preview">
+        <div class="md-panel-body md-panel-body--preview">
           <aside class="about-card" aria-label="首页关于卡预览">
             <div class="ah"><span>README.md · 关于</span></div>
             <div class="about-body" id="mdPreview"></div>
           </aside>
         </div>
-        <div class="ab-foot">
+        <div class="md-panel-foot">
           <span>预览为本地近似渲染，保存后以前台服务端渲染为准</span>
           <span id="sourceTag">来源：读取中…</span>
         </div>
@@ -92,6 +107,9 @@ const aboutApi = `${apiBasePath}/admin/about`;
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/markdown.js"></script>
+  <script is:inline src="/js/media-picker.js"></script>
+  <script is:inline src="/js/markdown-editor.js"></script>
   <script is:inline src="/js/pages/admin-about.js"></script>
 </AdminLayout>

@@ -87,8 +87,8 @@
 .backline{margin-top:26px;display:flex;justify-content:space-between;gap:16px;align-items:center;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62)}
 .backline a{font-weight:500;border-bottom:2px solid var(--ink)}
 .backline a:hover{color:var(--pink-deep);border-color:var(--pink)}
-.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,14px);background:var(--ink);color:var(--paper);border:3px solid var(--pink);font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:10px 16px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:90}
-.toast.show{opacity:1;transform:translate(-50%,0)}
+.art-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,14px);background:var(--ink);color:var(--paper);border:3px solid var(--pink);font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:10px 16px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:90}
+.art-toast.show{opacity:1;transform:translate(-50%,0)}
 @media (max-width:1100px){
   .art-layout{grid-template-columns:minmax(0,1fr);gap:0}
   .toc{position:static;margin-top:36px;padding:0;display:grid;grid-template-columns:1fr 1fr}

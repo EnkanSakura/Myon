@@ -520,5 +520,42 @@
     return renderBlocks(text.split('\n'), 0);
   }
 
-  window.MyonMarkdown = { render: render };
+  /* ---------- 文章正文预览：对齐服务端 packages/back/src/markdown.ts 的 renderArticle ----------
+     1) 剥掉正文开头重复的一级标题（页面页头渲染标题）
+     2) 给 h2 编号并注入锚点（与前台目录一致）
+     3) 把围栏代码块包成 .code 卡片（前台 article.css 的样式）
+     目录、阅读进度、复制按钮由前台页面脚本生成，预览里省略。 */
+
+  var ATX_H1 = /^\s*#\s+[^\n]*(?:\n|$)/;
+  var SETEXT_H1 = /^\s*(?![#\s])[^\n]*[^\s][^\n]*\n=+[ \t]*(?:\n|$)/;
+
+  function stripLeadingH1(md){
+    var text = md == null ? '' : String(md);
+    var atx = text.match(ATX_H1);
+    if (atx) return text.slice(atx[0].length);
+    var setext = text.match(SETEXT_H1);
+    if (setext) return text.slice(setext[0].length);
+    return text;
+  }
+
+  function renderArticle(md){
+    var count = 0;
+    var html = render(stripLeadingH1(md));
+    html = html.replace(/<h2>([\s\S]*?)<\/h2>/g, function (match, inner) {
+      count += 1;
+      var order = String(count).padStart(2, '0');
+      return '<h2 id="s' + count + '"><span class="n">' + order + '</span>' + inner + '</h2>';
+    });
+    html = html.replace(
+      /<pre><code(?: class="language-([^"]+)")?>([\s\S]*?)<\/code><\/pre>/g,
+      function (match, lang, code) {
+        var name = lang || 'text';
+        return '<div class="code"><div class="code-h"><span class="fname">' + name +
+          '</span><span>CODE</span></div><pre><code>' + code + '</code></pre></div>';
+      }
+    );
+    return html;
+  }
+
+  window.MyonMarkdown = { render: render, renderArticle: renderArticle };
 })();

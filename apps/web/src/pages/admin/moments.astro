@@ -1,5 +1,7 @@
 ---
 // 迁移自 design 分支 design/site/admin-moments.html。
+// 2026-10 改版：页面只保留列表；新增 / 编辑改走呼出对话框（<dialog id="momentDlg">），
+// 配图由共享媒体选择器（public/js/media-picker.js）返回 MediaItem。
 // 数据走 /api/v1/admin/moments（需要 x-admin-token，令牌存在浏览器 localStorage）。
 // 样式：public/css/pages/admin-moments.css；脚本：public/js/pages/admin-moments.js
 import { env } from 'cloudflare:workers';
@@ -83,88 +85,10 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <button class="notice-btn" id="btnToken" type="button" data-token-open>管理令牌</button>
     </div>
 
-    <!-- ---------- 01 发布 ---------- -->
-    <section class="sec" aria-labelledby="h-compose">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-compose">发一条</h2>
-        <span class="sec-en">COMPOSE / NEW NOTE</span>
-        <div class="sec-r"><span class="sec-note">正文 2000 字以内 · 发布后同步前台第 03 页</span></div>
-      </div>
-
-      <form class="compose" id="composeForm" novalidate>
-        <span class="c-tab" id="composeTab">NEW NOTE / 新动态</span>
-
-        <div class="c-main">
-          <label class="sr-only" for="noteText">动态内容</label>
-          <textarea class="c-area" id="noteText" rows="4" maxlength="2000" spellcheck="false" placeholder="现在在做什么…"></textarea>
-
-          <div class="c-thumbs" id="thumbs" aria-label="从媒体库选择配图"></div>
-
-          <div class="c-media-row">
-            <input class="c-file" id="mediaFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml" hidden>
-            <button class="c-act" id="btnUpload" type="button">上传图片 <span aria-hidden="true">＋</span></button>
-            <span class="c-media-hint" id="mediaHint">JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传</span>
-          </div>
-
-          <div class="c-attach" id="attachBox">
-            <img id="attachImg" alt="已选配图">
-            <span class="an" id="attachName">未选图</span>
-            <button class="c-remove" id="btnRemoveImg" type="button">移除</button>
-          </div>
-
-          <div class="c-bar">
-            <button class="c-act" id="btnAddImg" type="button" aria-expanded="false" aria-controls="thumbs">添加图片 <span aria-hidden="true">＋</span></button>
-            <button class="c-act" id="btnClear" type="button">清空</button>
-            <button class="c-act" id="btnCancelEdit" type="button" hidden>取消编辑</button>
-            <span class="c-count"><span id="noteCount">0</span> / 2000</span>
-            <button class="btn btn--pink c-pub" id="btnPublish" type="submit">发布 <span class="ar" aria-hidden="true">→</span></button>
-          </div>
-        </div>
-
-        <aside class="c-side" aria-label="发布设置">
-          <div class="c-field">
-            <label class="c-k" for="noteCategory">分类 / CATEGORY</label>
-            <input class="c-input" id="noteCategory" name="category" type="text" maxlength="40" list="categoryList" placeholder="日常" autocomplete="off" value={defaultCategory}>
-            <datalist id="categoryList">
-              {categoryOptions.map((name) => <option value={name} />)}
-            </datalist>
-          </div>
-
-          <div class="c-field">
-            <label class="c-k" for="noteTag">标签 / TAG</label>
-            <input class="c-input" id="noteTag" name="tag" type="text" maxlength="40" placeholder="可留空" autocomplete="off">
-            <div class="c-tags" id="tagQuick">
-              {categoryOptions.map((name) => (
-                <button class="c-tag" type="button" data-tag={name} aria-pressed="false">{name}</button>
-              ))}
-            </div>
-          </div>
-
-          <div class="c-field">
-            <span class="c-k">可见性 / VISIBILITY</span>
-            <div class="c-vis" id="visPick">
-              <button class="c-tag" type="button" data-vis="public" aria-pressed="true">公开</button>
-              <button class="c-tag" type="button" data-vis="private" aria-pressed="false">仅自己</button>
-            </div>
-          </div>
-
-          <div class="c-field">
-            <span class="c-k">置顶 / PINNED</span>
-            <div class="c-vis">
-              <button class="c-tag" id="pinPick" type="button" aria-pressed="false">置顶这条</button>
-            </div>
-          </div>
-
-          <p class="c-hint">发布后出现在前台第 03 页；「仅自己」的动态不显示在前台列表，也不进 RSS。图片先上传到媒体库，再把 key 存进动态。</p>
-        </aside>
-      </form>
-    </section>
-
-    <!-- ---------- 02 列表 ---------- -->
+    <!-- ---------- 01 列表 ---------- -->
     <section class="sec" aria-labelledby="h-list">
       <div class="sec-h">
-        <span class="sec-num">02</span>
+        <span class="sec-num">01</span>
         <h2 id="h-list">列表</h2>
         <span class="sec-en" id="notesEn">NOTES / —</span>
         <div class="sec-r">
@@ -202,7 +126,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <div class="empty" id="emptyNotes" hidden>
         <div class="empty-c">
           <b class="empty-t" id="emptyTitle">还没有动态</b>
-          <p class="empty-d" id="emptyText">在上面发第一条，或者填写管理令牌后刷新列表。</p>
+          <p class="empty-d" id="emptyText">点右上角「发动态」写第一条，或者填写管理令牌后刷新列表。</p>
         </div>
         <div class="empty-actions"><button class="nr-act" id="btnResetFilter" type="button">清除筛选</button></div>
       </div>
@@ -217,6 +141,91 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     </section>
 
   </div>
+
+<!-- ---------- 发 / 编辑动态（呼出对话框） ---------- -->
+<dialog class="dlg moment-dlg" id="momentDlg" aria-labelledby="momentDlgTitle">
+  <form class="dlg-box moment-box" id="momentForm" novalidate>
+    <span class="dlg-tab">NOTE / 动态</span>
+
+    <div class="dlg-h">
+      <span id="momentDlgTitle">发动态</span>
+      <span id="momentDlgState" aria-live="polite">未发布</span>
+    </div>
+
+    <div class="moment-banner" id="momentBanner" role="status" hidden>
+      <span class="moment-banner-k" id="momentBannerK">ERR</span>
+      <div class="moment-banner-c">
+        <b id="momentBannerTitle"></b>
+        <p id="momentBannerText"></p>
+        <ul class="moment-issues" id="momentIssues" hidden></ul>
+      </div>
+    </div>
+
+    <div class="moment-field moment-field--wide">
+      <label for="noteText">正文 / TEXT</label>
+      <textarea class="dlg-note" id="noteText" rows="5" maxlength="2000" spellcheck="false" placeholder="现在在做什么…"></textarea>
+      <p class="moment-count">
+        <span>纯文本动态，不支持 Markdown</span>
+        <span><b id="noteCount">0</b> / 2000</span>
+      </p>
+    </div>
+
+    <div class="moment-field moment-field--wide">
+      <span class="moment-label">配图 / IMAGE</span>
+      <div class="moment-media">
+        <button class="moment-act" id="btnPickImage" type="button">选择图片 <span aria-hidden="true">＋</span></button>
+        <div class="moment-attach" id="attachBox">
+          <img id="attachImg" alt="已选配图">
+          <span class="moment-attach-name" id="attachName">未选图</span>
+          <button class="moment-act" id="btnRemoveImg" type="button">移除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="moment-fields">
+      <div class="moment-field">
+        <label for="noteCategory">分类 / CATEGORY</label>
+        <input class="moment-input" id="noteCategory" name="category" type="text" maxlength="40" list="categoryList" placeholder="日常" autocomplete="off" value={defaultCategory}>
+        <datalist id="categoryList">
+          {categoryOptions.map((name) => <option value={name} />)}
+        </datalist>
+      </div>
+
+      <div class="moment-field">
+        <label for="noteTag">标签 / TAG</label>
+        <input class="moment-input" id="noteTag" name="tag" type="text" maxlength="40" placeholder="可留空" autocomplete="off">
+        <div class="moment-tags" id="tagQuick">
+          {categoryOptions.map((name) => (
+            <button class="moment-tag" type="button" data-tag={name} aria-pressed="false">{name}</button>
+          ))}
+        </div>
+      </div>
+
+      <div class="moment-field">
+        <span class="moment-label">可见性 / VISIBILITY</span>
+        <div class="moment-tags" id="visPick">
+          <button class="moment-tag" type="button" data-vis="public" aria-pressed="true">公开</button>
+          <button class="moment-tag" type="button" data-vis="private" aria-pressed="false">仅自己</button>
+        </div>
+      </div>
+
+      <div class="moment-field">
+        <span class="moment-label">置顶 / PINNED</span>
+        <div class="moment-tags">
+          <button class="moment-tag" id="pinPick" type="button" aria-pressed="false">置顶这条</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="moment-foot">
+      <span class="moment-meta">发布后同步前台第 03 页；「仅自己」的动态不进前台列表与 RSS。</span>
+      <div class="moment-actions">
+        <button class="p-btn" id="btnCancelMoment" type="button">取消</button>
+        <button class="p-btn p-btn--pub" id="btnPublish" type="submit">发布</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <!-- ---------- 删除确认 ---------- -->
 <dialog class="dlg" id="confirmDlg" aria-labelledby="confirmTitle">
@@ -238,5 +247,6 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script is:inline src="/js/image-upload.js"></script>
+  <script is:inline src="/js/media-picker.js"></script>
   <script is:inline src="/js/pages/admin-moments.js"></script>
 </AdminLayout>

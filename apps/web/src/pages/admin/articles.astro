@@ -3,17 +3,32 @@
 // 样式：public/css/pages/admin-articles.css；脚本：public/js/pages/admin-articles.js
 import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import { mediaUrl } from '../../lib/media';
 
 // 接口地址由服务端渲染给页面脚本，public/js 里不硬编码。
 const postsApi = `${apiBasePath}/admin/posts`;
+// 正文编辑器的图片按钮复用共享媒体选择器，需要媒体接口与地址前缀。
+const mediaApi = `${apiBasePath}/admin/media`;
+const gifWebpApi = `${mediaApi}/gif-webp`;
+// 图片预览的 URL 规则来自 mediaUrl()，脚本只负责把 key 拼回去。
+const mediaSample = mediaUrl('__KEY__');
+const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 ---
 
 <AdminLayout title="文章" crumb="文章" active="articles">
   <Fragment slot="head">
+    <!-- 预览要还原前台文章正文：先加载文章正文样式，再加载本页布局，保证本页排在最后。 -->
+    <link rel="stylesheet" href="/css/pages/article.css" />
     <link rel="stylesheet" href="/css/pages/admin-articles.css" />
   </Fragment>
 
-  <div class="page" data-api={postsApi}>
+  <div
+    class="page"
+    data-api={postsApi}
+    data-api-media={mediaApi}
+    data-gif-api={gifWebpApi}
+    data-media-base={mediaBase}
+  >
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -151,6 +166,7 @@ const postsApi = `${apiBasePath}/admin/posts`;
         </div>
       </div>
 
+      <!-- 元数据压成三行，把高度让给正文的编辑 / 预览面板 -->
       <div class="post-fields">
         <div class="pf pf--wide">
           <label for="fTitle">标题 / TITLE</label>
@@ -175,15 +191,45 @@ const postsApi = `${apiBasePath}/admin/posts`;
             <option value="archived">归档</option>
           </select>
         </div>
-        <div class="pf">
-          <label for="fExcerpt">摘要 / EXCERPT</label>
-          <textarea id="fExcerpt" rows="3" maxlength="400"></textarea>
-        </div>
         <div class="pf pf--wide">
-          <label for="fBody">正文 / MARKDOWN</label>
-          <textarea id="fBody" rows="10" maxlength="200000" spellcheck="false"></textarea>
-          <p class="pf-hint" id="bodyHint">0 字 · 约 1 分钟</p>
+          <label for="fExcerpt">摘要 / EXCERPT</label>
+          <textarea id="fExcerpt" rows="2" maxlength="400"></textarea>
         </div>
+      </div>
+
+      <!-- 正文：与「关于」编辑页一致的 Markdown 双栏（左编辑 + 右实时预览，长相在共享 .md-*） -->
+      <div class="md-split post-md">
+        <section class="md-panel" aria-labelledby="fBodyLabel">
+          <div class="md-panel-head">
+            <span class="sec-num">01</span>
+            <h2 id="fBodyLabel">编辑器</h2>
+            <span class="md-panel-en">MARKDOWN</span>
+            <span class="md-panel-file">body.md</span>
+          </div>
+          <div class="md-panel-body md-panel-body--editor">
+            <label class="sr-only" for="fBody">正文 Markdown 内容</label>
+            <textarea class="md-input" id="fBody" maxlength="200000" spellcheck="false" placeholder="## 小标题&#10;&#10;正文段落……&#10;&#10;- 列表项&#10;- [ ] 任务项"></textarea>
+          </div>
+          <div class="md-panel-foot">
+            <span>工具栏只插入语法，保存后以前台渲染为准</span>
+            <span id="bodyHint">0 字 · 约 1 分钟</span>
+          </div>
+        </section>
+
+        <section class="md-panel" aria-labelledby="fPreviewLabel">
+          <div class="md-panel-head">
+            <span class="sec-num">02</span>
+            <h2 id="fPreviewLabel">预览</h2>
+            <span class="md-panel-en">LIVE</span>
+            <span class="md-panel-file">前台文章页</span>
+          </div>
+          <div class="md-panel-body md-panel-body--preview">
+            <div class="md-paper"><div class="body" id="fPreview"></div></div>
+          </div>
+          <div class="md-panel-foot">
+            <span>本地近似渲染，省略目录 / 阅读进度 / 复制按钮</span>
+          </div>
+        </section>
       </div>
 
       <div class="post-foot">
@@ -215,5 +261,10 @@ const postsApi = `${apiBasePath}/admin/posts`;
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <!-- 共享脚本顺序：图片处理 → Markdown 渲染 → 媒体选择器 → 编辑器 → 本页逻辑 -->
+  <script is:inline src="/js/image-upload.js"></script>
+  <script is:inline src="/js/markdown.js"></script>
+  <script is:inline src="/js/media-picker.js"></script>
+  <script is:inline src="/js/markdown-editor.js"></script>
   <script is:inline src="/js/pages/admin-articles.js"></script>
 </AdminLayout>

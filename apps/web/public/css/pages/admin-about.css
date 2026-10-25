@@ -1,42 +1,16 @@
 /* ==========================================================================
    后台 · 关于 / README 编辑器
-   左：Markdown 编辑器；右：首页 01 封面上的「关于」纸卡实时预览。
+   共享布局：.md-split + .md-panel（admin.css）；编辑器工具栏由
+   /js/markdown-editor.js 自动插入，预览纸卡沿用首页 about-card 的排版。
    内容来自 /api/v1/about，保存写 /api/v1/admin/about。
    ========================================================================== */
 body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 
-.ab-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:16px;margin-top:18px;align-items:start}
-.ab-panel{min-width:0;background:var(--panel);border:2px solid var(--pline);box-shadow:4px 4px 0 var(--ppk-deep);display:flex;flex-direction:column}
-.ab-head{display:flex;align-items:center;gap:10px;padding:11px 15px;border-bottom:2px solid var(--pline-2);flex:none}
-.ab-head h2{font-size:16px;font-weight:900;letter-spacing:.02em;line-height:1.3;color:var(--pp)}
-.ab-en{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--pp-55)}
-.ab-file{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 页面布局：两栏撑满视口下的剩余高度；窄屏改成上下堆叠 */
+.about-md{margin-top:18px;height:clamp(460px,calc(100vh - 300px),640px)}
+.about-md .md-panel{height:100%}
 
-/* 编辑器 */
-.ab-body--editor{display:flex;height:560px;min-height:0;background:var(--desk)}
-.md-input{
-  flex:1;min-width:0;width:100%;height:100%;resize:none;border:0;border-radius:0;background:transparent;
-  color:var(--pp-88);font-family:var(--mono);font-size:14px;line-height:1.9;letter-spacing:.01em;
-  padding:14px 16px;outline:none;caret-color:var(--ppk);tab-size:2;scrollbar-width:thin;
-}
-.md-input::placeholder{color:var(--pp-55)}
-.md-input:focus{outline:2px solid var(--ppk);outline-offset:-2px;background:color-mix(in srgb, var(--pink) 3.5%, transparent)}
-.md-input:disabled{opacity:.55;cursor:wait}
-.md-input::-webkit-scrollbar{width:10px;height:10px}
-.md-input::-webkit-scrollbar-track{background:var(--desk)}
-.md-input::-webkit-scrollbar-thumb{background:var(--pp-track);border:2px solid var(--desk)}
-
-/* 预览：深色台面上的一张纸卡 */
-.ab-body--preview{
-  height:560px;min-height:0;overflow:auto;padding:16px;
-  background-color:var(--desk);
-  background-image:radial-gradient(color-mix(in srgb, var(--pp) 6%, transparent) 1px,transparent 1.2px);
-  background-size:6px 6px;
-  scrollbar-width:thin;
-}
-.ab-body--preview::-webkit-scrollbar{width:10px;height:10px}
-.ab-body--preview::-webkit-scrollbar-track{background:transparent}
-.ab-body--preview::-webkit-scrollbar-thumb{background:var(--pp-track);border:2px solid var(--desk)}
+/* 预览：深色台面上的一张纸卡（外观沿用首页 01 封面关于卡） */
 .about-card{
   width:100%;max-width:560px;margin:0 auto;padding:14px 17px 17px;
   background:var(--paper);color:var(--ink);border:3px solid var(--ink);
@@ -94,22 +68,15 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 .about-body em{font-style:italic}
 .about-body:empty::after{content:"内容为空 · 首页关于卡将不显示段落";font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--ink-62)}
 
-/* 面板脚 */
-.ab-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;border-top:2px solid var(--pline-2);font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);flex:none}
-.ab-foot b{font-weight:500;color:var(--pp-70)}
-
 /* 页头状态 */
 .ph-note{margin-top:2px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);text-align:right}
 .ph-note.is-on{color:var(--ppk)}
 
 @media (max-width:1100px){
-  .ab-grid{grid-template-columns:1fr}
-  .ab-body--editor,.ab-body--preview{height:460px}
+  .about-md{grid-template-columns:1fr;height:auto}
+  .about-md .md-panel{height:clamp(360px,52vh,520px)}
 }
 @media (max-width:600px){
-  .ab-body--editor,.ab-body--preview{height:380px}
-  .md-input{font-size:14px;padding:12px}
-  .ab-body--preview{padding:10px}
   .about-card{padding:12px 13px 14px;box-shadow:6px 6px 0 var(--ppk-deep)}
   .ph-note{text-align:left}
 }

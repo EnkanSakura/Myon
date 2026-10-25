@@ -146,7 +146,8 @@
    弹层：文章表单 / 删除确认（白纸 + 墨框 + 硬阴影，复用 admin.css 的 .dlg）
    ========================================================================== */
 .post-dlg {
-  width: 780px;
+  /* 正文改成左右双栏，弹窗加宽；仍留 40px 让出滚动条与视口边距。 */
+  width: min(1240px, calc(100vw - 40px));
   max-width: calc(100vw - 40px);
 }
 .post-box {
@@ -239,11 +240,11 @@
   display: none;
 }
 
-/* 表单字段 */
+/* 表单字段：标题 / 摘要通栏，slug / 分类 / 状态压成一行，把高度让给正文面板 */
 .post-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 14px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 150px;
+  gap: 10px 12px;
 }
 .pf {
   min-width: 0;
@@ -281,12 +282,6 @@
 .post-fields textarea {
   resize: vertical;
 }
-.post-fields #fBody {
-  min-height: 190px;
-  font-family: var(--mono);
-  font-size:14px;
-  line-height: 1.75;
-}
 .post-fields input:focus,
 .post-fields select:focus,
 .post-fields textarea:focus {
@@ -316,6 +311,18 @@
 .pf.is-invalid textarea {
   border-color: var(--pink-deep);
   box-shadow: 2px 2px 0 var(--pink);
+}
+
+/* ---------- 正文：Markdown 编辑 / 预览双栏 ----------
+   .md-split / .md-panel / .md-* 的长相（字体、颜色、边框、内边距、内部滚动）
+   全部在 admin.css 的共享组件段；这里只放弹窗里的布局：
+   列宽、整体高度、断点。面板是 flex 列，高度给定后共享层会自动撑满并各自滚动。 */
+.post-md {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+  height: clamp(320px, 46vh, 520px);
 }
 
 /* 表单底栏 */
@@ -425,6 +432,11 @@
   .tbl--articles .c-read {
     display: none;
   }
+  /* 弹窗变窄，双栏整体高度跟着收一点，保证底部操作栏仍然可见 */
+  .post-md {
+    gap: 12px;
+    height: clamp(300px, 42vh, 460px);
+  }
 }
 @media (max-width: 900px) {
   .tbl--articles {
@@ -442,14 +454,26 @@
     padding-top: 20px;
     flex-wrap: wrap;
   }
-  .post-fields {
-    grid-template-columns: 1fr;
-  }
   .post-dlg-state {
     margin-left: 0;
   }
+  /* 900 以下双栏改单列：先编辑、预览在下方，两个面板各自限高，弹窗不无限拉长 */
+  .post-md {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    height: auto;
+  }
+  .post-md .md-panel {
+    height: min(46vh, 420px);
+  }
 }
 @media (max-width: 600px) {
+  .post-fields {
+    grid-template-columns: 1fr;
+  }
+  .post-md .md-panel {
+    height: 280px;
+  }
   .post-foot {
     flex-wrap: wrap;
   }

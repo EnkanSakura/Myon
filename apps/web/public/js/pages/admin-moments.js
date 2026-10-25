@@ -5,8 +5,6 @@
   var TOKEN_KEY = "myon-admin-token";
   var PAGE_LIMIT = 20;
   var MAX_BODY = 2000;
-  var MAX_UPLOAD = 8 * 1024 * 1024;
-  var MAX_SOURCE_UPLOAD = 20 * 1024 * 1024;
 
   /* ================= 工具 ================= */
   function $(id) { return document.getElementById(id); }
@@ -76,29 +74,9 @@
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
 
   /* ================= 元素 ================= */
-  var composeForm = $("composeForm");
-  var composeTab = $("composeTab");
-  var noteText = $("noteText");
-  var noteCount = $("noteCount");
-  var noteCategory = $("noteCategory");
-  var noteTag = $("noteTag");
-  var tagQuick = $("tagQuick");
-  var visPick = $("visPick");
-  var pinPick = $("pinPick");
-  var btnPublish = $("btnPublish");
-  var btnClear = $("btnClear");
-  var btnCancelEdit = $("btnCancelEdit");
   var btnCompose = $("btnCompose");
-  var btnAddImg = $("btnAddImg");
-  var thumbs = $("thumbs");
-  var mediaFile = $("mediaFile");
-  var btnUpload = $("btnUpload");
-  var mediaHint = $("mediaHint");
-  var attachBox = $("attachBox");
-  var attachImg = $("attachImg");
-  var attachName = $("attachName");
-  var btnRemoveImg = $("btnRemoveImg");
 
+  // 列表
   var noteList = $("noteList");
   var noteSearch = $("noteSearch");
   var shownNotes = $("shownNotes");
@@ -115,12 +93,39 @@
   var pgNext = $("pgNext");
   var listState = $("listState");
 
+  // 页面级提示
   var amBanner = $("amBanner");
   var amBannerK = $("amBannerK");
   var amBannerTitle = $("amBannerTitle");
   var amBannerText = $("amBannerText");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
 
+  // 发 / 编辑动态弹窗
+  var momentDlg = $("momentDlg");
+  var momentForm = $("momentForm");
+  var momentDlgTitle = $("momentDlgTitle");
+  var momentDlgState = $("momentDlgState");
+  var momentBanner = $("momentBanner");
+  var momentBannerK = $("momentBannerK");
+  var momentBannerTitle = $("momentBannerTitle");
+  var momentBannerText = $("momentBannerText");
+  var momentIssues = $("momentIssues");
+  var noteText = $("noteText");
+  var noteCount = $("noteCount");
+  var noteCategory = $("noteCategory");
+  var noteTag = $("noteTag");
+  var tagQuick = $("tagQuick");
+  var visPick = $("visPick");
+  var pinPick = $("pinPick");
+  var btnPublish = $("btnPublish");
+  var btnCancelMoment = $("btnCancelMoment");
+  var btnPickImage = $("btnPickImage");
+  var attachBox = $("attachBox");
+  var attachImg = $("attachImg");
+  var attachName = $("attachName");
+  var btnRemoveImg = $("btnRemoveImg");
+
+  // 删除确认
   var confirmDlg = $("confirmDlg");
   var confirmTitle = $("confirmTitle");
   var confirmMeta = $("confirmMeta");
@@ -129,7 +134,6 @@
   var confirmCancel = $("confirmCancel");
 
   var DEFAULT_CATEGORY = noteCategory ? noteCategory.value || "日常" : "日常";
-  var DEFAULT_MEDIA_HINT = mediaHint ? mediaHint.textContent : "";
 
   /* ================= 状态 ================= */
   var state = {
@@ -149,9 +153,6 @@
     busy: false,
     loading: false,
     loadError: "",
-    mediaItems: [],
-    mediaLoaded: false,
-    mediaLoading: false,
     pendingDelete: null
   };
 
@@ -183,6 +184,29 @@
   }
   function setListState(text) {
     if (listState) listState.textContent = text;
+  }
+
+  // 弹窗内的错误 / 提示条：页面级 notice 会被模态背景挡住，所以弹窗里单独一条。
+  function hideFormBanner() {
+    if (!momentBanner) return;
+    momentBanner.hidden = true;
+    if (momentIssues) momentIssues.hidden = true;
+  }
+  function showFormBanner(tone, title, text, issues) {
+    if (!momentBanner) return;
+    momentBanner.hidden = false;
+    momentBanner.setAttribute("data-tone", tone === "warn" ? "warn" : "error");
+    momentBannerK.textContent = tone === "warn" ? "WARN" : "ERR";
+    momentBannerTitle.textContent = title;
+    momentBannerText.textContent = text || "";
+    momentBannerText.hidden = !text;
+    if (!momentIssues) return;
+    momentIssues.innerHTML = "";
+    var lines = issues || [];
+    lines.forEach(function (line) {
+      momentIssues.appendChild(el("li", null, line));
+    });
+    momentIssues.hidden = lines.length === 0;
   }
 
   /* ================= 接口 ================= */
@@ -218,13 +242,11 @@
     return false;
   }
 
-  function showIssues(data, title) {
+  function issueLines(data) {
     var issues = data && data.issues ? data.issues : [];
-    var text = issues.map(function (issue) {
+    return issues.map(function (issue) {
       return (issue.path || "字段") + "：" + issue.message;
-    }).join("；") || "字段校验未通过";
-    showBanner("error", title, text);
-    toast(title + " · " + ((issues[0] && issues[0].path) || "字段") + " 校验未通过");
+    });
   }
 
   /* ================= 渲染：列表 ================= */
@@ -307,7 +329,7 @@
         emptyText.textContent = "填写管理令牌后，这里会显示真实数据。";
       } else {
         emptyTitle.textContent = "还没有动态";
-        emptyText.textContent = "用上面的发布框发第一条。";
+        emptyText.textContent = "点右上角「发动态」写第一条。";
       }
       return;
     }
@@ -488,26 +510,25 @@
     });
   }
 
-  /* ================= 发布 / 编辑 ================= */
+  /* ================= 弹窗：打开 / 填充 / 关闭 ================= */
   function syncCounter() {
-    setText("noteCount", noteText.value.length);
+    if (noteText) setText("noteCount", noteText.value.length);
   }
 
   function paintVisibility() {
-    each(visPick.querySelectorAll(".c-tag"), function (btn) {
+    each(visPick.querySelectorAll(".moment-tag"), function (btn) {
       btn.setAttribute("aria-pressed", String(btn.getAttribute("data-vis") === state.visibility));
     });
   }
 
   function paintPinned() {
     pinPick.setAttribute("aria-pressed", String(state.pinned));
-    pinPick.classList.toggle("is-on", state.pinned);
     pinPick.textContent = state.pinned ? "已置顶 · 点击取消" : "置顶这条";
   }
 
   function updateTagQuick() {
     var value = noteTag.value.trim();
-    each(tagQuick.querySelectorAll(".c-tag"), function (btn) {
+    each(tagQuick.querySelectorAll(".moment-tag"), function (btn) {
       btn.setAttribute("aria-pressed", String(btn.getAttribute("data-tag") === value));
     });
   }
@@ -518,14 +539,13 @@
       attachBox.classList.add("is-on");
       attachImg.src = mediaSrc(state.mediaKey);
       attachName.textContent = state.mediaName || fileName(state.mediaKey);
+      attachName.title = state.mediaKey;
     } else {
       attachBox.classList.remove("is-on");
       attachImg.removeAttribute("src");
       attachName.textContent = "未选图";
+      attachName.removeAttribute("title");
     }
-    each(thumbs.querySelectorAll(".c-thumb"), function (btn) {
-      btn.classList.toggle("is-on", btn.getAttribute("data-key") === state.mediaKey);
-    });
   }
 
   function paintPublishLabel() {
@@ -535,65 +555,77 @@
       : '发布 <span class="ar" aria-hidden="true">→</span>';
   }
 
-  function resetCompose() {
-    state.editingId = null;
-    noteText.value = "";
-    noteCategory.value = DEFAULT_CATEGORY;
-    noteTag.value = "";
-    state.mediaKey = null;
-    state.mediaName = "";
-    state.visibility = "public";
-    state.pinned = false;
-    paintVisibility();
-    paintPinned();
-    updateTagQuick();
-    paintMedia();
-    syncCounter();
-    composeTab.textContent = "NEW NOTE / 新动态";
-    btnCancelEdit.hidden = true;
-    btnPublish.removeAttribute("data-busy");
-    paintPublishLabel();
+  function setDlgState(text) {
+    if (momentDlgState) momentDlgState.textContent = text;
   }
 
-  function fillCompose(item) {
-    state.editingId = item.id;
-    noteText.value = item.body;
-    noteCategory.value = item.category;
-    noteTag.value = item.tag || "";
-    state.visibility = item.visibility === "private" ? "private" : "public";
-    state.pinned = !!item.pinned;
-    state.mediaKey = item.mediaKey || null;
-    state.mediaName = fileName(item.mediaKey);
+  function openDialog(item) {
+    var editing = !!item;
+    state.editingId = editing ? item.id : null;
+    state.visibility = editing && item.visibility === "private" ? "private" : "public";
+    state.pinned = editing ? !!item.pinned : false;
+    state.mediaKey = editing ? item.mediaKey || null : null;
+    state.mediaName = state.mediaKey ? fileName(state.mediaKey) : "";
+    noteText.value = editing ? item.body || "" : "";
+    noteCategory.value = editing && item.category ? item.category : DEFAULT_CATEGORY;
+    noteTag.value = editing && item.tag ? item.tag : "";
+    hideFormBanner();
     paintVisibility();
     paintPinned();
     updateTagQuick();
     paintMedia();
     syncCounter();
-    composeTab.textContent = "EDIT NOTE / 编辑中";
-    btnCancelEdit.hidden = false;
+    if (momentDlgTitle) momentDlgTitle.textContent = editing ? "编辑动态" : "发动态";
+    setDlgState(editing ? "编辑中" : "未发布");
     paintPublishLabel();
-    composeForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (momentDlg) {
+      if (typeof momentDlg.showModal === "function") {
+        if (!momentDlg.open) momentDlg.showModal();
+      } else {
+        momentDlg.setAttribute("open", "");
+      }
+    }
     noteText.focus();
-    toast("已载入编辑区 · 改完点「保存修改」");
   }
 
-  function readCompose() {
+  function closeDialog() {
+    if (!momentDlg || state.busy) return;
+    if (typeof momentDlg.close === "function") {
+      if (momentDlg.open) momentDlg.close();
+    } else {
+      momentDlg.removeAttribute("open");
+    }
+    state.editingId = null;
+  }
+
+  // 提交成功 / 弹窗被强制关闭时用：绕过 busy 守卫，直接收起。
+  function finishDialog() {
+    if (!momentDlg) return;
+    if (typeof momentDlg.close === "function") {
+      if (momentDlg.open) momentDlg.close();
+    } else {
+      momentDlg.removeAttribute("open");
+    }
+    state.editingId = null;
+  }
+
+  function readDialog() {
     var body = noteText.value.trim();
     var category = noteCategory.value.trim();
     var tag = noteTag.value.trim();
     if (!body) {
+      showFormBanner("error", "正文不能为空", "先写点什么再发布。");
       noteText.focus();
-      toast("先写点什么再发");
       return null;
     }
     if (body.length > MAX_BODY) {
+      showFormBanner("error", "正文超长", "最多 " + MAX_BODY + " 字，现在 " + body.length + " 字。");
       noteText.focus();
-      toast("正文最多 " + MAX_BODY + " 字");
       return null;
     }
     if (!category) {
+      showFormBanner("error", "分类不能为空", "填一个分类，或者点下面的快捷标签选一个。");
       noteCategory.focus();
-      toast("分类不能为空");
       return null;
     }
     return {
@@ -606,10 +638,10 @@
     };
   }
 
-  function submitCompose(e) {
-    e.preventDefault();
+  function submitDialog(e) {
+    if (e) e.preventDefault();
     if (state.busy) return;
-    var payload = readCompose();
+    var payload = readDialog();
     if (!payload) return;
 
     var isEdit = !!state.editingId;
@@ -617,22 +649,38 @@
     state.busy = true;
     paintPublishLabel();
     btnPublish.textContent = isEdit ? "保存中…" : "发布中…";
+    setDlgState(isEdit ? "保存中…" : "发布中…");
+    hideFormBanner();
 
     var req = isEdit
       ? api("PATCH", MOMENTS_API + "/" + encodeURIComponent(editingId), payload)
       : api("POST", MOMENTS_API, payload);
 
     req.then(function (res) {
-      if (handleAuth(res)) return;
+      if (res.status === 401) {
+        handleAuth(res);
+        showFormBanner("error", "保存失败 · 管理令牌无效", "点右上角「管理令牌」更新后重试。");
+        return;
+      }
+      if (res.status === 503) {
+        handleAuth(res);
+        showFormBanner("warn", "保存失败 · 服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重试。");
+        return;
+      }
       if (res.status === 400) {
-        showIssues(res.data, isEdit ? "保存失败" : "发布失败");
+        showFormBanner(
+          "error",
+          (isEdit ? "保存失败" : "发布失败") + " · 字段校验未通过",
+          "修正下列字段后再试：",
+          issueLines(res.data)
+        );
+        toast((isEdit ? "保存失败" : "发布失败") + " · 字段校验未通过");
         return;
       }
       if (!res.ok) throw new Error("HTTP " + res.status);
       var item = res.data && res.data.item;
       if (!item || !item.id) throw new Error("接口响应缺少 item 字段");
 
-      resetCompose();
       hideBanner();
       state.q = "";
       state.imgOnly = false;
@@ -640,6 +688,7 @@
       paintImgToggle();
       setFilter("all");
       toast(isEdit ? "已保存修改" : "已发布 · 前台同步");
+      finishDialog();
 
       if (isEdit) {
         loadList(false);
@@ -667,11 +716,35 @@
         loadList(false);
       }
     }).catch(function (err) {
-      showBanner("error", isEdit ? "保存失败" : "发布失败", (err && err.message) || "请稍后重试");
+      showFormBanner("error", isEdit ? "保存失败" : "发布失败", (err && err.message) || "网络或服务端异常，请稍后重试。");
       toast((isEdit ? "保存失败" : "发布失败") + " · 请重试");
     }).then(function () {
       state.busy = false;
       paintPublishLabel();
+      if (momentDlg && momentDlg.open) setDlgState(isEdit ? "编辑中" : "未发布");
+    });
+  }
+
+  /* ================= 配图：共享媒体选择器 ================= */
+  function openMediaPicker() {
+    var picker = window.MyonMediaPicker;
+    if (!picker || typeof picker.open !== "function") {
+      toast("媒体选择器未加载，请刷新页面");
+      return;
+    }
+    picker.open({
+      mode: "pick",
+      api: MEDIA_API,
+      gifApi: GIF_API,
+      base: MEDIA_BASE,
+      selectedKey: state.mediaKey,
+      onPick: function (item) {
+        if (!item || !item.key) return;
+        state.mediaKey = item.key;
+        state.mediaName = item.filename || fileName(item.key);
+        paintMedia();
+        toast("已选配图 · " + (state.mediaName || "图片"));
+      }
     });
   }
 
@@ -701,6 +774,7 @@
       toast("置顶操作失败 · 请重试");
     }).then(function () {
       state.busy = false;
+      paintPublishLabel();
     });
   }
 
@@ -743,129 +817,32 @@
     });
   }
 
-  /* ================= 媒体库 ================= */
-  function mediaErrorText(code) {
-    var map = {
-      unsupported_type: "仅支持 WebP / AVIF / SVG 最终文件",
-      too_large: "转换后超过 8MB",
-      empty_file: "文件为空",
-      upload_failed: "服务端上传失败"
-    };
-    return map[code] || "";
-  }
-
-  function renderThumbs() {
-    if (!thumbs) return;
-    each(thumbs.querySelectorAll(".c-thumb, .c-thumbs-empty"), function (node) { node.remove(); });
-    state.mediaItems.forEach(function (item) {
-      var btn = el("button", "c-thumb");
-      btn.type = "button";
-      btn.setAttribute("data-key", item.key);
-      btn.setAttribute("data-name", item.filename || item.key);
-      var img = document.createElement("img");
-      img.src = mediaSrc(item.key);
-      img.alt = item.filename || item.key;
-      img.loading = "lazy";
-      btn.appendChild(img);
-      if (state.mediaKey === item.key) btn.classList.add("is-on");
-      thumbs.appendChild(btn);
-    });
-    if (state.mediaItems.length === 0) {
-      thumbs.appendChild(el("p", "c-thumbs-empty", "媒体库还是空的，先上传一张。"));
-    }
-  }
-
-  function loadMedia() {
-    if (state.mediaLoaded || state.mediaLoading) return;
-    if (!hasToken()) {
-      if (mediaHint) mediaHint.textContent = "填写管理令牌后才能读取媒体库";
-      return;
-    }
-    state.mediaLoading = true;
-    if (mediaHint) mediaHint.textContent = "正在读取媒体库…";
-    api("GET", MEDIA_API + "?limit=30").then(function (res) {
-      if (handleAuth(res)) {
-        if (mediaHint) mediaHint.textContent = "媒体库读取失败 · 需要令牌";
-        return;
-      }
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      state.mediaLoaded = true;
-      state.mediaItems = Array.isArray(res.data.items) ? res.data.items : [];
-      renderThumbs();
-      if (mediaHint) mediaHint.textContent = state.mediaItems.length + " 张图 · 点缩略图换图";
-    }).catch(function (err) {
-      if (mediaHint) mediaHint.textContent = "媒体库读取失败 · " + ((err && err.message) || "请重试");
-    }).then(function () {
-      state.mediaLoading = false;
-    });
-  }
-
-  function selectMedia(key, name) {
-    state.mediaKey = key || null;
-    state.mediaName = name || fileName(key);
-    paintMedia();
-    if (mediaHint) {
-      mediaHint.textContent = state.mediaKey ? "已选图 · " + (state.mediaName || state.mediaKey) : DEFAULT_MEDIA_HINT;
-    }
-  }
-
-  function uploadMedia(file) {
-    var uploader = window.MyonImageUpload;
-    state.busy = true;
-    btnUpload.disabled = true;
-    if (mediaHint) mediaHint.textContent = "转换中 · " + file.name;
-    if (!uploader) {
-      state.busy = false;
-      btnUpload.disabled = false;
-      if (mediaHint) mediaHint.textContent = "上传组件未加载";
-      toast("上传组件未加载，请刷新页面");
-      return;
-    }
-
-    uploader
-      .prepareImage(file, { gifApi: GIF_API })
-      .then(function (prepared) {
-        if (prepared.size > MAX_UPLOAD) {
-          throw new Error("转换后超过 8MB 上限");
-        }
-        if (mediaHint) mediaHint.textContent = "上传中 · " + prepared.name;
-        var form = new FormData();
-        form.append("file", prepared, prepared.name);
-        return api("POST", MEDIA_API, form);
-      })
-      .then(function (res) {
-        if (handleAuth(res)) return;
-        var data = res.data || {};
-        if (!res.ok) {
-          var message = mediaErrorText(data.error) || ("HTTP " + res.status);
-          toast("上传失败 · " + message);
-          if (mediaHint) mediaHint.textContent = "上传失败 · " + message;
-          return;
-        }
-        if (!data.item || !data.item.key) {
-          toast("上传失败 · 响应缺少 key");
-          return;
-        }
-        state.mediaLoaded = false;
-        selectMedia(data.item.key, data.item.filename || "image.webp");
-        if (mediaHint) mediaHint.textContent = "已上传 · " + data.item.key;
-        toast("图片已上传 · key 已填入");
-      })
-      .catch(function (err) {
-        var message = (err && err.message) || "请重试";
-        toast("上传失败 · " + message);
-        if (mediaHint) mediaHint.textContent = "上传失败 · " + message;
-      })
-      .then(function () {
-        state.busy = false;
-        btnUpload.disabled = false;
-        if (mediaFile) mediaFile.value = "";
-      });
-  }
-
   /* ================= 事件绑定 ================= */
-  // 标签 / 可见性 / 置顶
-  each(tagQuick.querySelectorAll(".c-tag"), function (btn) {
+  // 页头「发动态」打开新动态弹窗；列表行「编辑」打开编辑弹窗
+  btnCompose.addEventListener("click", function () {
+    openDialog(null);
+  });
+
+  // 弹窗表单
+  if (momentForm) momentForm.addEventListener("submit", submitDialog);
+  if (momentDlg) {
+    if (btnCancelMoment) btnCancelMoment.addEventListener("click", closeDialog);
+    momentDlg.addEventListener("click", function (e) {
+      if (e.target === momentDlg) closeDialog();
+    });
+    momentDlg.addEventListener("cancel", function (e) {
+      // 请求还没回来时不接受 Esc 关闭，避免状态卡在提交中。
+      if (state.busy) e.preventDefault();
+    });
+    momentDlg.addEventListener("close", function () {
+      if (state.busy) return;
+      state.editingId = null;
+      hideFormBanner();
+    });
+  }
+
+  // 标签 / 可见性 / 置顶 / 正文字数
+  each(tagQuick.querySelectorAll(".moment-tag"), function (btn) {
     btn.addEventListener("click", function () {
       var value = btn.getAttribute("data-tag");
       noteTag.value = noteTag.value.trim() === value ? "" : value;
@@ -877,7 +854,7 @@
     if (noteCategory.value.length > 40) noteCategory.value = noteCategory.value.slice(0, 40);
   });
 
-  each(visPick.querySelectorAll(".c-tag"), function (btn) {
+  each(visPick.querySelectorAll(".moment-tag"), function (btn) {
     btn.addEventListener("click", function () {
       state.visibility = btn.getAttribute("data-vis") === "private" ? "private" : "public";
       paintVisibility();
@@ -888,46 +865,15 @@
     paintPinned();
   });
 
-  // 媒体库缩略图
-  thumbs.addEventListener("click", function (e) {
-    var btn = e.target.closest(".c-thumb");
-    if (!btn) return;
-    selectMedia(btn.getAttribute("data-key"), btn.getAttribute("data-name"));
-  });
-  btnAddImg.addEventListener("click", function () {
-    var open = thumbs.classList.toggle("is-open");
-    btnAddImg.setAttribute("aria-expanded", String(open));
-    if (open) loadMedia();
-  });
-  btnUpload.addEventListener("click", function () { mediaFile.click(); });
-  mediaFile.addEventListener("change", function () {
-    var file = mediaFile.files && mediaFile.files[0];
-    if (!file) return;
-    if (!/^image\//.test(file.type)) {
-      toast("只支持图片文件");
-      mediaFile.value = "";
-      return;
-    }
-    if (file.size > MAX_SOURCE_UPLOAD) {
-      toast("源图片超过 20MB");
-      mediaFile.value = "";
-      return;
-    }
-    uploadMedia(file);
-  });
-  btnRemoveImg.addEventListener("click", function () { selectMedia(null, ""); });
-
-  // 正文计数 / 发布
   noteText.addEventListener("input", syncCounter);
-  composeForm.addEventListener("submit", submitCompose);
-  btnClear.addEventListener("click", function () {
-    resetCompose();
-    noteText.focus();
-    toast("已清空草稿");
-  });
-  btnCancelEdit.addEventListener("click", function () {
-    resetCompose();
-    toast("已取消编辑");
+
+  // 配图：共享媒体选择器（现有 R2 图片 + 上传）
+  btnPickImage.addEventListener("click", openMediaPicker);
+  btnRemoveImg.addEventListener("click", function () {
+    state.mediaKey = null;
+    state.mediaName = "";
+    paintMedia();
+    toast("已移除配图");
   });
 
   // 列表操作（事件委托）
@@ -940,7 +886,7 @@
     if (!item) return;
     var act = btn.getAttribute("data-act");
     if (act === "edit") {
-      fillCompose(item);
+      openDialog(item);
       return;
     }
     if (act === "pin") {
@@ -985,15 +931,6 @@
     if (state.offset + state.limit >= state.total) return;
     state.offset += state.limit;
     loadList(false);
-  });
-
-  // 页头动作
-  btnCompose.addEventListener("click", function () {
-    resetCompose();
-    noteText.focus();
-    composeForm.scrollIntoView({ behavior: "smooth", block: "center" });
-    noteText.classList.add("is-flash");
-    setTimeout(function () { noteText.classList.remove("is-flash"); }, 900);
   });
 
   // 删除确认

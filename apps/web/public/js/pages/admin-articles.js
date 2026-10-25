@@ -73,6 +73,13 @@
   var pageEl = document.querySelector(".page[data-api]");
   var API_URL = pageEl ? pageEl.getAttribute("data-api") || "" : "";
 
+  // 正文编辑器的图片按钮复用共享媒体选择器（只把服务端渲染的地址透传给共享组件）。
+  var MEDIA_CONFIG = {
+    api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
+    gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
+    base: pageEl ? pageEl.getAttribute("data-media-base") || "" : ""
+  };
+
   var rowsEl = $("rows");
   var tblWrap = $("tblWrap");
   var listState = $("listState");
@@ -776,6 +783,28 @@
     bodyHint.textContent = fmtNumber(chars) + " 字 · 约 " + Math.max(1, Math.ceil(chars / 400)) + " 分钟";
   }
 
+  /* ---------------- Markdown 编辑器（共享组件） ----------------
+     /js/markdown-editor.js 负责工具栏、预览渲染与图片选择；
+     本页只负责把 textarea / 预览容器和媒体配置交给它，不自己造工具栏。
+     共享脚本还没就绪时静默跳过，表单逻辑仍可正常保存。 */
+  var mdEditor = null;
+
+  function mountMarkdownEditor() {
+    if (!window.MyonMarkdownEditor || typeof window.MyonMarkdownEditor.mount !== "function") return;
+    mdEditor = window.MyonMarkdownEditor.mount({
+      textarea: "#fBody",
+      preview: "#fPreview",
+      mode: "article",
+      media: MEDIA_CONFIG
+    });
+  }
+
+  /** 字数立即更新；编辑器就绪时同步刷新预览。 */
+  function renderPreview() {
+    updateBodyHint();
+    if (mdEditor && typeof mdEditor.render === "function") mdEditor.render();
+  }
+
   function openForm(post, prefill) {
     state.editing = post || null;
     hideFormBanner();
@@ -807,7 +836,7 @@
       postMeta.textContent = "新增的文章默认存为草稿 · 发布后前台可见";
     }
     setFormBusy(false);
-    updateBodyHint();
+    renderPreview();
     if (typeof postDlg.showModal === "function") postDlg.showModal();
     fTitle.focus();
   }
@@ -1079,6 +1108,7 @@
   });
 
   /* ---------------- 初始化 ---------------- */
+  mountMarkdownEditor();
   resetCounts();
   applyStatusTab();
   loadPage(readPageParam());
