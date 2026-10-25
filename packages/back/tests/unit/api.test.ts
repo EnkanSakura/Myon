@@ -836,6 +836,54 @@ describe('tools and traffic API', () => {
 });
 
 describe('admin access mode', () => {
+  /**
+   * 造一份 RS256 的 Access JWT 和对应 JWKS：`requireAdmin` 走 cookie 校验时
+   * 会用 `verifyAccessJwt` 拉 JWKS 验签，这里用同一对密钥签名。
+   */
+  async function createAccessToken(options: {
+    teamDomain: string;
+    aud: string;
+  }) {
+    const keyPair = (await crypto.subtle.generateKey(
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['sign', 'verify'],
+    )) as { publicKey: CryptoKey; privateKey: CryptoKey };
+    const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+    const kid = 'unit-test-kid';
+    const now = Math.floor(Date.now() / 1000);
+    const base64Url = (bytes: Uint8Array) => {
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    };
+    const encode = (value: unknown) =>
+      base64Url(new TextEncoder().encode(JSON.stringify(value)));
+    const data = `${encode({ alg: 'RS256', kid, typ: 'JWT' })}.${encode({
+      aud: [options.aud],
+      iss: `https://${options.teamDomain}`,
+      iat: now,
+      exp: now + 600,
+    })}`;
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      keyPair.privateKey,
+      new TextEncoder().encode(data),
+    );
+    return {
+      token: `${data}.${base64Url(new Uint8Array(signature))}`,
+      jwks: { keys: [{ ...publicJwk, kid, alg: 'RS256' }] },
+    };
+  }
+
   const accessEnv = {
     ...createEnv('test'),
     ACCESS_TEAM_DOMAIN: 'demo.cloudflareaccess.com',
@@ -852,6 +900,45 @@ describe('admin access mode', () => {
       accessEnv,
     );
     expect(malformed.status).toBe(401);
+  });
+
+  it('accepts the CF_Authorization cookie for API requests', async () => {
+    const teamDomain = 'cookie-auth.example.com';
+    const aud = 'cookie-auth-aud';
+    const { token, jwks } = await createAccessToken({ teamDomain, aud });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(jwks), {
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    try {
+      const cookieEnv = {
+        ...createEnv('test'),
+        ACCESS_TEAM_DOMAIN: teamDomain,
+        ACCESS_AUD: aud,
+      } as unknown as AppBindings;
+
+      const ok = await app.request(
+        '/api/v1/admin/settings',
+        { headers: { cookie: `theme=dark; CF_Authorization=${token}` } },
+        cookieEnv,
+      );
+      expect(ok.status).toBe(200);
+      expect(await ok.json()).toHaveProperty('settings');
+
+      const bad = await app.request(
+        '/api/v1/admin/settings',
+        { headers: { cookie: 'CF_Authorization=not-a-jwt' } },
+        cookieEnv,
+      );
+      expect(bad.status).toBe(401);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -876,6 +963,44 @@ describe('bangumi cover proxy', () => {
       expect(res.headers.get('cache-control')).toContain('max-age=31536000');
       expect(await res.arrayBuffer()).toEqual(png.buffer);
       expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('copies a cached cover into a fresh mutable response', async () => {
+    const cached = new Response(png, {
+      status: 200,
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=31536000, immutable',
+      },
+    });
+    const cacheStub = {
+      match: vi.fn(async () => cached),
+      put: vi.fn(async () => undefined),
+    };
+    vi.stubGlobal('caches', { default: cacheStub });
+    const fetchMock = vi.fn(async () => {
+      throw new Error('cache hit 不应回源');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const src = 'https://lain.bgm.tv/pic/cover/l/cc/dd/cache-hit-test.jpg';
+      const res = await app.request(
+        `/api/v1/bangumi/cover?src=${encodeURIComponent(src)}`,
+        {},
+        createEnv('test'),
+      );
+      expect(res.status).toBe(200);
+      // cache.match() 返回的响应头在 Workers 运行时不可变，直接返回会被
+      // secureHeaders() 撞出 "Can't modify immutable headers"（接口 500）。
+      // 这里断言拿到的是新响应、头可写、内容与缓存一致。
+      expect(res).not.toBe(cached);
+      expect(() => res.headers.set('x-test', '1')).not.toThrow();
+      expect(res.headers.get('cache-control')).toContain('max-age=31536000');
+      expect(await res.arrayBuffer()).toEqual(png.buffer);
+      expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

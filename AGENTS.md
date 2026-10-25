@@ -13,7 +13,7 @@
 - **API 已版本化**：内容接口在 `/api/v1/*`，探针 `/api/health` 不版本化。后台写接口在 `/api/v1/admin/*`。
 - **站点配置存在 Workers KV**：主题色、页脚文案、站点名/副标题/描述、首页配置与尾页后记（`home_end_*` / `home_afterword_*`）都在 KV 键 `site-settings:v1`（一份 JSON），键名与默认值定义在 `@myon/shared` 的 `siteSettingKeys`；**D1 里没有 `settings` 表**。前台通过 `GET /api/v1/site` 读取，后台设置页通过 `/api/v1/admin/settings` 读写。每页 head-title 统一为 `页面名 · 站点名 副标题`（`formatPageTitle`），head-description 统一取站点描述。页脚版权不再单独配置，由「© 当前年份 + `site_author`」生成。
 - **维护模式**：`maintenance_enabled` 存 KV；`apps/web/src/worker.ts` 对前台 HTML GET 返回 503 维护页，`/admin`、`/api`、静态资源与 RSS 放行；后台总览的开关写同一个设置。
-- **后台写接口的临时门禁**是环境变量 `ADMIN_TOKEN`（请求头 `x-admin-token`）：未配置时返回 503，配置后不匹配返回 401。Cloudflare Access 接入后替换为校验 Access JWT。
+- **后台写接口的临时门禁**是环境变量 `ADMIN_TOKEN`（请求头 `x-admin-token`）：未配置时返回 503，配置后不匹配返回 401。Cloudflare Access 接入后改为校验 Access JWT：**只用一个 Access 应用保护 `/admin*`**，Worker 同时接受 Access 注入的 `Cf-Access-Jwt-Assertion` 头与同源请求的 `CF_Authorization` cookie（`/api/v1/admin/*` 不在应用路径内，靠 cookie 校验）；不要为 API 再建第二个 Access 应用——同一域名下两个应用的 AUD 不同却共用一个 cookie，后台 fetch 会被 302 到登录域并被 CORS 拦截。
 - **文章与动态有分类**：`posts.category`、`moments.category`，接口返回 `category`。
 - **列表页数据来自 D1**：文章目次、动态、展柜、追番都在服务端经 `/api/v1/*` 取数渲染；`GET /api/v1/stats` 是公开只读的内容统计，后台总览与前台页头共用。
 - **追番分五类**：`bangumi_shows.subject_type` 为 `anime/book/music/game/real`；`syncBangumi` 一次请求拉全部收藏（超过 100 条才分页），再按响应里的 `subject_type` 分类写入，书籍优先 `vol_status`/`volumes`，并保存我的评分 `score`、简评 `comment` 与封面源 URL `cover_source`。封面不在同步时下载或转存：前台把 `images.large`（回退 common/medium）经站内 `GET /api/v1/bangumi/cover?src=` 代理，Worker 只放行 bgm.tv/bangumi.tv、限制 8MB，并用 Cloudflare 边缘缓存保存一年。`GET /api/v1/bangumi?type=&sort=recent` 支持筛选与按更新时间排序；`/api/v1/stats.bangumi` 提供 `byType` 与 `byStatus` 全量聚合。前台 `/bangumi` 默认简化总览，分类页用 `?type=`。
@@ -25,13 +25,13 @@
 - **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
 - **发布流程拆成三个 workflow**：push `main` 后按 `Database Migrate`（D1 迁移）→ `Deploy`（只构建 + 部署）→ `Smoke Test`（等待 3 分钟后 curl `/api/health`）串联；`deploy.yml` 不再做迁移和 smoke。
 - **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
-- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图与贴纸文案都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。
+- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图与贴纸文案都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。第 2/3/4 页的装饰插图也统一使用 `home_cover_image`，不要写死 `/media` 图片路径。
 - **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
 - **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
 - **首页窄屏交互**：面板内容高于一屏时先内部滚动，滚到底/顶才翻页，并显示「本页还有内容」提示；不要改回“滚轮直接翻页”。
 - **本地 Bangumi 同步**用 `pnpm bangumi:sync:local`（默认走 `127.0.0.1:7890` 代理，`BANGUMI_PROXY` 可覆盖）；生产 Worker 的 Cron 与后台按钮是直连。本地脚本只写 D1 元数据（含 `cover_source`），不下载封面；封面由前台代理路由按需获取。
 - **手机端原生 App** 将来在仓库的另一条分支开发，通过 HTTP 消费 `/api/v1`，不共享 TS 类型。
-- **后台页面尚未接入身份验证**：`/admin*` 本身没有登录，只有写接口有令牌门禁。**令牌入口只有一个**：`AdminLayout` 顶栏的「管理令牌」按钮/弹窗（`public/js/admin-token.js`），页面里不要再放第二个令牌输入框。
+- **后台页面身份验证是可选的**：未接 Cloudflare Access 时 `/admin*` 本身没有登录，只有写接口有令牌门禁；接入后 `/admin*` 由单个 Access 应用保护（见上）。**令牌入口只有一个**：`AdminLayout` 顶栏的「管理令牌」按钮/弹窗（`public/js/admin-token.js`），页面里不要再放第二个令牌输入框。
 
 ---
 

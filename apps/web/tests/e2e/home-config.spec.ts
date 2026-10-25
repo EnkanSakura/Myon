@@ -48,6 +48,19 @@ test.describe('首页封面配置', () => {
     await expect(page.locator('.p1 .frame-wrap .sticker')).toContainText(
       home.cover.badge,
     );
+    // 第 2/3/4 页的装饰框也统一用后台配置的封面图，不再引用写死的 /media 路径
+    for (const selector of [
+      '.p2 .side .frame img',
+      '.p3 .mini-panel .frame img',
+      '.p4 .collage .frame img',
+    ]) {
+      const images = page.locator(selector);
+      const count = await images.count();
+      expect(count).toBeGreaterThan(0);
+      for (let i = 0; i < count; i += 1) {
+        await expect(images.nth(i)).toHaveAttribute('src', home.cover.image);
+      }
+    }
 
     // 七页主标签都来自配置
     await expect(page.locator('.p1 .kicker .sticker').first()).toHaveText(

@@ -112,7 +112,7 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 | `CLOUDFLARE_KV_SETTINGS_ID` | 是 | GitHub Secret | 第 2.3 节拿到的 KV namespace id；Deploy 用它生成 `SETTINGS` 绑定并迁移旧设置 |
 | `ADMIN_TOKEN` | 否 | GitHub Secret → Worker secret | 后台写接口的临时门禁；Deploy 时自动同步到 Worker，见 3.3 |
 | `ACCESS_TEAM_DOMAIN` | 否 | GitHub Secret → Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
-| `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | Access 应用（API 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
+| `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | 后台 Access 应用（`/admin*` 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
 | `CF_ACCESS_CLIENT_ID` | 否 | GitHub Secret | Cloudflare Access Service Token 的 Client ID；配了之后 smoke test 会带上 Access 头（与下一项成对） |
 | `CF_ACCESS_CLIENT_SECRET` | 否 | GitHub Secret | 与上一项成对配置；用于让 CI 的 smoke test 通过 Access 保护 |
 | `BANGUMI_ACCESS_TOKEN` | 否 | GitHub Secret → Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
@@ -289,27 +289,30 @@ Deploy 成功后触发；**先等待 3 分钟**让新 Worker 版本在边缘生�
 ## 6. Cloudflare Access（可选）
 
 后台页面本身没有登录，写接口用 `ADMIN_TOKEN` 临时门禁；接 Cloudflare Access 后改用 Access JWT，
-更安全。需要 **两个 Access 应用**：
+更安全。**只需要一个 Access 应用**：
 
 | 应用 | 保护路径 | 作用 |
 | --- | --- | --- |
-| A. 后台界面 | `/admin*` | 访问后台页面时要求登录（邮箱/SSO） |
-| B. 后台 API | `/api/v1/admin/*` | 给 API 请求加 `Cf-Access-Jwt-Assertion`，由 Worker 校验 |
+| 后台 | `/admin*` | 访问后台页面时要求登录（邮箱/SSO） |
 
 配置步骤（Cloudflare Zero Trust → Access → Applications → Self-hosted）：
 
-1. 应用 A：域名 = 站点域名，路径 = `/admin*`，加允许策略（邮箱/域名/组）；
-2. 应用 B：域名 = 站点域名，路径 = `/api/v1/admin/*`，策略与应用 A 一致；
-3. 记下应用 B 的 **Audience Tag**（`ACCESS_AUD`）和团队域名（`ACCESS_TEAM_DOMAIN`，形如
+1. 新建一个应用：域名 = 站点域名，路径 = `/admin*`，加允许策略（邮箱/域名/组）；
+2. 记下这个应用的 **Audience Tag**（`ACCESS_AUD`）和团队域名（`ACCESS_TEAM_DOMAIN`，形如
    `<team>.cloudflareaccess.com`）；
-4. 把两者配到仓库 Repository Secrets（`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD`）后重新跑 Deploy（见 3.3）；
-5. 此时 Worker 的 `requireAdmin` 优先校验 Access JWT，`ADMIN_TOKEN` 不再参与；两个变量必须成对配置，
-   只配一个会回退到 `ADMIN_TOKEN` 模式。
+3. 把两者配到仓库 Repository Secrets（`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD`）后重新跑 Deploy（见 3.3）；
+4. 此时 Worker 的 `requireAdmin` 优先校验 Access JWT：`/admin*` 由 Access 注入
+   `Cf-Access-Jwt-Assertion` 头；`/api/v1/admin/*` 不在 Access 应用范围内，Worker 改为校验
+   浏览器同源请求带回的 `CF_Authorization` cookie（同一个应用、同一个 AUD），`ADMIN_TOKEN`
+   不再参与；两个变量必须成对配置，只配一个会回退到 `ADMIN_TOKEN` 模式。
 
-验证：无痕窗口打开 `https://<站点>/admin` 应跳转 Access 登录；登录后后台接口正常；
-不带 JWT 直接 curl `/api/v1/admin/bangumi` 时，请求会先被 Access 在边缘拦截
-（通常是 302 跳登录页，非浏览器客户端也可能是 403），到不了 Worker；只有带合法
-Access JWT 的请求才会进入 Worker 的 `requireAdmin` 校验。
+**不要把 `/api/v1/admin/*` 单独做成第二个 Access 应用**：同一域名下两个应用各有自己的 AUD，
+却共用一个 `CF_Authorization` cookie；后台页面用 `fetch` 请求 API 时会被 Access 302 到登录域，
+浏览器按 CORS 拦截（现象是后台所有接口「连接失败」）。
+
+验证：无痕窗口打开 `https://<站点>/admin` 应跳转 Access 登录；登录后后台接口正常（Network 里
+`/api/v1/admin/settings` 返回 200）；不带 cookie / JWT 直接 curl `/api/v1/admin/settings` 时由
+Worker 返回 401（API 路径没有单独的 Access 应用，边缘不拦截，鉴权在 Worker 里完成）。
 
 如果 Deploy 的 smoke test 需要访问受 Access 保护的路径：在 Zero Trust → Access → Service Auth
 建一个 Service Token，把 Client ID / Client Secret 配到 Repository Secrets 的

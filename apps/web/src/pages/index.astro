@@ -25,6 +25,9 @@ import { mediaUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
+// 首页所有插图（封面与第 2/3/4 页的装饰框）统一用后台「封面图」设置的那张图，
+// 不再硬编码 /media 下的设计占位路径，避免指向 R2 里不存在的对象。
+const homeCoverImage = mediaUrl(home.cover.image);
 const end = site.end;
 const leadLines = home.lead.split(String.fromCharCode(10));
 const afterwordLines = end.afterword.body.split(String.fromCharCode(10));
@@ -276,7 +279,7 @@ function presetValue(preset: HomeStatPreset): string {
         <span class="dots" aria-hidden="true"></span>
         <span class="tape" aria-hidden="true"></span>
         <div class="frame">
-          <img src={mediaUrl(home.cover.image)} alt="被一盏灯照亮的木制陈列柜">
+          <img src={homeCoverImage} alt="被一盏灯照亮的木制陈列柜">
           <span class="cover-year">MYON {year}</span>
         </div>
         <span class="sticker cover-badge">{home.cover.badge}</span>
@@ -322,8 +325,8 @@ function presetValue(preset: HomeStatPreset): string {
       </div>
       </div>
       <div class="side">
-        <div class="frame reveal" style="--i:2"><img src="/media/gallery/k1-fuji.jpg" alt="《凯风快晴》，葛饰北斋"><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
-        <div class="frame two reveal" style="--i:3"><img src="/media/gallery/k6-print.jpg" alt="江户风俗册页"><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
+        <div class="frame reveal" style="--i:2"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
+        <div class="frame two reveal" style="--i:3"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
       </div>
       <span class="bgtype" aria-hidden="true">ARTICLES</span>
     </div>
@@ -348,7 +351,7 @@ function presetValue(preset: HomeStatPreset): string {
         <div class="mini-panel m2 is-pink reveal" style="--i:2">
           <div class="pm"><span>昨天 22:41</span><span>N°185</span></div>
           <p>神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。</p>
-          <div class="frame"><img src="/media/gallery/k6-print.jpg" alt="浮世绘册页"><div class="cap"><span>FIGURE</span><span>册页</span></div></div>
+          <div class="frame"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE</span><span>册页</span></div></div>
         </div>
         <div class="mini-panel m3 reveal" style="--i:3">
           <div class="pm"><span>周二 18:03</span><span>N°184</span></div>
@@ -358,7 +361,7 @@ function presetValue(preset: HomeStatPreset): string {
         <div class="mini-panel m4 reveal" style="--i:4">
           <div class="pm"><span>上周六</span><span>N°182</span></div>
           <p>去看了个小的浮世绘展，回来把首页的粉调亮了一格。</p>
-          <div class="frame"><img src="/media/moments/w3-museum.jpg" alt="19 世纪博物馆展厅版画"><div class="cap"><span>FIGURE</span><span>展场</span></div></div>
+          <div class="frame"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE</span><span>展场</span></div></div>
         </div>
       </div>
     </div>
@@ -381,9 +384,9 @@ function presetValue(preset: HomeStatPreset): string {
       </div>
       <div class="collage reveal" style="--i:1">
         <span class="halo" aria-hidden="true"></span>
-        <div class="frame f1"><img src="/media/gallery/k7-demon.jpg" alt="鬼之根付，象牙雕，黑底"><div class="cap"><span>C-001 鬼之根付</span><span>手办</span></div></div>
-        <div class="frame f2"><img src="/media/gallery/k4-box.jpg" alt="莳绘文箱"><div class="cap"><span>E-007 莳绘文箱</span><span>小物</span></div></div>
-        <div class="frame f3"><img src="/media/gallery/m7-laugh.jpg" alt="笑面根付，木雕"><div class="cap"><span>H-019 笑面根付</span><span>手办</span></div></div>
+        <div class="frame f1"><img src={homeCoverImage} alt=""><div class="cap"><span>C-001 鬼之根付</span><span>手办</span></div></div>
+        <div class="frame f2"><img src={homeCoverImage} alt=""><div class="cap"><span>E-007 莳绘文箱</span><span>小物</span></div></div>
+        <div class="frame f3"><img src={homeCoverImage} alt=""><div class="cap"><span>H-019 笑面根付</span><span>手办</span></div></div>
         <span class="sticker s1" style="background:var(--ink);color:var(--pink)">NEW ARRIVAL</span>
         <span class="sticker s2 sticker--paper">CAT.04</span>
       </div>

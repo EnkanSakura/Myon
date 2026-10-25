@@ -266,7 +266,16 @@ v1.get('/bangumi/cover', async (c) => {
   if (cache) {
     try {
       const hit = await cache.match(cacheKey);
-      if (hit) return hit;
+      if (hit) {
+        // Cache API 返回的 Response 头是不可变的，而 secureHeaders() 中间件会在
+        // 响应上补安全头；直接原样返回会抛 "Can't modify immutable headers"
+        // （接口变成 500，还会带着一年的缓存头被边缘缓存），这里复制成可变响应。
+        return new Response(hit.body, {
+          status: hit.status,
+          statusText: hit.statusText,
+          headers: new Headers(hit.headers),
+        });
+      }
     } catch (error) {
       console.error('[bangumi-cover] cache read failed', error);
     }

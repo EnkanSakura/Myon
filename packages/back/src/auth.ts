@@ -12,6 +12,25 @@ function safeEqual(a: string, b: string): boolean {
 
 const decoder = new TextDecoder();
 
+/**
+ * 从 Cookie 头里取 Cloudflare Access 的应用令牌。
+ * 后台界面（`/admin*`）由单个 Access 应用保护，`/api/v1/admin/*` 不在该应用的
+ * 路径范围内，Cloudflare 不会注入 `Cf-Access-Jwt-Assertion` 头；但浏览器访问同源
+ * 接口时会带上登录时写入的 `CF_Authorization` cookie，Worker 从这里验同一份 JWT。
+ */
+function readAccessCookieJwt(
+  cookieHeader: string | undefined,
+): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(';')) {
+    const entry = part.trim();
+    if (!entry.startsWith('CF_Authorization=')) continue;
+    const value = entry.slice('CF_Authorization='.length).trim();
+    return value || undefined;
+  }
+  return undefined;
+}
+
 function base64UrlToBytes(input: string): Uint8Array<ArrayBuffer> {
   const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
   const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
@@ -103,7 +122,10 @@ export async function verifyAccessJwt(
 
 /**
  * 后台写接口的门禁，两种模式：
- * - 配置了 ACCESS_TEAM_DOMAIN + ACCESS_AUD：校验 Access 注入的 JWT（生产推荐）；
+ * - 配置了 ACCESS_TEAM_DOMAIN + ACCESS_AUD：校验 Access JWT。后台界面走 Access
+ *   应用时会拿到注入的 `Cf-Access-Jwt-Assertion` 头；只保护 `/admin*` 时，
+ *   `/api/v1/admin/*` 的请求没有该头，改为校验同源请求带回的 `CF_Authorization`
+ *   cookie（同一个应用、同一个 AUD）；
  * - 否则回退到 `x-admin-token` 头与 ADMIN_TOKEN 比对（本地开发用）。
  * 两种都没配置时直接关闭接口，避免把写能力暴露出去。
  */
@@ -114,7 +136,9 @@ export const requireAdmin: MiddlewareHandler<{
   const aud = c.env.ACCESS_AUD;
 
   if (domain && aud) {
-    const jwt = c.req.header('cf-access-jwt-assertion');
+    const jwt =
+      c.req.header('cf-access-jwt-assertion') ??
+      readAccessCookieJwt(c.req.header('cookie'));
     if (!jwt) return c.json({ error: 'unauthorized' }, 401);
     let valid = false;
     try {

@@ -7,7 +7,9 @@ ENVIRONMENT=development
 ADMIN_TOKEN=dev-admin-token
 
 # 可选：接入 Cloudflare Access 后，配置下面两项即可改用 Access JWT 鉴权，
-# ADMIN_TOKEN 不再需要。ACCESS_AUD 是 Access 应用里看到的 Audience Tag。
+# ADMIN_TOKEN 不再需要。只需要一个保护 `/admin*` 的后台应用：
+# ACCESS_AUD 填这个应用的 Audience Tag；`/api/v1/admin/*` 由 Worker 校验
+# 浏览器同源请求带回的 `CF_Authorization` cookie（同一个应用、同一个 AUD）。
 # 生产环境同样配到仓库 Repository Secrets，由 Deploy workflow 同步到 Worker。
 # ACCESS_TEAM_DOMAIN=myon.cloudflareaccess.com
 # ACCESS_AUD=
