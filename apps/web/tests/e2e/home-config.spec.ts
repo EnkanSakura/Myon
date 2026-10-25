@@ -25,7 +25,7 @@ test.describe('首页封面配置', () => {
     const year = String(new Date().getFullYear());
 
     await page.goto('/?p=0');
-    await expect(page.locator('.p1 h1')).toContainText(home.title);
+    await expect(page.locator('.p1 .copy h1')).toContainText(home.title);
     await expect(page.locator('.p1 .stat-box')).toHaveCount(home.stats.length);
     await expect(page.locator('.p1 .contacts a')).toHaveCount(
       home.links.length,

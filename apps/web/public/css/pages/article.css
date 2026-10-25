@@ -18,6 +18,10 @@
 .body h2{font-size:30px;font-weight:900;line-height:1.35;margin:54px 0 16px;color:var(--ink);display:flex;gap:12px;align-items:baseline;scroll-margin-top:110px;border-top:3px solid var(--ink);padding-top:14px}
 .body h2 .n{font-family:var(--disp);font-size:13px;letter-spacing:.04em;color:var(--on-pink);flex:none;background:var(--pink);border:2px solid var(--ink);padding:1px 6px}
 .body h3{font-size:20px;font-weight:900;margin:32px 0 12px;color:var(--ink)}
+/* h4-h6：设计稿没有定义，补上和正文字号递减的阅读档（间距按 4px 网格） */
+.body h4{font-size:17px;font-weight:900;line-height:1.55;margin:28px 0 8px;color:var(--ink)}
+.body h5{font-size:15px;font-weight:900;line-height:1.6;margin:24px 0 8px;color:var(--ink)}
+.body h6{font-size:13px;font-weight:900;line-height:1.7;margin:20px 0 8px;color:var(--ink);letter-spacing:.02em}
 .body ul{margin:0 0 24px;padding-left:0}
 .body ul li{position:relative;padding-left:24px;margin-bottom:8px;color:var(--ink-80)}
 .body ul li::before{content:"";position:absolute;left:0;top:12px;width:10px;height:10px;background:var(--pink);border:2px solid var(--ink)}
@@ -27,12 +31,15 @@
 .body a:hover{background:var(--pink);color:var(--on-pink)}
 .body sup{font-family:var(--mono);font-size:10px;color:var(--pink-deep);padding-left:2px}
 /* 代码 */
+/* 裸代码块兜底：只出现在渲染器没包成 .code 卡片时（列表/引用里的围栏等），硬边框 + 深底 + 横向滚动 */
+.body pre{margin:0 0 24px;padding:16px 18px;border:3px solid var(--ink);background:var(--ink);color:var(--paper);overflow-x:auto;max-width:100%;font-family:var(--mono);font-size:13px;line-height:1.78}
+[data-theme="dark"] .body > pre{background:var(--paper-3);color:var(--ink)}
 .code{margin:26px 0 32px;border:3px solid var(--ink);background:var(--ink);box-shadow:6px 6px 0 var(--ink-25)}
 .code-h{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 14px;border-bottom:2px solid color-mix(in srgb, var(--paper) 25%, transparent);font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--pink-soft)}
 .code-h .fname{color:var(--paper)}
 .code-h .copy{color:var(--pink);letter-spacing:.12em}
 .code-h .copy:hover{color:var(--paper)}
-.code pre{margin:0;padding:16px 18px 20px;overflow-x:auto;max-width:100%;font-family:var(--mono);font-size:13px;line-height:1.78;color:#EDE6DC}
+.code pre{margin:0;padding:16px 18px 20px;border:0;background:none;overflow-x:auto;max-width:100%;font-family:var(--mono);font-size:13px;line-height:1.78;color:#EDE6DC}
 .code .kw{color:var(--pink)}.code .st{color:#A9D8B8}.code .cm{color:#8B7F86}.code .fn{color:#F1C7DE}.code .ty{color:#A8C7D8}
 /* 引用 */
 .pull{margin:34px 0;border:3px solid var(--ink);background:var(--pink);padding:22px 24px 20px;box-shadow:6px 6px 0 var(--shade);position:relative;transform:rotate(-.4deg)}
@@ -97,6 +104,9 @@
   .body{font-size:16px;line-height:1.95}
   .body > p:first-of-type{font-size:17px}
   .body h2{font-size:23px;margin-top:40px}
+  .body h4{font-size:16px;margin-top:24px}
+  .body h5{font-size:14px;margin-top:20px}
+  .body h6{font-size:13px;margin-top:16px}
   .code pre{font-size:12px}
   .pull p{font-size:18px}
   .diagram{grid-template-columns:1fr;padding:14px}
@@ -108,15 +118,29 @@
 }
 
 /* Markdown 正文补充：D1 里的 Markdown 渲染出的元素，设计稿没有覆盖到 */
-.body ol{margin:0 0 24px;padding-left:24px}
-.body ol li{margin-bottom:8px;color:var(--ink-80)}
+/* 有序列表：v2.css 的全局 reset 去掉了编号，正文里恢复数字编号，标记用 mono + 深粉 */
+.body ol{margin:0 0 24px;padding-left:32px;list-style:decimal}
+.body ol li{margin-bottom:8px;padding-left:4px;color:var(--ink-80)}
+.body ol li::marker{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--pink-deep)}
+/* 任务列表：渲染器输出 <li class="task"><span class="task-box"> 文本</li>，方框交给 CSS 画 */
+.body li.task{padding-left:0}
+.body li.task::before{content:none}
+.body .task-box{display:inline-block;width:12px;height:12px;margin-right:8px;background:var(--paper);border:2px solid var(--ink);vertical-align:-1px}
+.body .task-box.is-done{background:var(--pink)}
+/* 松散列表的任务项会被 <p> 包一层，别让段落间距把方框顶开 */
+.body li.task p{margin:0}
 .body blockquote{margin:32px 0;padding:18px 22px;border:3px solid var(--ink);border-left-width:10px;background:var(--pink-wash);box-shadow:5px 5px 0 var(--shade)}
 .body blockquote p{margin:0;font-size:17px;color:var(--ink)}
 .body blockquote p + p{margin-top:10px}
 .body hr{border:0;border-top:3px solid var(--ink);margin:40px 0}
 .body table{width:100%;border-collapse:collapse;margin:0 0 24px;font-size:14px}
 .body th,.body td{border:2px solid var(--ink);padding:8px 10px;text-align:left}
+/* GFM 的 align 属性要压过上一条 text-align:left */
+.body th[align="center"],.body td[align="center"]{text-align:center}
+.body th[align="right"],.body td[align="right"]{text-align:right}
 .body th{background:var(--pink-wash);font-weight:900}
 .body img{max-width:100%;height:auto;border:3px solid var(--ink);box-shadow:6px 6px 0 var(--shade)}
+.body del{text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:var(--ink-62);color:var(--ink-62)}
 .body code{font-family:var(--mono);font-size:.9em;background:var(--pink-wash);border:2px solid var(--ink);padding:1px 5px}
-.code pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit}
+/* 代码块里的 code 不要再套行内代码的粉底和细框 */
+.body pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit}

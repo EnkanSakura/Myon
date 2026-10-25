@@ -1,4 +1,4 @@
-/* Myon · 全站公共交互：深浅色切换 + 封面「关于」渲染 */
+/* Myon · 全站公共交互：深浅色切换 + 封面「关于」入场动画 */
 (function(){
   var root = document.documentElement;
   var KEY = 'myon-theme';
@@ -36,21 +36,11 @@
     setTheme(current());
   }
 
-  function paintAbout(el, md){
-    el.innerHTML = window.MyonMarkdown.render(md);
-    Array.prototype.forEach.call(el.children, function(k, i){ k.style.setProperty('--ai', i); });
-  }
-  function renderAbout(){
+  /* 首页封面「关于」纸卡由服务端渲染成 HTML，这里只补入场动画的序号。 */
+  function staggerAbout(){
     var el = document.getElementById('aboutBody');
-    if(!el || !window.MyonMarkdown) return;
-    // 先立即可用：本机草稿 / 默认内容；随后以 D1 的 /api/v1/about 为准。
-    var local = null;
-    try { local = localStorage.getItem('myon-about'); } catch(e){}
-    paintAbout(el, local || window.MYON_ABOUT_DEFAULT || '');
-    fetch('/api/v1/about', { headers: { accept: 'application/json' } })
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(data){ if(data && data.markdown) paintAbout(el, data.markdown); })
-      .catch(function(){ /* 本地开发未迁移 D1 时保留草稿/默认内容 */ });
+    if(!el) return;
+    Array.prototype.forEach.call(el.children, function(k, i){ k.style.setProperty('--ai', i); });
   }
 
   function initTheme(){
@@ -67,9 +57,9 @@
   }
 
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){ initTheme(); addToggle(); renderAbout(); });
+    document.addEventListener('DOMContentLoaded', function(){ initTheme(); addToggle(); staggerAbout(); });
   } else {
-    initTheme(); addToggle(); renderAbout();
+    initTheme(); addToggle(); staggerAbout();
   }
 
   /* 媒体只从 R2 读取：对象缺失时不要显示破图图标，让相框保留纸面。 */
@@ -79,5 +69,4 @@
   }, true);
 
   window.MyonTheme = { set: setTheme, current: current };
-  window.MyonAbout = { render: renderAbout };
 })();

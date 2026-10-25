@@ -6,6 +6,7 @@
     ".": "./src/app.ts",
     "./types": "./src/types.ts",
     "./bangumi": "./src/bangumi.ts",
+    "./markdown": "./src/markdown.ts",
     "./media": "./src/media.ts",
     "./site": "./src/site.ts",
     "./traffic": "./src/traffic.ts"
