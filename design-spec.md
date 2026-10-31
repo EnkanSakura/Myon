@@ -217,7 +217,8 @@
 | 分页 | `.pager` + `.pager-info` + `.pager-btns` + `.pager-nums` / `.pager-gap` + `.pager-btn` | `.is-on` 当前页、`disabled` 禁用 |
 | 提示条 | `.notice` + `.notice-k` + `.notice-c` + `.notice-issues` + `.notice-a` / `.notice-btn`；变体 `.notice--info / --warn / --ok / --error` | 语气用修饰类切换；浮层 `.toast` 不是提示条，别混用 |
 | 筛选栏 | `.filterbar` + `.filterbar-tabs` + `.filterbar-tab` + `.filterbar-search` + `.filterbar-sort` + `.filterbar-count` + `.filterbar-clear` | chips 用 `is-on` / `aria-pressed`；清除仅激活时出现 |
-| Markdown 编辑器 | `.md-split` 两栏 + `.md-panel`（`.md-panel-head` / `.md-panel-body--editor` + `.md-input` / `.md-panel-body--preview` + 纸面 / `.md-panel-foot`）；快捷工具栏 `.md-toolbar` + `.md-tool`（`data-md-act`）由 `public/js/markdown-editor.js` 插入 | 页面只写布局（`.md-split` 高度、断点、弹窗宽度）；文章预览纸面用 `.md-paper` + `article.css` 的 `.body`，关于页预览沿用 `.about-card` 纸卡 |
+| Markdown 编辑器 | `.md-split` 两栏 + `.md-panel`（`.md-panel-head` / `.md-panel-body--editor` + `.md-input` / `.md-panel-body--preview` + 预览承载 / `.md-panel-foot`）；快捷工具栏 `.md-toolbar` + `.md-tool`（`data-md-act`）由 `public/js/markdown-editor.js` 插入；面板头 `.md-fs-btn` 把整组双栏放大到视口 | 页面只写布局（`.md-split` 高度、断点、弹窗宽度）；文章预览给 `.md-panel-body--preview` 加 `.is-page` 变体，再用页面自己的 `.art-preview` 画「一页纸」+ `article.css` 的 `.body`（无纸卡边框/阴影）；关于页预览沿用 `.about-card` 纸卡；工具栏动作含 GFM 与扩展语法（`math` / `mathblock` / `alert`（下拉选 5 类）/ `spoiler` / `grid` / `github`）；全屏态 `.md-split.is-fullscreen` 让编辑区 + 预览区左右并排铺满视口，`body.md-fs-open` 锁滚动，Esc 退出 |
+| Markdown 扩展语法 | 服务端 `packages/back/src/markdown.ts` 输出、后台预览 `public/js/markdown.js` 同步：`.alert` + `.alert--note/tip/important/warning/caution` + `.alert-head` / `.alert-body`；`.spoiler`；`.image-grid` + `.image-grid--2/3/4` + `.image-grid-item`（`figcaption` 取图片 alt）；`.repo-card`（静态 owner/repo，`site.js` 再补 star / fork）；`.math-inline` / `.math-block`（KaTeX） | 语法：`> [!NOTE]`、`:spoiler[…]`、`[grid]…[/grid]`、`::github{repo="owner/repo"}`、`$…$` / `$$…$$`；样式统一在 `public/css/markdown-extras.css`，公式样式与字体由 npm `katex` 提供；扩展组件在 sanitize 之后注入，不要为放行它们扩大 HTML 白名单 |
 | 图片选择器 | `#mediaPickerDlg`（`public/js/media-picker.js` 生成）：`.mp-tabs` + `.mp-grid`/`.mp-item` + `.mp-up-*` 上传进度 + `.mp-notice` 令牌提示 | `MyonMediaPicker.open({mode:'insert'|'pick', api, gifApi, base, selectedKey, onPick})`；图片处理复用 `image-upload.js`，令牌仍走顶栏 |
 | 管理令牌 | `AdminLayout` 顶栏按钮 + 弹窗（`public/js/admin-token.js`） | 全后台唯一入口；页面只放 `[data-token-open]` 引导，不重复输入框 |
 
@@ -259,6 +260,7 @@ loading / empty / error 三态，是下一轮要补的缺口。
   （数据驱动的变量如 `--i`、`--rot` 除外）。
 - 链接用路由（`/articles`），不出现 `.html`。
 - 图片用 `mediaUrl()`，不要手拼 `/assets/`。
+- 后台表单的下拉框（原生 `select` 与分类 combobox）共用同一套箭头与字段外观；分类候选列表用自绘 `.combo-list`（`role="listbox"`），不再使用浏览器 datalist，支持输入过滤、键盘选择与直接新建分类。组合框统一由 `public/js/combo.js`（`MyonCombo.attach`）实现，文章 / 展柜 / 动态三处复用；文章分类候选合并当前页分类与 `/api/v1/stats.categories.posts` 的全站分类。
 
 ---
 
