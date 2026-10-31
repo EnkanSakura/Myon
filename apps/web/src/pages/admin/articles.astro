@@ -7,6 +7,8 @@ import { mediaUrl } from '../../lib/media';
 
 // 接口地址由服务端渲染给页面脚本，public/js 里不硬编码。
 const postsApi = `${apiBasePath}/admin/posts`;
+// 分类候选的全站来源（统计接口的 categories.posts），脚本只读，不需要令牌。
+const statsApi = `${apiBasePath}/stats`;
 // 正文编辑器的图片按钮复用共享媒体选择器，需要媒体接口与地址前缀。
 const mediaApi = `${apiBasePath}/admin/media`;
 const gifWebpApi = `${mediaApi}/gif-webp`;
@@ -25,6 +27,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
   <div
     class="page"
     data-api={postsApi}
+    data-api-stats={statsApi}
     data-api-media={mediaApi}
     data-gif-api={gifWebpApi}
     data-media-base={mediaBase}
@@ -179,8 +182,11 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
         </div>
         <div class="pf">
           <label for="fCategory">分类 / CATEGORY</label>
-          <input id="fCategory" type="text" maxlength="40" list="catList" autocomplete="off" required />
-          <datalist id="catList"></datalist>
+          <div class="combo" id="categoryCombo">
+            <input id="fCategory" type="text" maxlength="40" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="catList" />
+            <button class="combo-toggle" id="fCategoryToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
+            <div class="combo-list" id="catList" role="listbox" aria-label="已有分类" hidden></div>
+          </div>
           <p class="pf-hint">可从已有分类里选，也可以新建</p>
         </div>
         <div class="pf">
@@ -211,7 +217,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
             <textarea class="md-input" id="fBody" maxlength="200000" spellcheck="false" placeholder="## 小标题&#10;&#10;正文段落……&#10;&#10;- 列表项&#10;- [ ] 任务项"></textarea>
           </div>
           <div class="md-panel-foot">
-            <span>工具栏只插入语法，保存后以前台渲染为准</span>
+            <span>工具栏插入语法；公式 / 提醒框 / 剧透 / 网格 / GitHub 卡片在工具栏末组</span>
             <span id="bodyHint">0 字 · 约 1 分钟</span>
           </div>
         </section>
@@ -223,11 +229,12 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
             <span class="md-panel-en">LIVE</span>
             <span class="md-panel-file">前台文章页</span>
           </div>
-          <div class="md-panel-body md-panel-body--preview">
-            <div class="md-paper"><div class="body" id="fPreview"></div></div>
+          <div class="md-panel-body md-panel-body--preview is-page">
+            <!-- 文章预览按「前台文章页的一页纸」排版：没有纸卡边框/阴影，正文排版来自 article.css 的 .body -->
+            <div class="art-preview"><div class="body" id="fPreview"></div></div>
           </div>
           <div class="md-panel-foot">
-            <span>本地近似渲染，省略目录 / 阅读进度 / 复制按钮</span>
+            <span>与前台文章页同款排版；省略目录 / 阅读进度 / 复制按钮</span>
           </div>
         </section>
       </div>
@@ -261,7 +268,15 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <!-- 共享脚本顺序：图片处理 → Markdown 渲染 → 媒体选择器 → 编辑器 → 本页逻辑 -->
+  <!-- 预览公式：模块脚本延迟执行，准备好后通知编辑器重渲染一次 -->
+  <script>
+    import katex from 'katex';
+    Object.assign(window, { MyonKatex: katex });
+    document.dispatchEvent(new Event('myon:katex-ready'));
+  </script>
+
+  <!-- 共享脚本顺序：分类组合框 → 图片处理 → Markdown 渲染 → 媒体选择器 → 编辑器 → 本页逻辑 -->
+  <script is:inline src="/js/combo.js"></script>
   <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/markdown.js"></script>
   <script is:inline src="/js/media-picker.js"></script>

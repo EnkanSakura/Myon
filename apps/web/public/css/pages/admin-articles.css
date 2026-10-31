@@ -279,6 +279,25 @@
 .post-fields select {
   height: 40px;
 }
+/* 状态（原生 select）与分类组合框共用同一套箭头外观；分类结构见共享组件 .combo */
+.post-fields select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% + 1px),
+    calc(100% - 11px) calc(50% + 1px);
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+.post-fields select::-ms-expand {
+  display: none;
+}
 .post-fields textarea {
   resize: vertical;
 }
@@ -323,6 +342,26 @@
   gap: 14px;
   margin-top: 14px;
   height: clamp(320px, 46vh, 520px);
+}
+
+/* 预览「一页纸」：按前台文章页的实际排版——纸面 + 网点、无纸卡边框/阴影；
+   正文的 .body 字号/行高/颜色/代码卡片等全部来自 article.css，不再二次覆盖。 */
+.art-preview {
+  width: 100%;
+  min-height: 100%;
+  padding: clamp(22px, 3.4vw, 38px) clamp(18px, 4vw, 40px) 48px;
+  background-color: var(--paper);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--ink) 9%, transparent) 1px,
+    transparent 1.2px
+  );
+  background-size: 7px 7px;
+  color: var(--ink);
+}
+.art-preview .body {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
 }
 
 /* 表单底栏 */
