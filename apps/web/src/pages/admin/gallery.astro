@@ -162,8 +162,11 @@ const statsApi = `${apiBasePath}/stats`;
           <input id="fName" name="name" type="text" maxlength="120" autocomplete="off" placeholder="鬼之根付">
         </label>
         <label class="gfld"><span>分类 / CATEGORY <b>*</b></span>
-          <input id="fCat" name="category" type="text" maxlength="40" list="catList" autocomplete="off" placeholder="手办">
-          <datalist id="catList"></datalist>
+          <span class="combo">
+            <input id="fCat" name="category" type="text" maxlength="40" autocomplete="off" placeholder="手办" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="catList">
+            <button class="combo-toggle" id="fCatToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
+            <span class="combo-list" id="catList" role="listbox" aria-label="已有分类" hidden></span>
+          </span>
         </label>
         <label class="gfld"><span>年代 / ERA</span>
           <input id="fEra" name="era" type="text" maxlength="40" autocomplete="off" placeholder="明治 / 19 世纪">
@@ -216,5 +219,6 @@ const statsApi = `${apiBasePath}/stats`;
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script is:inline src="/js/combo.js"></script>
   <script is:inline src="/js/pages/admin-gallery.js"></script>
 </AdminLayout>

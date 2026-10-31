@@ -527,13 +527,19 @@
   }
 
   /* ---------------- 弹层：新增 / 编辑 ---------------- */
+  var catCombo = null;
+
   function renderCatOptions() {
-    var list = $("catList");
-    list.innerHTML = "";
-    categoryNames().forEach(function (name) {
-      var option = document.createElement("option");
-      option.value = name;
-      list.appendChild(option);
+    if (catCombo) catCombo.refresh();
+  }
+
+  function initCatCombo() {
+    if (!window.MyonCombo) return;
+    catCombo = window.MyonCombo.attach({
+      input: $("fCat"),
+      list: $("catList"),
+      toggle: $("fCatToggle"),
+      getOptions: categoryNames
     });
   }
 
@@ -573,6 +579,7 @@
   function openEditor(item) {
     state.editing = item || null;
     state.saving = false;
+    if (catCombo) catCombo.close();
     editDlgTab.textContent = item ? "EDIT" : "NEW";
     editDlgTitle.textContent = item ? "编辑藏品" : "新增藏品";
     editMode.textContent = item ? "编辑现有藏品" : "新增后默认不上架";
@@ -594,6 +601,7 @@
   }
   function closeEditor() {
     state.editing = null;
+    if (catCombo) catCombo.close();
     if (typeof editDlg.close === "function") editDlg.close();
   }
 
@@ -854,6 +862,7 @@
 
   /* ---------------- 初始化 ---------------- */
   sortSelect.value = state.sort;
+  initCatCombo();
   renderCatOptions();
   renderSlots();
   paintHeader();

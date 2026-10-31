@@ -72,6 +72,7 @@
   /* ---------------- 页面元素 ---------------- */
   var pageEl = document.querySelector(".page[data-api]");
   var API_URL = pageEl ? pageEl.getAttribute("data-api") || "" : "";
+  var STATS_URL = pageEl ? pageEl.getAttribute("data-api-stats") || "" : "";
 
   // 正文编辑器的图片按钮复用共享媒体选择器（只把服务端渲染的地址透传给共享组件）。
   var MEDIA_CONFIG = {
@@ -132,6 +133,8 @@
   var fTitle = $("fTitle");
   var fSlug = $("fSlug");
   var fCategory = $("fCategory");
+  var categoryCombo = $("categoryCombo");
+  var fCategoryToggle = $("fCategoryToggle");
   var fStatus = $("fStatus");
   var fExcerpt = $("fExcerpt");
   var fBody = $("fBody");
@@ -441,10 +444,68 @@
     catSel.value = keep !== "all" && seen[keep] ? keep : "all";
     state.category = catSel.value;
 
-    while (catList.firstChild) catList.removeChild(catList.firstChild);
-    each(cats, function (cat) {
-      catList.appendChild(new Option(cat, cat));
+    catOptionValues = mergeCategoryOptions(cats, statsCategoryValues);
+    if (categoryCombo) categoryCombo.refresh();
+  }
+
+  /* ---------------- 分类组合框（共享 MyonCombo） ----------------
+     候选 = 当前页文章分类 + /api/v1/stats 的全站文章分类；
+     输入过滤、键盘选择、新建分类都由 public/js/combo.js 统一处理。 */
+  var catOptionValues = [];
+  var statsCategoryValues = [];
+  var categoryCombo = null;
+
+  function mergeCategoryOptions(base, extra) {
+    var seen = {};
+    var out = [];
+    (base || []).concat(extra || []).forEach(function (name) {
+      var value = String(name == null ? "" : name).trim();
+      if (!value || seen[value]) return;
+      seen[value] = true;
+      out.push(value);
     });
+    out.sort(function (a, b) {
+      return a.localeCompare(b, "zh-Hans-CN");
+    });
+    return out;
+  }
+
+  function initCategoryCombo() {
+    if (!window.MyonCombo || !fCategory || !catList) return;
+    categoryCombo = window.MyonCombo.attach({
+      input: fCategory,
+      list: catList,
+      toggle: fCategoryToggle,
+      getOptions: function () {
+        return catOptionValues;
+      }
+    });
+  }
+
+  function loadCategoryStats() {
+    if (!STATS_URL) return;
+    fetch(STATS_URL, {
+      headers: { accept: "application/json" },
+      cache: "no-store"
+    })
+      .then(function (res) {
+        return res.ok ? res.json() : null;
+      })
+      .then(function (body) {
+        var entries = body && body.categories && body.categories.posts;
+        if (!Array.isArray(entries)) return;
+        statsCategoryValues = entries
+          .map(function (entry) {
+            return entry && entry.name ? String(entry.name) : "";
+          })
+          .filter(Boolean);
+        catOptionValues = mergeCategoryOptions(
+          catOptionValues,
+          statsCategoryValues
+        );
+        if (categoryCombo) categoryCombo.refresh();
+      })
+      .catch(function () {});
   }
 
   function filteredPosts() {
@@ -807,6 +868,7 @@
 
   function openForm(post, prefill) {
     state.editing = post || null;
+    if (categoryCombo) categoryCombo.close();
     hideFormBanner();
     clearFieldMarks();
     postForm.reset();
@@ -843,6 +905,7 @@
 
   function closeForm() {
     if (state.saving) return;
+    if (categoryCombo) categoryCombo.close();
     if (typeof postDlg.close === "function") postDlg.close();
     state.editing = null;
   }
@@ -1108,6 +1171,8 @@
   });
 
   /* ---------------- 初始化 ---------------- */
+  initCategoryCombo();
+  loadCategoryStats();
   mountMarkdownEditor();
   resetCounts();
   applyStatusTab();

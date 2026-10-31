@@ -52,7 +52,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <link rel="stylesheet" href="/css/pages/admin-moments.css" />
   </Fragment>
 
-<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase}>
+<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase} data-cat-options={JSON.stringify(categoryOptions)}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -185,10 +185,11 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <div class="moment-fields">
       <div class="moment-field">
         <label for="noteCategory">分类 / CATEGORY</label>
-        <input class="moment-input" id="noteCategory" name="category" type="text" maxlength="40" list="categoryList" placeholder="日常" autocomplete="off" value={defaultCategory}>
-        <datalist id="categoryList">
-          {categoryOptions.map((name) => <option value={name} />)}
-        </datalist>
+        <span class="combo">
+          <input class="moment-input" id="noteCategory" name="category" type="text" maxlength="40" placeholder="日常" autocomplete="off" value={defaultCategory} role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="categoryList">
+          <button class="combo-toggle" id="noteCategoryToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
+          <span class="combo-list" id="categoryList" role="listbox" aria-label="已有分类" hidden></span>
+        </span>
       </div>
 
       <div class="moment-field">
@@ -246,6 +247,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script is:inline src="/js/combo.js"></script>
   <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/media-picker.js"></script>
   <script is:inline src="/js/pages/admin-moments.js"></script>

@@ -72,6 +72,15 @@
   var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
   var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
+  var CATEGORY_OPTIONS = (function () {
+    try {
+      var raw = pageEl ? pageEl.getAttribute("data-cat-options") : "";
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  })();
 
   /* ================= 元素 ================= */
   var btnCompose = $("btnCompose");
@@ -113,6 +122,9 @@
   var noteText = $("noteText");
   var noteCount = $("noteCount");
   var noteCategory = $("noteCategory");
+  var noteCategoryToggle = $("noteCategoryToggle");
+  var categoryList = $("categoryList");
+  var categoryCombo = null;
   var noteTag = $("noteTag");
   var tagQuick = $("tagQuick");
   var visPick = $("visPick");
@@ -559,8 +571,22 @@
     if (momentDlgState) momentDlgState.textContent = text;
   }
 
+  /* 分类候选：共享组合框，候选来自服务端渲染的 /api/v1/categories 数据 */
+  function initCategoryCombo() {
+    if (!window.MyonCombo || !noteCategory || !categoryList) return;
+    categoryCombo = window.MyonCombo.attach({
+      input: noteCategory,
+      list: categoryList,
+      toggle: noteCategoryToggle,
+      getOptions: function () {
+        return CATEGORY_OPTIONS;
+      }
+    });
+  }
+
   function openDialog(item) {
     var editing = !!item;
+    if (categoryCombo) categoryCombo.close();
     state.editingId = editing ? item.id : null;
     state.visibility = editing && item.visibility === "private" ? "private" : "public";
     state.pinned = editing ? !!item.pinned : false;
@@ -590,6 +616,7 @@
 
   function closeDialog() {
     if (!momentDlg || state.busy) return;
+    if (categoryCombo) categoryCombo.close();
     if (typeof momentDlg.close === "function") {
       if (momentDlg.open) momentDlg.close();
     } else {
@@ -601,6 +628,7 @@
   // 提交成功 / 弹窗被强制关闭时用：绕过 busy 守卫，直接收起。
   function finishDialog() {
     if (!momentDlg) return;
+    if (categoryCombo) categoryCombo.close();
     if (typeof momentDlg.close === "function") {
       if (momentDlg.open) momentDlg.close();
     } else {
@@ -949,6 +977,7 @@
   }
 
   /* ================= 初始化 ================= */
+  initCategoryCombo();
   paintVisibility();
   paintPinned();
   paintImgToggle();
