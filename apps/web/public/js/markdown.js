@@ -72,7 +72,68 @@
     });
   }
 
-  /* ---------- 行内渲染 ---------- */
+  /* ---------- 扩展语法：公式 / 剧透 / 提醒框 / 图片网格 / GitHub 卡片 ----------
+     预览里的公式用页面加载的 KaTeX（window.MyonKatex，见后台两个编辑页的
+     模块脚本）；取不到时退回原始 $…$ 文本，不假装渲染成功。
+     生成的结构与服务端 packages/back/src/markdown.ts 保持一致。 */
+  var ALERT_LABELS = { NOTE: '注意', TIP: '提示', IMPORTANT: '重要', WARNING: '警告', CAUTION: '谨慎' };
+
+  function renderMath(tex, display){
+    var katex = window.MyonKatex;
+    if (!katex || typeof katex.renderToString !== 'function') return '';
+    try {
+      return katex.renderToString(tex, {
+        displayMode: !!display,
+        throwOnError: false,
+        output: 'htmlAndMathml',
+        strict: 'ignore'
+      });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function alertHtml(type, inner){
+    var label = ALERT_LABELS[type] || '注意';
+    return '<div class="alert alert--' + type.toLowerCase() + '">' +
+      '<div class="alert-head"><span class="alert-kind">' + type + '</span>' +
+      '<span class="alert-label">' + label + '</span></div>' +
+      '<div class="alert-body">' + inner + '</div></div>';
+  }
+
+  function repoCardHtml(repo){
+    var parts = repo.split('/');
+    var owner = parts[0] || '';
+    var name = parts[1] || '';
+    return '<a class="repo-card" href="' + escAttr('https://github.com/' + repo) + '"' +
+      ' target="_blank" rel="noopener noreferrer" repo="' + escAttr(repo) + '">' +
+      '<span class="repo-card-main"><span class="repo-card-kind">GITHUB REPO</span>' +
+      '<b class="repo-card-name">' + escText(owner) + '<span class="repo-card-slash"> / </span>' +
+      '<span class="repo-card-repo">' + escText(name) + '</span></b></span>' +
+      '<span class="repo-card-stats">' +
+      '<span class="repo-card-stat"><span aria-hidden="true">★</span><b data-repo-stat="stars">—</b></span>' +
+      '<span class="repo-card-stat"><span aria-hidden="true">⑂</span><b data-repo-stat="forks">—</b></span>' +
+      '</span><span class="repo-card-go">打开 →</span></a>';
+  }
+
+  /* [grid] 里的多张图片：最多并排 4 张，alt 当图注 */
+  function gridHtml(lines, depth){
+    var inner = renderBlocks(lines, depth + 1);
+    var images = inner.match(/<img\b[^>]*>/gi) || [];
+    if (!images.length) return inner;
+    var count = Math.min(images.length, 4);
+    var cells = [];
+    var i, alt, caption;
+    for (i = 0; i < images.length; i++) {
+      alt = /alt="([^"]*)"/.exec(images[i]);
+      caption = alt ? decodeBasic(alt[1]).replace(/^\s+|\s+$/g, '') : '';
+      cells.push('<figure class="image-grid-item">' + images[i] +
+        (caption ? '<figcaption>' + escText(caption) + '</figcaption>' : '') + '</figure>');
+    }
+    return '<div class="image-grid image-grid--' + count + '">' + cells.join('') + '</div>';
+  }
+
+
 
   /* 链接/图片的目标地址：不允许空格，允许一层成对括号（如维基的 A_(b)）。 */
   var DEST = '((?:[^\\s()<>]|\\([^\\s()<>]*\\))+)';
@@ -86,6 +147,88 @@
     function hold(html){
       tokens.push(html);
       return '\u0001' + (tokens.length - 1) + '\u0002';
+    }
+
+    /* 扩展行内语法：内容先占位成最终 HTML，避免后面被强调规则二次处理 */
+    function extrasInline(input){
+      var out = '';
+      var i = 0;
+      var length = input.length;
+      while (i < length) {
+        var ch = input.charAt(i);
+
+        // :spoiler[...]（内容继续当行内 Markdown；括号支持一层层配对）
+        if (input.slice(i, i + 9) === ':spoiler[') {
+          var cursor = i + 9;
+          var level = 1;
+          var content = '';
+          while (cursor < length && level > 0) {
+            var current = input.charAt(cursor);
+            if (current === '[') level += 1;
+            if (current === ']') {
+              level -= 1;
+              if (level === 0) break;
+            }
+            content += current;
+            cursor += 1;
+          }
+          if (level === 0) {
+            out += hold('<span class="spoiler" tabindex="0" role="button" aria-label="剧透内容，悬停或点击展开">' +
+              inline(content, { tokens: tokens, depth: depth + 1 }) + '</span>');
+            i = cursor + 1;
+            continue;
+          }
+        }
+
+        // $$…$$：行内出现时按块级公式渲染
+        if (ch === '$' && input.charAt(i + 1) === '$') {
+          var blockEnd = input.indexOf('$$', i + 2);
+          if (blockEnd > i + 1 && input.slice(i + 2, blockEnd).indexOf('\n') < 0) {
+            var blockTex = trimText(input.slice(i + 2, blockEnd));
+            if (blockTex) {
+              var blockHtml = renderMath(blockTex, true);
+              out += blockHtml
+                ? hold('<div class="math-block">' + blockHtml + '</div>')
+                : hold(escText(input.slice(i, blockEnd + 2)));
+              i = blockEnd + 2;
+              continue;
+            }
+          }
+        }
+
+        // $…$：开头/结尾不能是空白，结束符后不能紧跟数字（给价格让路）
+        if (ch === '$') {
+          var after = input.charAt(i + 1);
+          if (after && !/\s/.test(after) && after !== '$') {
+            var close = -1;
+            var j = i + 1;
+            while (j < length) {
+              var letter = input.charAt(j);
+              if (letter === '\n') break;
+              if (letter === '$' && input.charAt(j - 1) !== '\\') {
+                if (!/\d/.test(input.charAt(j + 1))) close = j;
+                break;
+              }
+              j += 1;
+            }
+            if (close > i + 1) {
+              var tex = input.slice(i + 1, close);
+              if (trimText(tex) && !/\s$/.test(tex)) {
+                var mathHtml = renderMath(tex, false);
+                out += mathHtml
+                  ? hold('<span class="math-inline">' + mathHtml + '</span>')
+                  : hold(escText(input.slice(i, close + 1)));
+                i = close + 1;
+                continue;
+              }
+            }
+          }
+        }
+
+        out += ch;
+        i += 1;
+      }
+      return out;
     }
 
     var s = String(text == null ? '' : text);
@@ -102,6 +245,9 @@
     s = s.replace(/\\([\s\S])/g, function(match, ch){
       return ESCAPABLE.indexOf(ch) >= 0 ? hold(escText(ch)) : match;
     });
+
+    // 2.5) 扩展行内语法：:spoiler[...] / $…$ / $$…$$
+    s = extrasInline(s);
 
     // 3) 图片（要先于链接处理，否则开头的 ! 会被落下）
     s = s.replace(new RegExp('!\\[([^\\]]*)\\]\\(\\s*' + DEST + '(?:\\s+(?:"([^"]*)"|\'([^\']*)\'))?\\s*\\)', 'g'),
@@ -439,6 +585,66 @@
         if (codeLines.length) codeText += '\n';
         out.push('<pre><code' + (lang ? ' class="language-' + escAttr(lang) + '"' : '') + '>' +
           escText(codeText) + '</code></pre>');
+        continue;
+      }
+
+      // $$…$$ 块级公式
+      var mathMatch = /^ {0,3}\$\$/.exec(ln);
+      if (mathMatch) {
+        var mathStart = ln.indexOf('$$') + 2;
+        var mathText = ln.slice(mathStart);
+        var mathEnd = mathText.indexOf('$$');
+        var mathLast = i;
+        while (mathEnd < 0 && mathLast + 1 < lines.length) {
+          mathLast += 1;
+          mathText += '\n' + lines[mathLast];
+          mathEnd = mathText.indexOf('$$');
+        }
+        if (mathEnd >= 0) {
+          var mathTex = trimText(mathText.slice(0, mathEnd));
+          if (mathTex) {
+            var blockMathHtml = renderMath(mathTex, true);
+            out.push(blockMathHtml
+              ? '<div class="math-block">' + blockMathHtml + '</div>'
+              : '<pre class="math-block math-src">' + escText(mathText.slice(0, mathEnd)) + '</pre>');
+            i = mathLast + 1;
+            continue;
+          }
+        }
+      }
+
+      // GitHub 提醒框：> [!NOTE]
+      var alertLine = /^ {0,3}> ?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*$/.exec(ln);
+      if (alertLine) {
+        var alertQuote = [];
+        var alertQm;
+        i += 1;
+        while (i < lines.length && (alertQm = BLOCKQUOTE_RE.exec(lines[i]))) {
+          alertQuote.push(alertQm[1]);
+          i += 1;
+        }
+        out.push(alertHtml(alertLine[1], renderBlocks(alertQuote, depth + 1)));
+        continue;
+      }
+
+      // [grid] 图片网格
+      if (trimText(ln) === '[grid]') {
+        var gridLines = [];
+        i += 1;
+        while (i < lines.length && trimText(lines[i]) !== '[/grid]') {
+          gridLines.push(lines[i]);
+          i += 1;
+        }
+        i += 1;
+        out.push(gridHtml(gridLines, depth));
+        continue;
+      }
+
+      // ::github{repo="owner/repo"}
+      var repoMatch = /^ {0,3}::github\{repo="([\w.-]+\/[\w.-]+)"\}[ \t]*$/.exec(ln);
+      if (repoMatch) {
+        out.push(repoCardHtml(repoMatch[1]));
+        i += 1;
         continue;
       }
 

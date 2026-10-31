@@ -56,10 +56,84 @@
     setTheme(current());
   }
 
+  /* 剧透：点击或键盘展开；CSS 也支持 hover / focus 临时查看。 */
+  function toggleSpoiler(event) {
+    var el = event.target && event.target.closest ? event.target.closest('.spoiler') : null;
+    if (!el) return;
+    el.classList.toggle('is-open');
+  }
+  document.addEventListener('click', toggleSpoiler);
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    var el = event.target && event.target.closest ? event.target.closest('.spoiler') : null;
+    if (!el) return;
+    event.preventDefault();
+    el.classList.toggle('is-open');
+  });
+
+  /* GitHub 仓库卡片：静态输出版本；打开页面后补 star / fork，缓存 24 小时。
+     取不到数据时保留「—」，不阻塞页面。 */
+  var REPO_CACHE_PREFIX = 'myon-repo:';
+  var REPO_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+  function compactNumber(value) {
+    try {
+      return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+    } catch (e) {
+      return String(value);
+    }
+  }
+  function readRepoCache(repo) {
+    try {
+      var raw = localStorage.getItem(REPO_CACHE_PREFIX + repo.toLowerCase());
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.data || typeof parsed.fetchedAt !== 'number') return null;
+      if (Date.now() - parsed.fetchedAt >= REPO_CACHE_TTL) return null;
+      return parsed.data;
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeRepoCache(repo, data) {
+    try {
+      localStorage.setItem(REPO_CACHE_PREFIX + repo.toLowerCase(), JSON.stringify({ data: data, fetchedAt: Date.now() }));
+    } catch (e) {}
+  }
+  function fillRepoCard(card) {
+    var repo = card.getAttribute('repo');
+    if (!repo || card.getAttribute('data-repo-ready') === '1') return;
+    card.setAttribute('data-repo-ready', '1');
+    var stars = card.querySelector('[data-repo-stat="stars"]');
+    var forks = card.querySelector('[data-repo-stat="forks"]');
+    function apply(data) {
+      if (!data) return;
+      if (stars && typeof data.stargazers_count === 'number') stars.textContent = compactNumber(data.stargazers_count);
+      if (forks && typeof data.forks === 'number') forks.textContent = compactNumber(data.forks);
+    }
+    var cached = readRepoCache(repo);
+    if (cached) { apply(cached); return; }
+    var signal;
+    try { signal = AbortSignal.timeout(5000); } catch (e) { signal = undefined; }
+    fetch('https://api.github.com/repos/' + repo, { referrerPolicy: 'no-referrer', signal: signal })
+      .then(function (res) {
+        if (!res.ok) throw new Error('github ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        apply(data);
+        writeRepoCache(repo, data);
+      })
+      .catch(function () {});
+  }
+  function enhanceRepoCards() {
+    Array.prototype.forEach.call(document.querySelectorAll('.repo-card[repo]'), fillRepoCard);
+  }
+
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){ initTheme(); addToggle(); staggerAbout(); });
+    document.addEventListener('DOMContentLoaded', function(){ initTheme(); addToggle(); staggerAbout(); enhanceRepoCards(); });
   } else {
-    initTheme(); addToggle(); staggerAbout();
+    initTheme(); addToggle(); staggerAbout(); enhanceRepoCards();
   }
 
   /* 媒体只从 R2 读取：对象缺失时不要显示破图图标，让相框保留纸面。 */

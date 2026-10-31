@@ -20,7 +20,8 @@
     "@astrojs/cloudflare": "^14.4.1",
     "@myon/back": "workspace:*",
     "@myon/shared": "workspace:*",
-    "astro": "^7.4.1"
+    "astro": "^7.4.1",
+    "katex": "^0.19.1"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.11",

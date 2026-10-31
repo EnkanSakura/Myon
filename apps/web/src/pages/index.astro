@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import { renderMarkdown } from '@myon/back/markdown';
 import type { AppBindings } from '@myon/back/types';
+import 'katex/dist/katex.min.css';
 import {
   type BangumiShow,
   defaultSiteSettings,
@@ -371,6 +372,7 @@ function presetValue(preset: HomeStatPreset): string {
 <link rel="alternate" type="application/rss+xml" title={`${site.name} · RSS`} href="/rss.xml">
 <script is:inline>try{var t=localStorage.getItem('myon-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;else if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='dark';}catch(e){}</script>
 <link rel="stylesheet" href="/css/v2.css">
+<link rel="stylesheet" href="/css/markdown-extras.css">
 <ThemeTokens themeColor={site.themeColor} metaColor={site.themeColor} />
 <link rel="stylesheet" href="/css/pages/home.css">
 </head>

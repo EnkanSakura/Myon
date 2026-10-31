@@ -72,6 +72,79 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('<span');
     expect(html).toContain('raw');
   });
+
+  it('renders inline and block LaTeX with KaTeX', () => {
+    const html = renderMarkdown(
+      '质能方程 $E=mc^2$\n\n$$\n\\int_0^1 x\\,dx\n$$',
+    );
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('katex-display');
+    expect(html).toContain('math-inline');
+    expect(html).toContain('math-block');
+  });
+
+  it('keeps prices and inline code away from math', () => {
+    expect(renderMarkdown('价格 $5 和 $10')).not.toContain('class="katex"');
+    expect(renderMarkdown('`$x$`')).not.toContain('class="katex"');
+    expect(renderMarkdown('```\n$x$\n```')).not.toContain('class="katex"');
+  });
+
+  it('renders GitHub style alert callouts', () => {
+    const html = renderMarkdown(
+      '> [!NOTE]\n> 这是一条 **注意**。\n\n> [!WARNING]\n> 小心',
+    );
+    expect(html).toContain('<div class="alert alert--note">');
+    expect(html).toContain('<div class="alert alert--warning">');
+    expect(html).toContain('<span class="alert-kind">NOTE</span>');
+    expect(html).toContain('<span class="alert-label">注意</span>');
+    expect(html).toContain('<strong>注意</strong>');
+    expect(html).not.toContain('[!NOTE]');
+  });
+
+  it('renders spoilers with inline markdown kept', () => {
+    const html = renderMarkdown('内容 :spoiler[被隐藏了 **哈哈**]！');
+    expect(html).toContain('class="spoiler"');
+    expect(html).toContain('<strong>哈哈</strong>');
+    expect(html).not.toContain(':spoiler[');
+  });
+
+  it('sanitizes spoiler content', () => {
+    const html = renderMarkdown(':spoiler[<script>alert(1)</script>]');
+    expect(html).not.toContain('<script');
+  });
+
+  it('renders [grid] images with captions', () => {
+    const html = renderMarkdown(
+      '[grid]\n![图一](/media/a.png)\n![图二](/media/b.png "标题")\n[/grid]',
+    );
+    expect(html).toContain('<div class="image-grid image-grid--2">');
+    expect(html).toContain('<figure class="image-grid-item">');
+    expect(html).toContain('<figcaption>图一</figcaption>');
+    expect(html).toContain('<figcaption>图二</figcaption>');
+  });
+
+  it('renders GitHub repository cards', () => {
+    const html = renderMarkdown('::github{repo="CuteLeaf/Firefly"}');
+    expect(html).toContain('<a class="repo-card"');
+    expect(html).toContain('href="https://github.com/CuteLeaf/Firefly"');
+    expect(html).toContain('repo="CuteLeaf/Firefly"');
+    expect(html).toContain('repo-card-name');
+  });
+
+  it('leaves invalid repo syntax and raw urls untouched', () => {
+    const invalid = renderMarkdown('::github{repo="not-a-repo"}');
+    expect(invalid).toContain('::github{repo="not-a-repo"}');
+    expect(invalid).not.toContain('class="repo-card"');
+  });
+
+  it('keeps extended syntax inside code fences literal', () => {
+    const html = renderMarkdown(
+      '```\n> [!NOTE]\n> :spoiler[x]\n::github{repo="a/b"}\n```',
+    );
+    expect(html).not.toContain('alert--note');
+    expect(html).not.toContain('class="spoiler"');
+    expect(html).not.toContain('class="repo-card"');
+  });
 });
 
 describe('renderArticle', () => {
@@ -119,5 +192,20 @@ describe('renderArticle', () => {
     expect(html).toContain('<li class="task">');
     expect(html).toContain('<h4>四级标题</h4>');
     expect(html).toContain('<h5>五级标题</h5>');
+  });
+
+  it('builds toc labels for headings that contain math or spoilers', () => {
+    const { toc } = renderArticle('## 公式 $E=mc^2$\n\n## 剧透 :spoiler[秘密]');
+    expect(toc[0]?.label).toBe('公式 E=mc^2');
+    expect(toc[1]?.label).toBe('剧透 …');
+  });
+
+  it('renders extended components inside article bodies', () => {
+    const { html } = renderArticle(
+      '> [!TIP]\n> 正文提醒\n\n[grid]\n![图](/media/a.png)\n[/grid]\n\n:spoiler[剧透]',
+    );
+    expect(html).toContain('alert alert--tip');
+    expect(html).toContain('image-grid image-grid--1');
+    expect(html).toContain('class="spoiler"');
   });
 });

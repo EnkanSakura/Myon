@@ -16,6 +16,7 @@ import {
 } from '@myon/shared';
 import SiteBar from '../components/SiteBar.astro';
 import ThemeTokens from '../components/ThemeTokens.astro';
+import 'katex/dist/katex.min.css';
 
 interface Props {
   /** 页面名，例如「工具」「首页」；完整标题由布局拼。 */
@@ -56,6 +57,7 @@ const nav = [
       } catch (e) {}
     </script>
     <link rel="stylesheet" href="/css/v2.css" />
+    <link rel="stylesheet" href="/css/markdown-extras.css" />
     <ThemeTokens themeColor={site.themeColor} metaColor={site.themeColor} />
     <slot name="head" />
   </head>

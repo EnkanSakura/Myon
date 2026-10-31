@@ -122,7 +122,7 @@
 - schema 改动：先改 `packages/back/src/db/schema.ts`，再新增 migration，两者同一个提交。
 - 查询用 Drizzle 的表达式构建，不拼字符串 SQL。
 - `packages/back/scripts/seed.sql` 只放本地演示数据，不写生产内容。
-- Markdown 渲染统一走 `packages/back/src/markdown.ts`；新增 HTML 输出必须经过白名单过滤，不要绕过 `sanitizeHtml`。
+- Markdown 渲染统一走 `packages/back/src/markdown.ts`；新增 HTML 输出必须经过白名单过滤，不要绕过 `sanitizeHtml`。扩展语法（KaTeX 公式、GitHub 提醒框、剧透、图片网格、GitHub 卡片）也由该模块输出，后台预览用的 `public/js/markdown.js` 要同步实现；组件样式放 `public/css/markdown-extras.css`（公式样式与字体来自 npm `katex`），不要把用户的原始 HTML 直接放行。
 
 ### 4.6 测试
 

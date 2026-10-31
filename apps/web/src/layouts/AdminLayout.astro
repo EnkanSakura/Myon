@@ -16,6 +16,7 @@ import {
   toPublicSiteSettings,
 } from '@myon/shared';
 import ThemeTokens from '../components/ThemeTokens.astro';
+import 'katex/dist/katex.min.css';
 
 interface Props {
   /** 页面名，例如「总览」；完整标题由布局拼成 `页面名 · 站点名 副标题`。 */
@@ -153,6 +154,7 @@ const tail = [
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/css/v2.css" />
     <link rel="stylesheet" href="/css/admin.css" />
+    <link rel="stylesheet" href="/css/markdown-extras.css" />
     <ThemeTokens themeColor={themeColor} metaColor="#17131A" />
     <slot name="head" />
   </head>

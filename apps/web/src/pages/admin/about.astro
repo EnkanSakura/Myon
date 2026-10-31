@@ -79,7 +79,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '/media/';
           <textarea class="md-input" id="mdInput" spellcheck="false" disabled placeholder="# 关于 Myon&#10;&#10;在这里写一段关于自己的话。"></textarea>
         </div>
         <div class="md-panel-foot">
-          <span>工具栏可插入标题 / 列表 / 引用 / 代码 / 链接 / 图片</span>
+          <span>工具栏可插入标题 / 列表 / 引用 / 代码 / 链接 / 图片 / 公式 / 提醒框 / 剧透 / 网格 / GitHub 卡片</span>
           <span id="mdCounts">—</span>
         </div>
       </section>
@@ -107,6 +107,12 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '/media/';
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <!-- 预览公式：模块脚本延迟执行，准备好后通知编辑器重渲染一次 -->
+  <script>
+    import katex from 'katex';
+    Object.assign(window, { MyonKatex: katex });
+    document.dispatchEvent(new Event('myon:katex-ready'));
+  </script>
   <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/markdown.js"></script>
   <script is:inline src="/js/media-picker.js"></script>
