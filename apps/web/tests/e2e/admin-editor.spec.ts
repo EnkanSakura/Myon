@@ -157,6 +157,14 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     });
 
     await page.goto('/admin/articles');
+    // 原生 select 统一替换成 MyonCombo 外观，页面 JS 仍读写原生 select.value
+    await expect(page.locator('#catSel')).toHaveClass(/combo-native/);
+    await expect(page.locator('#sortSel')).toHaveClass(/combo-native/);
+    await page.locator('#sortSel-combo').click();
+    await expect(page.locator('#sortSel-list')).toBeVisible();
+    await page.locator('#sortSel-list .combo-item[data-value="title"]').click();
+    await expect(page.locator('#sortSel')).toHaveValue('title');
+    await expect(page.locator('#sortSel-combo')).toHaveValue('标题 A→Z');
     await page.locator('#btnNew').click();
     await expect(page.locator('#postDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#postDlg .md-split')).toBeVisible();
@@ -172,6 +180,22 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     await expect(page.locator('#postDlg .md-toolbar .md-tool')).not.toHaveCount(
       0,
     );
+
+    // 状态下拉同样由 MyonCombo 接管：选项列表、值同步都走原生 select
+    await expect(page.locator('#fStatus')).toHaveClass(/combo-native/);
+    await expect(page.locator('#fStatus-combo')).toBeVisible();
+    await page.locator('#fStatus-combo').click();
+    await expect(page.locator('#fStatus-list')).toBeVisible();
+    await expect(page.locator('#fStatus-list .combo-item')).toHaveText([
+      '草稿',
+      '已发布',
+      '归档',
+    ]);
+    await page
+      .locator('#fStatus-list .combo-item[data-value="published"]')
+      .click();
+    await expect(page.locator('#fStatus')).toHaveValue('published');
+    await expect(page.locator('#fStatus-combo')).toHaveValue('已发布');
 
     await page.locator('#fTitle').fill('E2E 文章');
     await page.locator('#fSlug').fill('e2e-markdown');

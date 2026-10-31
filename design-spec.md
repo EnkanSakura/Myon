@@ -261,6 +261,7 @@ loading / empty / error 三态，是下一轮要补的缺口。
 - 链接用路由（`/articles`），不出现 `.html`。
 - 图片用 `mediaUrl()`，不要手拼 `/assets/`。
 - 后台表单的下拉框（原生 `select` 与分类 combobox）共用同一套箭头与字段外观；分类候选列表用自绘 `.combo-list`（`role="listbox"`），不再使用浏览器 datalist，支持输入过滤、键盘选择与直接新建分类。组合框统一由 `public/js/combo.js`（`MyonCombo.attach`）实现，文章 / 展柜 / 动态三处复用；文章分类候选合并当前页分类与 `/api/v1/stats.categories.posts` 的全站分类。
+- 页面里的原生 `select` 由 `public/js/combo.js` 自动替换成 MyonCombo 外观（原生 select 保留为数据模型，页面 JS 继续读写 `value`、监听 `change`；动态插入的 select 也会自动接管）。样式在 `public/css/combo.css`，前后台布局统一引入，不要逐页另写下拉样式或 `selectOption` 交互。
 
 ---
 

@@ -547,34 +547,6 @@ body.md-fs-open{overflow:hidden}
 .md-input::-webkit-scrollbar-track{background:var(--desk)}
 .md-input::-webkit-scrollbar-thumb{background:var(--pp-track);border:2px solid var(--desk)}
 
-/* ---------- 共享组件：分类组合框（public/js/combo.js） ----------
-   输入框 + 右侧箭头 + 自绘候选列表；分类、展柜分类、动态分类共用。
-   箭头用 CSS 渐变画，和后台 select 保持同一套视觉。 */
-.combo{position:relative;display:block;min-width:0;white-space:normal}
-.combo .combo-input{
-  appearance:none;
-  -webkit-appearance:none;
-  padding-right:30px;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
-    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
-  background-position:
-    calc(100% - 16px) calc(50% + 1px),
-    calc(100% - 11px) calc(50% + 1px);
-  background-size:5px 5px,5px 5px;
-  background-repeat:no-repeat;
-}
-.combo .combo-toggle{position:absolute;top:0;right:0;bottom:0;width:30px;padding:0;border:0;border-radius:0;background:transparent;cursor:pointer}
-.combo .combo-toggle:focus-visible{outline:2px solid var(--pink-deep);outline-offset:-4px}
-.combo .combo-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:35;max-height:220px;overflow:auto;padding:4px;border:2px solid var(--ink);background:var(--panel);box-shadow:5px 5px 0 var(--ppk-deep)}
-.combo .combo-list[hidden]{display:none}
-.combo .combo-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 9px;border:0;border-radius:0;background:transparent;color:var(--pp-70);font-family:var(--mono);font-size:12px;letter-spacing:.02em;line-height:1.4;text-align:left;cursor:pointer}
-.combo .combo-item:hover,.combo .combo-item.is-active{background:var(--ppk);color:var(--ink)}
-.combo .combo-item--create{margin-top:2px;border-top:2px solid var(--pline-2);color:var(--ppk)}
-.combo .combo-item-en{font-size:10px;letter-spacing:.1em;color:var(--pp-55)}
-.combo .combo-item:hover .combo-item-en,.combo .combo-item.is-active .combo-item-en{color:var(--ink)}
-.combo .combo-empty{margin:0;padding:8px 9px;font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--pp-55)}
-
 /* ---------- 共享组件：图片选择器（媒体库现有图片 + 上传） ---------- */
 /* 唯一实现：/js/media-picker.js 生成的 #mediaPickerDlg。
    现有图片网格 + 上传进度 + 令牌提示；令牌按钮复用 [data-token-open]。 */

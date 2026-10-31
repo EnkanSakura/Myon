@@ -275,8 +275,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     document.dispatchEvent(new Event('myon:katex-ready'));
   </script>
 
-  <!-- 共享脚本顺序：分类组合框 → 图片处理 → Markdown 渲染 → 媒体选择器 → 编辑器 → 本页逻辑 -->
-  <script is:inline src="/js/combo.js"></script>
+  <!-- 共享脚本顺序：图片处理 → Markdown 渲染 → 媒体选择器 → 编辑器 → 本页逻辑（combo.js 由 AdminLayout 预加载） -->
   <script is:inline src="/js/image-upload.js"></script>
   <script is:inline src="/js/markdown.js"></script>
   <script is:inline src="/js/media-picker.js"></script>

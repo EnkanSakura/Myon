@@ -1,0 +1,143 @@
+/* Myon · 共享选择组件 MyonCombo 样式（public/js/combo.js）
+   - 手动组合框：分类候选（输入框 + 自绘列表）
+   - 原生 select 自动增强后的替身外观（.combo-select）
+   前后台共用；颜色优先用后台变量，取不到时退回 v2 前台变量。 */
+
+.combo {
+  position: relative;
+  display: block;
+  min-width: 0;
+  white-space: normal;
+}
+.combo .combo-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% + 1px),
+    calc(100% - 11px) calc(50% + 1px);
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+.combo .combo-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.combo .combo-toggle:focus-visible {
+  outline: 2px solid var(--pink-deep);
+  outline-offset: -4px;
+}
+.combo .combo-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  border: 2px solid var(--ink);
+  background: var(--panel, var(--paper));
+  box-shadow: 5px 5px 0 var(--ppk-deep, var(--pink-deep));
+}
+.combo .combo-list[hidden] {
+  display: none;
+}
+.combo .combo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pp-70, var(--ink-62));
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.combo .combo-item:hover,
+.combo .combo-item.is-active {
+  background: var(--ppk, var(--pink));
+  color: var(--ink);
+}
+.combo .combo-item--create {
+  margin-top: 2px;
+  border-top: 2px solid var(--pline-2, var(--ink-25));
+  color: var(--ppk, var(--pink-deep));
+}
+.combo .combo-item-en {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--pp-55, var(--ink-62));
+}
+.combo .combo-item:hover .combo-item-en,
+.combo .combo-item.is-active .combo-item-en {
+  color: var(--ink);
+}
+.combo .combo-empty {
+  margin: 0;
+  padding: 8px 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--pp-55, var(--ink-62));
+}
+
+/* ---------- 原生 select 的替身：覆盖在原 select 的位置上 ---------- */
+.combo-host {
+  position: relative;
+}
+.combo-native {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.combo-select {
+  position: absolute;
+  z-index: 6;
+  min-width: 0;
+  display: block;
+}
+.combo-select .combo-input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.combo-select .combo-input:focus {
+  border-color: var(--ppk-deep, var(--pink-deep)) !important;
+  box-shadow: 3px 3px 0 var(--ppk, var(--pink)) !important;
+  outline: none;
+}
+.combo-select .combo-list {
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 24px));
+}
+.combo-select .combo-item {
+  white-space: nowrap;
+}
+/* 前台工具页时区字段自带一个箭头图标，替身出现后隐藏原生图标 */
+.combo-host > .ic {
+  display: none;
+}

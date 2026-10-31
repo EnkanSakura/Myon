@@ -64,6 +64,16 @@ test.describe('工具页与真实数据', () => {
     await expect(input).toBeVisible();
     await input.fill('0');
     await expect(page.locator('#resTime')).toContainText('1970-01-01 08:00:00');
+
+    // 前台 select 也统一由 MyonCombo 接管；切时区仍走原生 select.change
+    await expect(page.locator('#tzSel')).toHaveClass(/combo-native/);
+    await expect(page.locator('#tzSel-combo')).toBeVisible();
+    await page.locator('#tzSel-combo').click();
+    await expect(page.locator('#tzSel-list')).toBeVisible();
+    await page.locator('#tzSel-list .combo-item[data-value="9"]').click();
+    await expect(page.locator('#tzSel')).toHaveValue('9');
+    await expect(page.locator('#tzSel-combo')).toHaveValue('UTC+9');
+    await expect(page.locator('#resTime')).toContainText('1970-01-01 09:00:00');
   });
 
   test('不存在的工具返回 404 空态', async ({ page }) => {
