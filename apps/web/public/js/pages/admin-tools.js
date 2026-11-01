@@ -674,10 +674,8 @@
     var key = fKey.value;
     if (key) {
       formHint.textContent = "内置工具「" + (BUILTIN_LABEL[key] || key) + "」· 链接可留空";
-      fHref.placeholder = "可留空；也可填 / 或 http(s) 开头的链接";
     } else {
       formHint.textContent = "「自定义链接」需要填链接：/ 开头或 http(s):// 开头。";
-      fHref.placeholder = "/tools 或 https://…";
     }
   }
 

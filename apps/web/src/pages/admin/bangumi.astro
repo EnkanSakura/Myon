@@ -45,16 +45,6 @@ const syncApi = `${apiBasePath}/admin/bangumi/sync`;
       </div>
     </header>
 
-    <!-- ---------- 唯一的页面级提示：只读说明，同时承接同步错误 ---------- -->
-    <div class="notice notice--info" id="tbanner" role="status" aria-live="polite">
-      <span class="notice-k" id="tbannerK">READONLY</span>
-      <div class="notice-c">
-        <b id="tbannerTitle">只读列表</b>
-        <p id="tbannerText">条目由 Bangumi 同步维护；修改评分、评论或进度请到 Bangumi，之后点「同步 Bangumi」。</p>
-      </div>
-      <button class="notice-btn" id="tbannerLink" type="button" data-token-open hidden>管理令牌</button>
-    </div>
-
     <!-- ---------- 统计 ---------- -->
     <section class="metrics" aria-label="追番统计">
       <div class="metric">

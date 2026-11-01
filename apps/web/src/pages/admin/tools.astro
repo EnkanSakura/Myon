@@ -138,24 +138,24 @@ const toolsApi = `${apiBasePath}/admin/tools`;
       <div class="tool-fields">
         <div class="tf tf--wide">
           <label for="fName">名称 / NAME</label>
-          <input class="p-in" id="fName" type="text" maxlength="60" placeholder="例如：正则测试" autocomplete="off" required />
+          <input class="p-in" id="fName" type="text" maxlength="60" autocomplete="off" required />
         </div>
         <div class="tf tf--wide">
           <label for="fSlug">地址 / SLUG</label>
-          <input class="p-in" id="fSlug" type="text" maxlength="40" placeholder="timestamp" spellcheck="false" autocomplete="off" required />
+          <input class="p-in" id="fSlug" type="text" maxlength="40" spellcheck="false" autocomplete="off" required />
           <p class="tf-note">用在 /tools/ 后面 · 只能小写字母、数字、连字符，例：timestamp</p>
         </div>
         <div class="tf tf--wide">
           <label for="fDesc">一句说明 / DESC</label>
-          <textarea class="p-in tf-area" id="fDesc" rows="2" maxlength="200" placeholder="一句话说清它做什么"></textarea>
+          <textarea class="p-in tf-area" id="fDesc" rows="2" maxlength="200"></textarea>
         </div>
         <div class="tf">
           <label for="fKind">类型 / KIND</label>
-          <input class="p-in" id="fKind" type="text" maxlength="80" placeholder="例如：UNIX TIME · 浏览器内换算" autocomplete="off" />
+          <input class="p-in" id="fKind" type="text" maxlength="80" autocomplete="off" />
         </div>
         <div class="tf">
           <label for="fKeywords">关键词 / KEYWORDS</label>
-          <input class="p-in" id="fKeywords" type="text" maxlength="200" placeholder="空格分隔，例如：时间戳 unix 时区" autocomplete="off" />
+          <input class="p-in" id="fKeywords" type="text" maxlength="200" autocomplete="off" />
         </div>
         <div class="tf">
           <label for="fKey">内置工具 / TOOL KEY</label>
@@ -173,7 +173,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
         </div>
         <div class="tf">
           <label for="fHref">链接 / HREF</label>
-          <input class="p-in" id="fHref" type="text" maxlength="300" placeholder="/tools 或 https://…" spellcheck="false" autocomplete="off" />
+          <input class="p-in" id="fHref" type="text" maxlength="300" spellcheck="false" autocomplete="off" />
         </div>
         <div class="tf tf--pos">
           <label for="fPosition">排序 / POSITION</label>

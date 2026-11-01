@@ -76,7 +76,7 @@
       "</div>" +
       '<div class="mp-pane" id="mpExistingPane" role="tabpanel" aria-label="现有图片">' +
       '<label class="mp-search"><span class="sr-only">搜索图片文件名</span>' +
-      '<input id="mpSearch" type="search" placeholder="搜索文件名" autocomplete="off" spellcheck="false"></label>' +
+      '<input id="mpSearch" type="search" autocomplete="off" spellcheck="false"></label>' +
       '<div class="mp-grid" id="mpGrid" aria-busy="true"></div>' +
       '<p class="mp-empty" id="mpEmpty" hidden>媒体库还是空的，切到「上传新图」传一张。</p>' +
       '<div class="mp-foot"><span id="mpCount">—</span>' +

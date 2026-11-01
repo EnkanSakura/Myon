@@ -30,11 +30,6 @@
   var syncBtn = document.getElementById("syncMain");
   var syncLabel = document.getElementById("syncMainLabel");
   var exportBtn = document.getElementById("exportBtn");
-  var banner = document.getElementById("tbanner");
-  var bannerK = document.getElementById("tbannerK");
-  var bannerTitle = document.getElementById("tbannerTitle");
-  var bannerText = document.getElementById("tbannerText");
-  var bannerToken = document.getElementById("tbannerLink");
   var toastEl = document.getElementById("toast");
   var typeChips = document.querySelectorAll(".filterbar .chip[data-type]");
   var clearBtn = document.getElementById("clearFilters");
@@ -137,20 +132,6 @@
     return { pct: pct, text: text };
   }
 
-  function hideBanner() {
-    if (banner) banner.hidden = true;
-  }
-
-  function showBanner(tone, title, text, withToken) {
-    if (!banner) return;
-    banner.hidden = false;
-    banner.className = "notice notice--" + tone;
-    if (bannerK) bannerK.textContent = tone === "error" ? "ERROR" : tone === "warn" ? "WARN" : "INFO";
-    if (bannerTitle) bannerTitle.textContent = title;
-    if (bannerText) bannerText.textContent = text;
-    if (bannerToken) bannerToken.hidden = !withToken;
-  }
-
   function toast(text) {
     if (!toastEl) return;
     toastEl.textContent = text;
@@ -210,8 +191,7 @@
           empty.appendChild(content);
           listEl.appendChild(empty);
         }
-        showBanner("error", "读取失败", "公开追番接口没有返回数据，请刷新页面重试。", false);
-        setText("pageState", "读取失败");
+        toast("读取失败：公开追番接口没有返回数据，请刷新页面重试");
       })
       .finally(function () {
         state.loading = false;
@@ -347,7 +327,7 @@
     if (state.syncing) return;
     var token = readToken();
     if (!token) {
-      showBanner("warn", "需要管理令牌", "同步会请求 Bangumi 并写入 D1，请先在右上角填写管理令牌。", true);
+      toast("同步需要管理令牌：请先点右上角「管理令牌」填写后再试");
       return;
     }
     state.syncing = true;
@@ -363,15 +343,15 @@
       })
       .then(function (result) {
         if (result.response.status === 401) {
-          showBanner("warn", "令牌无效", "右上角的管理令牌未通过校验，请重新填写。", true);
+          toast("管理令牌无效：请在右上角「管理令牌」里重新填写");
           return;
         }
         if (result.response.status === 503) {
-          showBanner("warn", "服务端只读", "服务端没有配置管理令牌，暂时不能同步。", false);
+          toast("同步失败：服务端没有配置管理令牌，暂时不能同步");
           return;
         }
         if (!result.response.ok || !result.body.ok) {
-          showBanner("error", "同步失败", result.body.reason ? "Bangumi 返回：" + result.body.reason : "同步没有完成，请稍后重试。", false);
+          toast("同步失败：" + (result.body.reason ? "Bangumi 返回 " + result.body.reason : "同步没有完成，请稍后重试"));
           return;
         }
         toast("同步 " + (result.body.synced || 0) + " 条记录");
@@ -379,7 +359,7 @@
       })
       .catch(function (error) {
         console.error("[admin-bangumi] 同步失败", error);
-        showBanner("error", "同步失败", "网络请求没有完成，请稍后重试。", false);
+        toast("同步失败：网络请求没有完成，请稍后重试");
       })
       .finally(function () {
         state.syncing = false;
