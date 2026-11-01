@@ -13,11 +13,22 @@
   var pageEl = document.querySelector(".page[data-api]");
   var SAVE_API = pageEl ? pageEl.getAttribute("data-api") || "" : "";
   var READ_API = pageEl ? pageEl.getAttribute("data-read-api") || "" : "";
+  // 尺寸档位：与文章编辑器一致，由页面用 @myon/shared 的 mediaImageSizes 渲染成 JSON。
+  var IMAGE_SIZES = (function () {
+    var raw = pageEl ? pageEl.getAttribute("data-image-sizes") : "";
+    var image = window.MyonImage;
+    if (image && typeof image.parseSizes === "function") return image.parseSizes(raw);
+    var fallback = ["480", "720", "1080", "1440", "orig"];
+    return fallback;
+  })();
   // 工具栏「图片」按钮复用共享媒体选择器，接口地址由服务端渲染在 .page 上。
   var mediaConfig = {
     api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
     gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
-    base: pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/"
+    base: pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/",
+    sizes: IMAGE_SIZES,
+    // README 正文与文章正文一样，默认长边 720px。
+    defaultSize: "720"
   };
 
   var input = document.getElementById("mdInput");

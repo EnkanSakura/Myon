@@ -450,11 +450,12 @@ test.describe('后台关于页 · 共享编辑器', () => {
 
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
-    // 关于页不传尺寸档位：尺寸栏整条隐藏，插入普通 /media/<key>
-    await expect(page.locator('#mpSize')).toBeHidden();
+    // 关于 / README 编辑器与文章编辑器一致：选择器带尺寸档位，默认长边 720
+    await expect(page.locator('#mpSize')).toBeVisible();
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#mdInput')).toHaveValue(
-      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\)/,
+      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=720&q=80\)/,
     );
     await expect(page.locator('#mdPreview img')).toHaveCount(1);
   });
@@ -622,7 +623,7 @@ test.describe('后台关于页 · 共享编辑器', () => {
     });
     // 复用媒体库上传链路：上传成功即写入 Markdown 图片并关闭选择器。
     await expect(page.locator('#mdInput')).toHaveValue(
-      /!\[e2e-upload\]\(\/media\/uploads\/202601\/e2e-upload\.webp\)/,
+      /!\[e2e-upload\]\(\/media\/uploads\/202601\/e2e-upload\.webp\?size=720&q=80\)/,
     );
     await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
       'open',

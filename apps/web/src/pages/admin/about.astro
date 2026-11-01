@@ -3,7 +3,7 @@
 // 编辑器 + 预览复用共享 Markdown 组件（public/js/markdown-editor.js），
 // 工具栏里的「图片」走媒体选择器（public/js/media-picker.js）。
 // 样式：public/css/pages/admin-about.css；脚本：public/js/pages/admin-about.js
-import { apiBasePath } from '@myon/shared';
+import { apiBasePath, mediaImageSizes } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { mediaUrl } from '../../lib/media';
 
@@ -32,6 +32,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '/media/';
     data-api-media={mediaApi}
     data-gif-api={gifWebpApi}
     data-media-base={mediaBase}
+    data-image-sizes={JSON.stringify(mediaImageSizes)}
   >
 
     <!-- ---------- 页头 ---------- -->
