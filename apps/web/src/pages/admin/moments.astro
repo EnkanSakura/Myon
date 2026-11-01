@@ -19,7 +19,8 @@ const momentsApi = `${apiBasePath}/admin/moments`;
 const mediaApi = `${apiBasePath}/admin/media`;
 const gifWebpApi = `${mediaApi}/gif-webp`;
 
-// 分类建议来自公开的分类计数（/categories 不需要令牌）；取不到就用一组默认值。
+// 分类建议来自公开的分类计数（/categories 不需要令牌）；取不到就用一组常见分类兜底。
+// categoryOptions 只用于对话框候选与筛选下拉，不再给新建动态预设分类。
 let momentCategories: string[] = [];
 try {
   const categoriesRes = await app.request('/api/v1/categories', {}, binding);
@@ -34,9 +35,6 @@ const categoryOptions =
   momentCategories.length > 0
     ? momentCategories
     : ['日常', '技术', '收藏', '看番', '碎念'];
-const defaultCategory = categoryOptions.includes('日常')
-  ? '日常'
-  : (categoryOptions[0] ?? '日常');
 
 // 图片预览的 URL 规则来自 mediaUrl()，脚本只负责把 key 拼回去。
 const mediaSample = mediaUrl('__KEY__');
@@ -85,60 +83,50 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <button class="notice-btn" id="btnToken" type="button" data-token-open>管理令牌</button>
     </div>
 
-    <!-- ---------- 01 列表 ---------- -->
-    <section class="sec" aria-labelledby="h-list">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-list">列表</h2>
-        <span class="sec-en" id="notesEn">NOTES / —</span>
-        <div class="sec-r">
-          <span class="sec-note" id="listState" aria-live="polite">未连接</span>
-          <a class="arrow-link" href="/moments">前台四格 <span class="ar" aria-hidden="true">→</span></a>
-        </div>
-      </div>
+    <!-- ---------- 列表 ---------- -->
+    <div class="filterbar" aria-label="筛选动态">
+      <button class="fb-toggle" id="imgToggle" type="button" aria-pressed="false">带图</button>
 
-      <div class="filterbar" aria-label="筛选动态">
-        <div class="fb-chips" role="group" aria-label="按分类筛选">
-          <button class="chip is-on" type="button" data-filter="all" aria-pressed="true">全部</button>
+      <label class="fb-search">
+        <span class="sr-only">搜索动态</span>
+        <input id="noteSearch" type="search" autocomplete="off">
+      </label>
+
+      <label class="fb-sort">分类
+        <select id="catSel" aria-label="按分类筛选动态">
+          <option value="all">全部分类</option>
           {categoryOptions.map((name) => (
-            <button class="chip" type="button" data-filter={name} aria-pressed="false">{name}</button>
+            <option value={name}>{name}</option>
           ))}
-        </div>
+        </select>
+      </label>
 
-        <button class="fb-toggle" id="imgToggle" type="button" aria-pressed="false">带图</button>
+      <span class="fb-count" id="shownNotes" aria-live="polite">显示 — 条 · 筛选只作用于本页</span>
+      <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    </div>
 
-        <label class="fb-search">
-          <span class="sr-only">搜索动态</span>
-          <input id="noteSearch" type="search" placeholder="搜正文、分类或标签" autocomplete="off">
-        </label>
-
-        <span class="fb-count" id="shownNotes" aria-live="polite">显示 — 条 · 筛选只作用于本页</span>
-        <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    <div class="notes" id="noteList">
+      <div class="note-head" aria-hidden="true">
+        <span>时间</span><span>内容</span><span class="hd-thumb">图</span><span class="hd-tag">分类</span><span class="hd-r">操作</span>
       </div>
+      <!-- 列表行由 public/js/pages/admin-moments.js 按接口数据渲染 -->
+    </div>
 
-      <div class="notes" id="noteList">
-        <div class="note-head" aria-hidden="true">
-          <span>时间</span><span>内容</span><span class="hd-thumb">图</span><span class="hd-tag">分类 · 标签</span><span class="hd-r">操作</span>
-        </div>
-        <!-- 列表行由 public/js/pages/admin-moments.js 按接口数据渲染 -->
+    <div class="empty" id="emptyNotes" hidden>
+      <div class="empty-c">
+        <b class="empty-t" id="emptyTitle">还没有动态</b>
+        <p class="empty-d" id="emptyText">点右上角「发动态」写第一条，或者填写管理令牌后刷新列表。</p>
       </div>
+      <div class="empty-actions"><button class="nr-act" id="btnResetFilter" type="button">清除筛选</button></div>
+    </div>
 
-      <div class="empty" id="emptyNotes" hidden>
-        <div class="empty-c">
-          <b class="empty-t" id="emptyTitle">还没有动态</b>
-          <p class="empty-d" id="emptyText">点右上角「发动态」写第一条，或者填写管理令牌后刷新列表。</p>
-        </div>
-        <div class="empty-actions"><button class="nr-act" id="btnResetFilter" type="button">清除筛选</button></div>
+    <div class="pager">
+      <span class="pager-info">第 <b id="pgNow">—</b> / <b id="pgTotal">—</b> 页 · 每页 20 条</span>
+      <div class="pager-btns">
+        <button class="pager-btn" id="pgPrev" type="button" disabled>← 上一页</button>
+        <button class="pager-btn" id="pgNext" type="button" disabled>下一页 →</button>
       </div>
-
-      <div class="pager">
-        <span class="pager-info">第 <b id="pgNow">—</b> / <b id="pgTotal">—</b> 页 · 每页 20 条</span>
-        <div class="pager-btns">
-          <button class="pager-btn" id="pgPrev" type="button" disabled>← 上一页</button>
-          <button class="pager-btn" id="pgNext" type="button" disabled>下一页 →</button>
-        </div>
-      </div>
-    </section>
+    </div>
 
   </div>
 
@@ -163,7 +151,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 
     <div class="moment-field moment-field--wide">
       <label for="noteText">正文 / TEXT</label>
-      <textarea class="dlg-note" id="noteText" rows="5" maxlength="2000" spellcheck="false" placeholder="现在在做什么…"></textarea>
+      <textarea class="dlg-note" id="noteText" rows="5" maxlength="2000" spellcheck="false"></textarea>
       <p class="moment-count">
         <span>纯文本动态，不支持 Markdown</span>
         <span><b id="noteCount">0</b> / 2000</span>
@@ -186,20 +174,10 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <div class="moment-field">
         <label for="noteCategory">分类 / CATEGORY</label>
         <span class="combo">
-          <input class="moment-input" id="noteCategory" name="category" type="text" maxlength="40" placeholder="日常" autocomplete="off" value={defaultCategory} role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="categoryList">
+          <input class="moment-input" id="noteCategory" name="category" type="text" maxlength="40" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="categoryList">
           <button class="combo-toggle" id="noteCategoryToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
           <span class="combo-list" id="categoryList" role="listbox" aria-label="已有分类" hidden></span>
         </span>
-      </div>
-
-      <div class="moment-field">
-        <label for="noteTag">标签 / TAG</label>
-        <input class="moment-input" id="noteTag" name="tag" type="text" maxlength="40" placeholder="可留空" autocomplete="off">
-        <div class="moment-tags" id="tagQuick">
-          {categoryOptions.map((name) => (
-            <button class="moment-tag" type="button" data-tag={name} aria-pressed="false">{name}</button>
-          ))}
-        </div>
       </div>
 
       <div class="moment-field">

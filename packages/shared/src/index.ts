@@ -54,7 +54,6 @@ export interface MomentListItem {
   body: string;
   /** 分类，例如「日常」「技术」。 */
   category: string;
-  tag: string | null;
   pinned: boolean;
   mediaKey: string | null;
   createdAt: string;

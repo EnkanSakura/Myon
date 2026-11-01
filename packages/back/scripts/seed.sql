@@ -48,13 +48,13 @@ INSERT OR REPLACE INTO posts (id, slug, title, excerpt, body_md, status, categor
 这个夏天只认真追完了三部。',
    'draft', '动画', NULL, '2026-10-18T00:00:00.000Z', 7, NULL, '2026-10-18T00:00:00.000Z');
 
-INSERT OR REPLACE INTO moments (id, body, category, tag, visibility, pinned, media_key, created_at) VALUES
-  ('m_186', '凌晨一点，Worker 的冷启动终于稳定在 40ms 以内。值了。', '技术', '技术', 'public', 0, NULL, '2026-10-20T23:10:00.000Z'),
-  ('m_185', '神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。', '收藏', '收藏', 'public', 0, 'gallery/k6-print.jpg', '2026-10-19T22:41:00.000Z'),
-  ('m_184', '把追番页面重写了。现在从 Bangumi 拉数据，每 6 小时同步一次。', '技术', '技术', 'public', 0, NULL, '2026-10-19T18:03:00.000Z'),
-  ('m_183', '去看了个小的浮世绘展，回来把首页的粉调亮了一格。', '日常', '看番', 'public', 0, 'moments/w3-museum.jpg', '2026-10-18T15:20:00.000Z'),
-  ('m_182', '最近在补《虫师》，第 12 话的雨声比白噪音好用。', '日常', '看番', 'public', 0, NULL, '2026-10-17T23:40:00.000Z'),
-  ('m_181', '给展柜的每件东西补了展签，拍照真的好难。', '收藏', '收藏', 'public', 0, 'gallery/k3-inro.jpg', '2026-10-16T20:15:00.000Z');
+INSERT OR REPLACE INTO moments (id, body, category, visibility, pinned, media_key, created_at) VALUES
+  ('m_186', '凌晨一点，Worker 的冷启动终于稳定在 40ms 以内。值了。', '技术', 'public', 0, NULL, '2026-10-20T23:10:00.000Z'),
+  ('m_185', '神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。', '收藏', 'public', 0, 'gallery/k6-print.jpg', '2026-10-19T22:41:00.000Z'),
+  ('m_184', '把追番页面重写了。现在从 Bangumi 拉数据，每 6 小时同步一次。', '技术', 'public', 0, NULL, '2026-10-19T18:03:00.000Z'),
+  ('m_183', '去看了个小的浮世绘展，回来把首页的粉调亮了一格。', '日常', 'public', 0, 'moments/w3-museum.jpg', '2026-10-18T15:20:00.000Z'),
+  ('m_182', '最近在补《虫师》，第 12 话的雨声比白噪音好用。', '日常', 'public', 0, NULL, '2026-10-17T23:40:00.000Z'),
+  ('m_181', '给展柜的每件东西补了展签，拍照真的好难。', '收藏', 'public', 0, 'gallery/k3-inro.jpg', '2026-10-16T20:15:00.000Z');
 
 INSERT OR REPLACE INTO gallery_items (id, no, name, category, era, note, media_key, displayed, position, created_at) VALUES
   ('g_005', 'G-005', '鬼之根付', '手办', '明治', '表情用力得过分，每天看一眼，提神。', 'gallery/k7-demon.jpg', 1, 1, '2025-02-21T00:00:00.000Z'),

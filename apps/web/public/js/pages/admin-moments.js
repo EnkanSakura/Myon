@@ -17,10 +17,6 @@
     try { return localStorage.getItem(key); } catch (e) { return null; }
   }
   function pad2(n) { return String(n).padStart(2, "0"); }
-  function timeNow() {
-    var d = new Date();
-    return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
-  }
   function hasToken() { return !!(readStore(TOKEN_KEY) || "").trim(); }
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -88,6 +84,7 @@
   // 列表
   var noteList = $("noteList");
   var noteSearch = $("noteSearch");
+  var catSel = $("catSel");
   var shownNotes = $("shownNotes");
   var emptyNotes = $("emptyNotes");
   var emptyTitle = $("emptyTitle");
@@ -100,7 +97,6 @@
   var pgTotal = $("pgTotal");
   var pgPrev = $("pgPrev");
   var pgNext = $("pgNext");
-  var listState = $("listState");
 
   // 页面级提示
   var amBanner = $("amBanner");
@@ -125,8 +121,6 @@
   var noteCategoryToggle = $("noteCategoryToggle");
   var categoryList = $("categoryList");
   var categoryCombo = null;
-  var noteTag = $("noteTag");
-  var tagQuick = $("tagQuick");
   var visPick = $("visPick");
   var pinPick = $("pinPick");
   var btnPublish = $("btnPublish");
@@ -144,8 +138,6 @@
   var confirmState = $("confirmState");
   var confirmOk = $("confirmOk");
   var confirmCancel = $("confirmCancel");
-
-  var DEFAULT_CATEGORY = noteCategory ? noteCategory.value || "日常" : "日常";
 
   /* ================= 状态 ================= */
   var state = {
@@ -194,9 +186,6 @@
   function hideBanner() {
     if (amBanner) amBanner.hidden = true;
   }
-  function setListState(text) {
-    if (listState) listState.textContent = text;
-  }
 
   // 弹窗内的错误 / 提示条：页面级 notice 会被模态背景挡住，所以弹窗里单独一条。
   function hideFormBanner() {
@@ -243,12 +232,10 @@
     if (!result) return false;
     if (result.status === 401) {
       showBanner("error", "管理令牌无效", "令牌被服务端拒绝。点右上角「管理令牌」更新后重试。");
-      setListState("未授权 · 令牌无效");
       return true;
     }
     if (result.status === 503) {
       showBanner("warn", "服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
-      setListState("只读 · 服务端未配置管理令牌");
       return true;
     }
     return false;
@@ -276,7 +263,7 @@
     row.setAttribute("data-img", item.mediaKey ? "1" : "0");
     row.setAttribute("data-pinned", item.pinned ? "1" : "0");
     row.setAttribute("data-vis", item.visibility);
-    row.setAttribute("data-text", (item.body + " " + item.category + " " + (item.tag || "")).toLowerCase());
+    row.setAttribute("data-text", (item.body + " " + item.category).toLowerCase());
 
     var time = el("div", "nr-time");
     time.appendChild(el("span", "nr-when", fmtDateTime(item.createdAt)));
@@ -299,9 +286,8 @@
       thumb.appendChild(el("span", "nr-empty", "—"));
     }
 
-    var tags = el("div", "nr-tag");
-    tags.appendChild(el("span", "tag tag--dark", item.category));
-    if (item.tag && item.tag !== item.category) tags.appendChild(el("span", "tag", item.tag));
+    var catCell = el("div", "nr-tag");
+    catCell.appendChild(el("span", "tag tag--dark", item.category));
 
     var acts = el("div", "nr-acts");
     acts.appendChild(actBtn("edit", "编辑"));
@@ -313,7 +299,7 @@
     row.appendChild(time);
     row.appendChild(body);
     row.appendChild(thumb);
-    row.appendChild(tags);
+    row.appendChild(catCell);
     row.appendChild(acts);
     return row;
   }
@@ -377,7 +363,6 @@
   function renderStats() {
     var known = state.countsKnown;
     setText("stickerPub", known ? state.total : "—");
-    setText("notesEn", "NOTES / " + (known ? state.total : "—"));
     if (!known) {
       setText("noteToday", "—");
       setText("noteLast", "—");
@@ -404,13 +389,11 @@
     pgNext.disabled = !state.countsKnown || page >= pageCount || state.loading;
   }
 
+  // 分类筛选是原生 select（combo.js 会自动增强成 MyonCombo 外观），
+  // 页面只读写 select.value 并监听 change。
   function setFilter(value) {
-    state.filter = value;
-    each(document.querySelectorAll(".fb-chips .chip"), function (btn) {
-      var on = btn.getAttribute("data-filter") === value;
-      btn.classList.toggle("is-on", on);
-      btn.setAttribute("aria-pressed", String(on));
-    });
+    state.filter = value || "all";
+    if (catSel && catSel.value !== state.filter) catSel.value = state.filter;
     applyFilter();
   }
 
@@ -420,29 +403,19 @@
     imgToggle.classList.toggle("is-on", state.imgOnly);
   }
 
-  function ensureFilterChips() {
-    var wrap = document.querySelector(".fb-chips");
-    if (!wrap) return;
-    // 动态分类 chips 只按当前数据刷新，SSR 渲染的固定分类保留。
-    each(wrap.querySelectorAll('.chip[data-dynamic="1"]'), function (btn) { btn.remove(); });
+  // 筛选下拉：把已加载数据里出现的新分类补进 option（去重，「全部分类」保持第一）。
+  function ensureFilterOptions() {
+    if (!catSel) return;
     var known = {};
-    each(wrap.querySelectorAll(".chip"), function (btn) { known[btn.getAttribute("data-filter")] = true; });
+    each(catSel.options, function (opt) { known[opt.value] = true; });
     state.items.forEach(function (item) {
       var name = item.category;
       if (!name || known[name]) return;
       known[name] = true;
-      var btn = el("button", "chip", name);
-      btn.type = "button";
-      btn.setAttribute("data-filter", name);
-      btn.setAttribute("data-dynamic", "1");
-      btn.setAttribute("aria-pressed", "false");
-      wrap.appendChild(btn);
+      catSel.appendChild(new Option(name, name));
     });
-    var exists = false;
-    each(wrap.querySelectorAll(".chip"), function (btn) {
-      if (btn.getAttribute("data-filter") === state.filter) exists = true;
-    });
-    if (!exists) setFilter("all");
+    // 当前筛选值不在候选里时回退「全部分类」。
+    if (state.filter !== "all" && !known[state.filter]) setFilter("all");
   }
 
   function resetFilters() {
@@ -480,12 +453,10 @@
       renderRows();
       renderStats();
       renderPager();
-      setListState("未连接 · 需要管理令牌");
       showBanner("info", "尚未连接后台", "动态列表和发布都需要管理令牌。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。");
       return;
     }
     state.loading = true;
-    setListState("读取中…");
     renderPager();
     var url = MOMENTS_API + "?limit=" + state.limit + "&offset=" + state.offset;
     api("GET", url).then(function (res) {
@@ -503,8 +474,7 @@
       state.total = Number(data.total) || 0;
       state.countsKnown = true;
       hideBanner();
-      setListState("已连接 · " + timeNow() + " 读取");
-      ensureFilterChips();
+      ensureFilterOptions();
       renderRows();
       renderStats();
     }).catch(function (err) {
@@ -512,7 +482,6 @@
       state.total = 0;
       state.countsKnown = false;
       state.loadError = "读取列表失败：" + ((err && err.message) || "网络或服务端异常");
-      setListState("读取失败");
       showBanner("error", "读取列表失败", (err && err.message) || "网络或服务端异常，请稍后重试。");
       renderRows();
       renderStats();
@@ -536,13 +505,6 @@
   function paintPinned() {
     pinPick.setAttribute("aria-pressed", String(state.pinned));
     pinPick.textContent = state.pinned ? "已置顶 · 点击取消" : "置顶这条";
-  }
-
-  function updateTagQuick() {
-    var value = noteTag.value.trim();
-    each(tagQuick.querySelectorAll(".moment-tag"), function (btn) {
-      btn.setAttribute("aria-pressed", String(btn.getAttribute("data-tag") === value));
-    });
   }
 
   function paintMedia() {
@@ -593,12 +555,11 @@
     state.mediaKey = editing ? item.mediaKey || null : null;
     state.mediaName = state.mediaKey ? fileName(state.mediaKey) : "";
     noteText.value = editing ? item.body || "" : "";
-    noteCategory.value = editing && item.category ? item.category : DEFAULT_CATEGORY;
-    noteTag.value = editing && item.tag ? item.tag : "";
+    // 新建动态不预设分类；编辑时保留原分类（缺失才留空）。
+    noteCategory.value = editing && item.category ? item.category : "";
     hideFormBanner();
     paintVisibility();
     paintPinned();
-    updateTagQuick();
     paintMedia();
     syncCounter();
     if (momentDlgTitle) momentDlgTitle.textContent = editing ? "编辑动态" : "发动态";
@@ -640,7 +601,6 @@
   function readDialog() {
     var body = noteText.value.trim();
     var category = noteCategory.value.trim();
-    var tag = noteTag.value.trim();
     if (!body) {
       showFormBanner("error", "正文不能为空", "先写点什么再发布。");
       noteText.focus();
@@ -652,14 +612,13 @@
       return null;
     }
     if (!category) {
-      showFormBanner("error", "分类不能为空", "填一个分类，或者点下面的快捷标签选一个。");
+      showFormBanner("error", "分类不能为空", "填一个分类，或者从已有分类里选一个。");
       noteCategory.focus();
       return null;
     }
     return {
       body: body,
       category: category,
-      tag: tag || null,
       visibility: state.visibility,
       pinned: state.pinned,
       mediaKey: state.mediaKey
@@ -727,7 +686,7 @@
         state.total += 1;
         state.countsKnown = true;
         sortItems();
-        ensureFilterChips();
+        ensureFilterOptions();
         renderRows();
         renderStats();
         renderPager();
@@ -786,7 +745,6 @@
     var payload = {
       body: item.body,
       category: item.category,
-      tag: item.tag || null,
       visibility: item.visibility,
       pinned: !item.pinned,
       mediaKey: item.mediaKey || null
@@ -869,15 +827,7 @@
     });
   }
 
-  // 标签 / 可见性 / 置顶 / 正文字数
-  each(tagQuick.querySelectorAll(".moment-tag"), function (btn) {
-    btn.addEventListener("click", function () {
-      var value = btn.getAttribute("data-tag");
-      noteTag.value = noteTag.value.trim() === value ? "" : value;
-      updateTagQuick();
-    });
-  });
-  noteTag.addEventListener("input", updateTagQuick);
+  // 可见性 / 置顶 / 正文字数
   noteCategory.addEventListener("input", function () {
     if (noteCategory.value.length > 40) noteCategory.value = noteCategory.value.slice(0, 40);
   });
@@ -925,12 +875,9 @@
   });
 
   // 筛选 / 搜索
-  var chipWrap = document.querySelector(".fb-chips");
-  if (chipWrap) {
-    chipWrap.addEventListener("click", function (e) {
-      var btn = e.target.closest(".chip");
-      if (!btn) return;
-      setFilter(btn.getAttribute("data-filter"));
+  if (catSel) {
+    catSel.addEventListener("change", function () {
+      setFilter(catSel.value);
     });
   }
   if (imgToggle) {
@@ -981,7 +928,6 @@
   paintVisibility();
   paintPinned();
   paintImgToggle();
-  updateTagQuick();
   paintMedia();
   syncCounter();
   renderRows();

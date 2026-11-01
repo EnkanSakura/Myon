@@ -27,7 +27,6 @@ export const moments = sqliteTable('moments', {
   id: text('id').primaryKey(),
   body: text('body').notNull(),
   category: text('category').notNull().default('日常'),
-  tag: text('tag'),
   visibility: text('visibility', { enum: ['public', 'private'] })
     .notNull()
     .default('public'),

@@ -46,7 +46,6 @@ export type PostInput = z.infer<typeof postInputSchema>;
 const momentFields = {
   body: z.string().min(1).max(2000),
   category: z.string().min(1).max(40),
-  tag: z.string().max(40).nullable().optional(),
   visibility: z.enum(['public', 'private']),
   pinned: z.boolean(),
   mediaKey: z.string().max(300).nullable().optional(),
@@ -54,7 +53,7 @@ const momentFields = {
 
 export const momentInputSchema = z.object({
   ...momentFields,
-  category: momentFields.category.default('日常'),
+  // category 不给默认值：发动态必须显式带分类。
   visibility: momentFields.visibility.default('public'),
   pinned: momentFields.pinned.default(false),
 });

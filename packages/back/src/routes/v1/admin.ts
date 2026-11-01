@@ -270,7 +270,6 @@ admin.post('/moments', async (c) => {
     id: `m_${crypto.randomUUID()}`,
     body: input.body,
     category: input.category,
-    tag: input.tag ?? null,
     visibility: input.visibility,
     pinned: input.pinned,
     mediaKey: input.mediaKey ?? null,

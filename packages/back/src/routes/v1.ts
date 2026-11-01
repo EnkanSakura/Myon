@@ -195,7 +195,6 @@ v1.get('/moments', async (c) => {
       id: moments.id,
       body: moments.body,
       category: moments.category,
-      tag: moments.tag,
       pinned: moments.pinned,
       mediaKey: moments.mediaKey,
       createdAt: moments.createdAt,
