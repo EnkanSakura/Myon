@@ -28,9 +28,11 @@ import { mediaUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
-// 第 2 页右侧装饰框统一用后台「封面图」设置（详见 AGENTS 首页约定）；
+// 第 2 页右侧装饰图后台可配置（留空时 API 已回退到封面图）；
 // 第 3/4 页只展示真实条目自带的图片，条目为空时不渲染任何图片，改为空态提示。
 const homeCoverImage = mediaUrl(home.cover.image);
+const homeFigureA = mediaUrl(home.figures.a);
+const homeFigureB = mediaUrl(home.figures.b);
 const end = site.end;
 const leadLines = home.lead.split(String.fromCharCode(10));
 const afterwordLines = end.afterword.body.split(String.fromCharCode(10));
@@ -492,8 +494,8 @@ function presetValue(preset: HomeStatPreset): string {
       </div>
       {latestPosts.length > 0 && (
         <div class="side">
-          <div class="frame reveal" style="--i:2"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
-          <div class="frame two reveal" style="--i:3"><img src={homeCoverImage} alt=""><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
+          <div class="frame reveal" style="--i:2"><img src={homeFigureA} alt=""><div class="cap"><span>FIGURE A</span><span>1830s</span></div></div>
+          <div class="frame two reveal" style="--i:3"><img src={homeFigureB} alt=""><div class="cap"><span>FIGURE B</span><span>册页</span></div></div>
         </div>
       )}
       <span class="bgtype" aria-hidden="true">ARTICLES</span>

@@ -8,6 +8,7 @@ import {
   homeStatPresets,
 } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import { mediaUrl } from '../../lib/media';
 
 // 接口地址、默认主题色与首页预设由服务端注入，public/js 里不硬编码。
 const settingsApi = `${apiBasePath}/admin/settings`;
@@ -15,6 +16,12 @@ const homeConfig = JSON.stringify({
   presets: homeStatPresets,
   pageLabels: defaultHomePageLabels,
 });
+// 图片路径可以走共享媒体选择器：媒体接口与 GIF 转码地址由服务端渲染。
+const mediaApi = `${apiBasePath}/admin/media`;
+const gifWebpApi = `${mediaApi}/gif-webp`;
+// 图片地址规则来自 mediaUrl()，脚本只负责把 key 拼回去（public/js 不参与打包）。
+const mediaSample = mediaUrl('__KEY__');
+const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
 ---
 
 <AdminLayout
@@ -26,7 +33,7 @@ const homeConfig = JSON.stringify({
     <link rel="stylesheet" href="/css/pages/admin-settings.css" />
   </Fragment>
 
-  <div class="page" data-api={settingsApi} data-theme-color={defaultThemeColor} data-home-config={homeConfig}>
+  <div class="page" data-api={settingsApi} data-theme-color={defaultThemeColor} data-home-config={homeConfig} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -70,7 +77,7 @@ const homeConfig = JSON.stringify({
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-basic">
           <div class="sp-head">
-            <span class="sec-num">01</span>
+            <span class="num-badge">01</span>
             <h2 id="sp-basic">基本信息</h2>
             <span class="sp-en">BASIC</span>
           </div>
@@ -111,7 +118,7 @@ const homeConfig = JSON.stringify({
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-home">
           <div class="sp-head">
-            <span class="sec-num">02</span>
+            <span class="num-badge">02</span>
             <h2 id="sp-home">首页封面</h2>
             <span class="sp-en">HOME / COVER</span>
           </div>
@@ -212,7 +219,10 @@ const homeConfig = JSON.stringify({
               <div class="fields">
                 <div class="fld fld--wide">
                   <label for="homeCoverImage">图片路径 / PATH</label>
-                  <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" placeholder="/media/cabinet.jpg" spellcheck="false" autocomplete="off" data-setting>
+                  <div class="path-row">
+                    <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
+                    <button class="path-pick" type="button" data-media-pick="homeCoverImage" data-setting>媒体库</button>
+                  </div>
                   <p class="fld-err" id="homeCoverImageErr" hidden></p>
                 </div>
                 <div class="fld">
@@ -224,7 +234,34 @@ const homeConfig = JSON.stringify({
                   <input id="homeCoverNote" name="home_cover_note" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
                 </div>
               </div>
-              <p class="hint">首页封面与第 2/3/4 页的装饰框都使用这张图；先把图片传到媒体库，再按 <code>/media/&lt;key&gt;</code> 填写路径。</p>
+              <p class="hint">首页封面使用这张图；第 2 页装饰图留空时也沿用这张图，可以单独配置。点「媒体库」可以从已上传的图片里选，选完自动填 <code>/media/&lt;key&gt;</code>。</p>
+            </div>
+
+            <div class="hf">
+              <div class="hf-head">
+                <b>第 2 页装饰图</b>
+                <span>PAGE 02 FIGURES</span>
+                <span class="hf-note">留空则沿用封面图</span>
+              </div>
+              <div class="fields">
+                <div class="fld fld--wide">
+                  <label for="homeFigureA">图 A / FIGURE A</label>
+                  <div class="path-row">
+                    <input id="homeFigureA" name="home_p2_figure_a" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
+                    <button class="path-pick" type="button" data-media-pick="homeFigureA" data-setting>媒体库</button>
+                  </div>
+                  <p class="fld-err" id="homeFigureAErr" hidden></p>
+                </div>
+                <div class="fld fld--wide">
+                  <label for="homeFigureB">图 B / FIGURE B</label>
+                  <div class="path-row">
+                    <input id="homeFigureB" name="home_p2_figure_b" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
+                    <button class="path-pick" type="button" data-media-pick="homeFigureB" data-setting>媒体库</button>
+                  </div>
+                  <p class="fld-err" id="homeFigureBErr" hidden></p>
+                </div>
+              </div>
+              <p class="hint">留空则沿用封面图；先把图片传到媒体库，再按 <code>/media/&lt;key&gt;</code> 填路径，也可以点「媒体库」直接选。</p>
             </div>
 
             <p class="hint">数据块的数值由站点统计实时计算，只需要选预设。</p>
@@ -245,7 +282,7 @@ const homeConfig = JSON.stringify({
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-theme">
           <div class="sp-head">
-            <span class="sec-num">03</span>
+            <span class="num-badge">03</span>
             <h2 id="sp-theme">主题色</h2>
             <span class="sp-en">ACCENT</span>
           </div>
@@ -277,7 +314,7 @@ const homeConfig = JSON.stringify({
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-footer">
           <div class="sp-head">
-            <span class="sec-num">04</span>
+            <span class="num-badge">04</span>
             <h2 id="sp-footer">页脚</h2>
             <span class="sp-en">FOOTER</span>
           </div>
@@ -285,7 +322,7 @@ const homeConfig = JSON.stringify({
             <div class="fields">
               <div class="fld">
                 <label for="footerRss">RSS 地址 / FEED</label>
-                <input id="footerRss" name="footer_rss" type="text" maxlength="300" placeholder="/rss.xml" spellcheck="false" autocomplete="off" data-setting>
+                <input id="footerRss" name="footer_rss" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
                 <p class="fld-err" id="footerRssErr" hidden></p>
               </div>
               <div class="fld">
@@ -319,7 +356,7 @@ const homeConfig = JSON.stringify({
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-end">
           <div class="sp-head">
-            <span class="sec-num">05</span>
+            <span class="num-badge">05</span>
             <h2 id="sp-end">后记</h2>
             <span class="sp-en">AFTERWORD</span>
           </div>
@@ -355,5 +392,8 @@ const homeConfig = JSON.stringify({
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <!-- 共享脚本顺序：图片处理 → 媒体选择器 → 本页逻辑 -->
+  <script is:inline src="/js/image-upload.js"></script>
+  <script is:inline src="/js/media-picker.js"></script>
   <script is:inline src="/js/pages/admin-settings.js"></script>
 </AdminLayout>

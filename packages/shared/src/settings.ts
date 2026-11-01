@@ -25,6 +25,8 @@ export const siteSettingKeys = [
   'home_cover_image',
   'home_cover_badge',
   'home_cover_note',
+  'home_p2_figure_a',
+  'home_p2_figure_b',
   'home_end_title',
   'home_end_lead',
   'home_afterword_body',
@@ -132,6 +134,9 @@ export const defaultSiteSettings: SiteSettings = {
   home_cover_image: '/media/cabinet.jpg',
   home_cover_badge: '全七页 / ALL 7',
   home_cover_note: 'LIGHT ON · 只开一盏灯',
+  // 第 2 页两张装饰图：留空表示沿用封面图，保证旧设置视觉零变化。
+  home_p2_figure_a: '',
+  home_p2_figure_b: '',
   home_end_title: '谢谢翻完',
   home_end_lead:
     '如果哪一件你也喜欢，或者只是想聊两句——下次漫展见，或者现在写邮件给我。',
@@ -143,6 +148,15 @@ export const defaultSiteSettings: SiteSettings = {
 };
 
 const text = (max: number) => z.string().max(max);
+
+/** 第 2 页装饰图的路径：留空表示沿用封面图，非空必须是站内路径或 http(s) 链接。 */
+const optionalFigurePath = z
+  .string()
+  .max(300)
+  .refine(
+    (value) => value === '' || /^(\/|https?:\/\/)/.test(value),
+    '装饰图需要是 / 开头的站内路径或 http(s):// 链接；留空则沿用封面图',
+  );
 
 const homeStatSettingSchema = z.object({
   preset: z.enum(
@@ -226,6 +240,8 @@ export const siteSettingsPatchSchema = z
       .regex(/^(\/|https?:\/\/)/, '封面图需要是站内路径或 http(s) 链接'),
     home_cover_badge: text(40),
     home_cover_note: text(60),
+    home_p2_figure_a: optionalFigurePath,
+    home_p2_figure_b: optionalFigurePath,
     home_end_title: text(60),
     home_end_lead: text(240),
     home_afterword_body: text(600),
@@ -258,6 +274,8 @@ export interface HomeCoverSettings {
   stats: HomeStatView[];
   links: HomeLink[];
   cover: { image: string; badge: string; note: string };
+  /** 第 2 页右侧的两张装饰图；后台留空时已回退为封面图。 */
+  figures: { a: string; b: string };
 }
 
 /** 前台真正需要的那一小部分：站点信息 + 主题色 + 页脚 + 首页封面。 */
@@ -361,6 +379,17 @@ function normalizeStats(stats: HomeStatSetting[]): HomeStatView[] {
 export function toPublicSiteSettings(
   settings: SiteSettings,
 ): PublicSiteSettings {
+  // 兼容旧设置里的 /assets/<key>：图片现在只从 R2 出。
+  const coverImage = settings.home_cover_image.replace(
+    /^\/assets\//,
+    '/media/',
+  );
+  // 第 2 页装饰图留空时沿用封面图，旧 KV 里没有这两个键时不会变形。
+  const figureA =
+    settings.home_p2_figure_a.replace(/^\/assets\//, '/media/') || coverImage;
+  const figureB =
+    settings.home_p2_figure_b.replace(/^\/assets\//, '/media/') || coverImage;
+
   return {
     name: settings.site_name,
     author: settings.site_author,
@@ -386,11 +415,12 @@ export function toPublicSiteSettings(
         parseJsonArray(settings.home_links, defaultHomeLinks),
       ),
       cover: {
-        // 兼容旧设置里的 /assets/<key>：图片现在只从 R2 出。
-        image: settings.home_cover_image.replace(/^\/assets\//, '/media/'),
+        image: coverImage,
         badge: settings.home_cover_badge,
         note: settings.home_cover_note,
       },
+      // 第 2 页两张装饰图：后台留空时回退封面图，前台不需要再判空。
+      figures: { a: figureA, b: figureB },
     },
     end: {
       title: settings.home_end_title,

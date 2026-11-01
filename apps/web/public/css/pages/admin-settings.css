@@ -47,6 +47,19 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 .fld-err[hidden]{display:none}
 .fld.is-invalid input,.fld.is-invalid textarea{border-color:var(--ppk);box-shadow:3px 3px 0 var(--ppk-deep)}
 
+/* 图片路径行：输入框 + 「媒体库」按钮（按钮走共享媒体选择器） */
+.path-row{display:flex;gap:8px;align-items:stretch}
+.path-row input{flex:1 1 auto;min-width:0}
+.path-pick{
+  flex:none;height:40px;padding:0 14px;border:2px solid var(--pline);border-radius:0;
+  background:transparent;color:var(--pp-70);font-family:var(--mono);font-size:12px;
+  letter-spacing:.06em;line-height:1.5;white-space:nowrap;cursor:pointer;
+  transition:background .14s var(--ease),color .14s var(--ease),border-color .14s var(--ease);
+}
+.path-pick:hover:not(:disabled){background:var(--ppk);color:var(--ink);border-color:var(--ink)}
+.path-pick:disabled{opacity:.4;cursor:not-allowed}
+.path-pick:focus-visible{outline:2px solid var(--ppk);outline-offset:2px}
+
 /* 未连接 / 只读：表单控件与保存按钮变灰 */
 .sp-body input:disabled,.sp-body button:disabled{opacity:.5;cursor:not-allowed}
 .fld input:disabled:hover{border-color:var(--pline)}

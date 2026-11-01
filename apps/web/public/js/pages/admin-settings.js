@@ -19,6 +19,14 @@
   var HOME_LINKS_MAX = 6;
   var HOME_JSON_MAX = 3000;
 
+  // 图片路径字段：可以从媒体库选择，并把粘贴进来的站点域名去掉
+  var IMAGE_PATH_IDS = ["homeCoverImage", "homeFigureA", "homeFigureB"];
+  var IMAGE_ERR_IDS = {
+    homeCoverImage: "homeCoverImageErr",
+    homeFigureA: "homeFigureAErr",
+    homeFigureB: "homeFigureBErr"
+  };
+
   // 设置接口字段 → 页面输入框 id
   var FIELD_IDS = {
     site_name: "siteName",
@@ -34,6 +42,8 @@
     home_cover_image: "homeCoverImage",
     home_cover_badge: "homeCoverBadge",
     home_cover_note: "homeCoverNote",
+    home_p2_figure_a: "homeFigureA",
+    home_p2_figure_b: "homeFigureB",
     home_end_title: "homeEndTitle",
     home_end_lead: "homeEndLead",
     home_afterword_body: "homeAfterwordBody",
@@ -56,6 +66,10 @@
   var pageEl = document.querySelector(".page[data-api]");
   var API_URL = pageEl ? pageEl.getAttribute("data-api") : "";
   var THEME_COLOR_DEFAULT = pageEl ? pageEl.getAttribute("data-theme-color") || "" : "";
+  // 图片路径的「媒体库」按钮依赖共享媒体选择器：接口与 /media/ 前缀由服务端渲染。
+  var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
+  var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
+  var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
 
   // 首页预设与默认七页标签由服务端注入（来自 @myon/shared）。
   var HOME_CONFIG = {};
@@ -105,6 +119,10 @@
   var homeLinksErr = $("homeLinksErr");
   var homeCoverImage = $("homeCoverImage");
   var homeCoverImageErr = $("homeCoverImageErr");
+  var homeFigureA = $("homeFigureA");
+  var homeFigureAErr = $("homeFigureAErr");
+  var homeFigureB = $("homeFigureB");
+  var homeFigureBErr = $("homeFigureBErr");
 
   /* ---------------- 页面状态 ---------------- */
   var state = {
@@ -203,6 +221,95 @@
       themeColorErr.hidden = false;
     }
     return false;
+  }
+
+  /* ---------------- 首页：图片路径（媒体库 + 去域名） ---------------- */
+  /**
+   * 去掉图片路径里的站点域名：
+   * - 值不是 http(s):// 或 // 开头的完整 URL（含站内 /media/ 路径）时原样返回；
+   * - 同源 URL 或 pathname 以 /media/ 开头的 URL 只保留 path + query + hash；
+   * - 其它外站图片 URL 原样保留，交给前台 <img> 直接加载；
+   * - URL 解析失败时原样返回。
+   */
+  function normalizeImagePath(value) {
+    var raw = String(value == null ? "" : value).trim();
+    if (!/^(https?:)?\/\//i.test(raw)) return raw;
+    var url;
+    try {
+      url = new URL(raw, window.location.href);
+    } catch (error) {
+      return raw;
+    }
+    var sameOrigin = url.origin === window.location.origin;
+    var isMediaPath = url.pathname.indexOf("/media/") === 0;
+    if (!sameOrigin && !isMediaPath) return raw;
+    return url.pathname + url.search + url.hash;
+  }
+
+  /** 由输入框里的 /media/<key> 反推媒体 key，用来在媒体库里高亮已选图；不是媒体路径时返回空。 */
+  function keyFromImagePath(value) {
+    var path = normalizeImagePath(value);
+    if (!MEDIA_BASE || path.indexOf(MEDIA_BASE) !== 0) return "";
+    return path.slice(MEDIA_BASE.length);
+  }
+
+  /** 清掉某个图片字段的 is-invalid 与错误文案（选图 / 改对之后调用）。 */
+  function clearImageError(inputId) {
+    var input = $(inputId);
+    if (input) {
+      var fld = input.closest(".fld");
+      if (fld) fld.classList.remove("is-invalid");
+    }
+    var err = $(IMAGE_ERR_IDS[inputId]);
+    if (!err) return;
+    err.textContent = "";
+    err.hidden = true;
+  }
+
+  /** 打开共享媒体选择器，选中的图片按 /media/<key> 填回对应输入框。 */
+  function openImagePicker(inputId) {
+    var input = $(inputId);
+    if (!input) return;
+    var picker = window.MyonMediaPicker;
+    if (!picker || typeof picker.open !== "function") {
+      toast("媒体选择器未加载，请刷新页面");
+      return;
+    }
+    picker.open({
+      mode: "pick",
+      api: MEDIA_API,
+      gifApi: GIF_API,
+      base: MEDIA_BASE,
+      selectedKey: keyFromImagePath(input.value),
+      onPick: function (item) {
+        if (!item || !item.key) return;
+        input.value = MEDIA_BASE + item.key;
+        clearImageError(inputId);
+        dirty();
+        toast("已从媒体库选择图片");
+      }
+    });
+  }
+
+  function bindImagePickers() {
+    each(document.querySelectorAll("[data-media-pick]"), function (btn) {
+      var inputId = btn.getAttribute("data-media-pick");
+      if (!inputId || !$(inputId)) return;
+      btn.addEventListener("click", function () {
+        openImagePicker(inputId);
+      });
+    });
+    // 手动粘贴 / 输入的图片链接：离开输入框时去掉同源域名
+    each(IMAGE_PATH_IDS, function (inputId) {
+      var input = $(inputId);
+      if (!input) return;
+      function normalizeField() {
+        var next = normalizeImagePath(input.value);
+        if (next !== input.value) input.value = next;
+      }
+      input.addEventListener("change", normalizeField);
+      input.addEventListener("blur", normalizeField);
+    });
   }
 
   /* ---------------- 首页：数据块 / 联系方式行编辑器 ---------------- */
@@ -457,7 +564,6 @@
       24
     );
     var labelInput = labelFld.querySelector("input");
-    labelInput.placeholder = presetInfo(stat.preset).label;
 
     var check = document.createElement("label");
     check.className = "row-check";
@@ -480,7 +586,6 @@
     row.appendChild(hint);
 
     select.addEventListener("change", function () {
-      labelInput.placeholder = presetInfo(select.value).label;
       updateStatHint(row);
       dirty();
     });
@@ -503,7 +608,6 @@
       80
     );
     var iconInput = iconFld.querySelector("input");
-    iconInput.placeholder = "ri:rss-fill";
     row.appendChild(iconFld);
     row.appendChild(makeRowField("联系方式 " + (index + 1) + " 链接", "href", link.href, 300));
     row.appendChild(makeRowActions("link", row));
@@ -652,6 +756,13 @@
 
   /* ---------------- 表单收集 / 回填 ---------------- */
   function readForm() {
+    // 图片路径在保存前再规范一次，保证输入框显示的值与写进 KV 的值一致
+    each(IMAGE_PATH_IDS, function (inputId) {
+      var input = $(inputId);
+      if (!input) return;
+      var next = normalizeImagePath(input.value);
+      if (next !== input.value) input.value = next;
+    });
     var data = {};
     Object.keys(FIELD_IDS).forEach(function (key) {
       data[key] = $(FIELD_IDS[key]).value.trim();
@@ -690,6 +801,8 @@
     footerRssErr.hidden = true;
     homePageLabelsErr.hidden = true;
     homeCoverImageErr.hidden = true;
+    homeFigureAErr.hidden = true;
+    homeFigureBErr.hidden = true;
     homeStatsErr.hidden = true;
     homeLinksErr.hidden = true;
   }
@@ -729,6 +842,14 @@
         homeCoverImageErr.textContent = issue.message;
         homeCoverImageErr.hidden = false;
       }
+      if (issue.path === "home_p2_figure_a") {
+        homeFigureAErr.textContent = issue.message;
+        homeFigureAErr.hidden = false;
+      }
+      if (issue.path === "home_p2_figure_b") {
+        homeFigureBErr.textContent = issue.message;
+        homeFigureBErr.hidden = false;
+      }
     });
   }
 
@@ -756,6 +877,22 @@
       homeCoverImage.closest(".fld").classList.add("is-invalid");
       homeCoverImageErr.textContent = "封面图需要是 / 开头的站内路径或 http(s):// 链接";
       homeCoverImageErr.hidden = false;
+      ok = false;
+    }
+
+    // 第 2 页装饰图允许留空（沿用封面图），非空时规则与封面图一致
+    var figureA = homeFigureA.value.trim();
+    if (figureA && !COVER_RE.test(figureA)) {
+      homeFigureA.closest(".fld").classList.add("is-invalid");
+      homeFigureAErr.textContent = "装饰图 A 需要是 / 开头的站内路径或 http(s):// 链接";
+      homeFigureAErr.hidden = false;
+      ok = false;
+    }
+    var figureB = homeFigureB.value.trim();
+    if (figureB && !COVER_RE.test(figureB)) {
+      homeFigureB.closest(".fld").classList.add("is-invalid");
+      homeFigureBErr.textContent = "装饰图 B 需要是 / 开头的站内路径或 http(s):// 链接";
+      homeFigureBErr.hidden = false;
       ok = false;
     }
 
@@ -991,6 +1128,15 @@
         homeCoverImage.closest(".fld").classList.remove("is-invalid");
         homeCoverImageErr.hidden = true;
       }
+      // 第 2 页装饰图：改对或清空后即刻消掉行内报错
+      if (key === "home_p2_figure_a" && (!homeFigureA.value.trim() || COVER_RE.test(homeFigureA.value.trim()))) {
+        homeFigureA.closest(".fld").classList.remove("is-invalid");
+        homeFigureAErr.hidden = true;
+      }
+      if (key === "home_p2_figure_b" && (!homeFigureB.value.trim() || COVER_RE.test(homeFigureB.value.trim()))) {
+        homeFigureB.closest(".fld").classList.remove("is-invalid");
+        homeFigureBErr.hidden = true;
+      }
       dirty();
     });
   });
@@ -1006,6 +1152,7 @@
   saveBtn.addEventListener("click", saveSettings);
 
   /* ---------------- 初始化 ---------------- */
+  bindImagePickers();
   applyColor(THEME_COLOR_DEFAULT);
   setEditable(false);
   loadSettings();
