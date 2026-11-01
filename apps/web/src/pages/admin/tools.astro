@@ -71,21 +71,10 @@ const toolsApi = `${apiBasePath}/admin/tools`;
       </div>
     </section>
 
-    <!-- ---------- 01 工具列表 ---------- -->
-    <section class="sec" id="tools" aria-labelledby="h-tools">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-tools">工具列表</h2>
-        <span class="sec-en" id="secEn">TOOLS / —</span>
-        <div class="sec-r">
-          <span class="sec-note">启用中 <b id="enabledCount">—</b> / <span id="totalCount">—</span></span>
-          <span class="sec-note">启用状态即时生效 · 前台地址是 /tools/&lt;slug&gt;</span>
-        </div>
-      </div>
+    <!-- ---------- 工具列表 ---------- -->
+    <p class="list-state" id="listState">正在读取工具…</p>
 
-      <p class="list-state" id="listState">正在读取工具…</p>
-
-      <div class="tbl-wrap" id="tblWrap" hidden>
+    <div class="tbl-wrap" id="tblWrap" hidden>
         <table class="tbl tools-tbl">
           <caption class="sr-only">后台工具列表</caption>
           <colgroup>
@@ -113,7 +102,6 @@ const toolsApi = `${apiBasePath}/admin/tools`;
         <div class="empty-c"><p class="empty-d" id="emptyText">还没有工具。</p></div>
         <div class="empty-actions"><button class="btn" id="emptyBtn" type="button">新增工具</button></div>
       </div>
-    </section>
 
   </div>
 
@@ -204,7 +192,7 @@ const toolsApi = `${apiBasePath}/admin/tools`;
     <div class="dlg-box">
       <span class="dlg-tab">DELETE / 删除</span>
       <div class="del-head">
-        <span class="sec-num">!</span>
+        <span class="num-badge">!</span>
         <h2 class="del-title" id="delTitle">删除这个工具？</h2>
       </div>
       <p class="del-text">删除后前台 /tools 会立刻少一个入口，操作不可撤销。</p>

@@ -51,99 +51,88 @@ const statsApi = `${apiBasePath}/stats`;
       <button class="notice-btn" id="authToken" type="button" data-token-open hidden>管理令牌</button>
     </div>
 
-    <!-- ---------- 01 藏品 ---------- -->
-    <section class="sec" aria-labelledby="h-items">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-items">藏品</h2>
-        <span class="sec-en">ITEMS / GRID</span>
-        <div class="sec-r">
-          <a class="arrow-link" href="/gallery">前台展柜 <span class="ar" aria-hidden="true">→</span></a>
+    <!-- ---------- 藏品 ---------- -->
+    <div class="filterbar" aria-label="筛选藏品">
+      <div class="fb-chips" id="catChips" role="group" aria-label="按分类筛选藏品">
+        <button class="chip is-on" type="button" data-cat="全部" aria-pressed="true">全部</button>
+      </div>
+
+      <label class="fb-sort">排序
+        <select id="galSortSelect" aria-label="藏品排序">
+          <option value="slot">按柜位</option>
+          <option value="new">最近入藏</option>
+          <option value="name">按名称</option>
+        </select>
+      </label>
+
+      <span class="fb-count" id="galCount" aria-live="polite">显示 — 件 · 筛选只作用于本页</span>
+      <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    </div>
+
+    <div class="gal-body">
+      <div class="gal-main">
+        <div class="gal-grid" id="galGrid" aria-busy="true"></div>
+
+        <div class="gal-loading" id="galLoading" hidden>
+          <span class="sticker sticker--paper">LOADING</span>
+          <p>正在读取展柜…</p>
+        </div>
+
+        <div class="empty" id="galState" hidden>
+          <span class="empty-k" id="galStateK">EMPTY</span>
+          <div class="empty-c">
+            <b class="empty-t" id="galStateTitle">展柜还空着</b>
+            <p class="empty-d" id="galStateText">还没有藏品，点右上角「新增藏品」放第一件进来。</p>
+          </div>
+          <div class="empty-actions"><button class="g-act" id="galRetry" type="button">重新读取</button></div>
+        </div>
+
+        <div class="pager">
+          <span class="pager-info">第 <b id="pgNow">—</b> / <span id="pgPages">—</span> 页 · 每页 <span id="pgSize">20</span> 件 · 共 <b id="pgTotal">—</b> 件</span>
+          <div class="pager-btns">
+            <button class="pager-btn" id="pgPrev" type="button" disabled>← 上一页</button>
+            <button class="pager-btn" id="pgNext" type="button" disabled>下一页 →</button>
+          </div>
         </div>
       </div>
 
-      <div class="filterbar" aria-label="筛选藏品">
-        <div class="fb-chips" id="catChips" role="group" aria-label="按分类筛选藏品">
-          <button class="chip is-on" type="button" data-cat="全部" aria-pressed="true">全部</button>
+      <!-- 右侧：排序位 + 选中详情 -->
+      <aside class="gal-side" aria-label="排序位与选中详情">
+        <div class="slot-panel">
+          <div class="sp-h"><span>SLOT MAP / 前九位</span><span class="sp-tag" id="spTag">—</span></div>
+          <h2 class="sp-title">排序位<span class="dot">。</span></h2>
+          <p class="sp-sub">数字即 position，1 最靠前 · 只看本页</p>
+
+          <div class="slot-map" id="slotMap" aria-label="排序位示意"></div>
+
+          <div class="sp-legend">
+            <span>已占用 <b id="occCount">0</b> / 9</span>
+            <span>空位 <b id="emptyCount">9</b></span>
+          </div>
+
+          <p class="sp-note">点格子可定位藏品。position 在编辑表单里改；新增的藏品默认不上架，补好展签再开灯。</p>
         </div>
 
-        <label class="fb-sort">排序
-          <select id="galSortSelect" aria-label="藏品排序">
-            <option value="slot">按柜位</option>
-            <option value="new">最近入藏</option>
-            <option value="name">按名称</option>
-          </select>
-        </label>
-
-        <span class="fb-count" id="galCount" aria-live="polite">显示 — 件 · 筛选只作用于本页</span>
-        <button class="fb-clear" id="clearFilters" type="button">清除</button>
-      </div>
-
-      <div class="gal-body">
-        <div class="gal-main">
-          <div class="gal-grid" id="galGrid" aria-busy="true"></div>
-
-          <div class="gal-loading" id="galLoading" hidden>
-            <span class="sticker sticker--paper">LOADING</span>
-            <p>正在读取展柜…</p>
-          </div>
-
-          <div class="empty" id="galState" hidden>
-            <span class="empty-k" id="galStateK">EMPTY</span>
-            <div class="empty-c">
-              <b class="empty-t" id="galStateTitle">展柜还空着</b>
-              <p class="empty-d" id="galStateText">还没有藏品，点右上角「新增藏品」放第一件进来。</p>
-            </div>
-            <div class="empty-actions"><button class="g-act" id="galRetry" type="button">重新读取</button></div>
-          </div>
-
-          <div class="pager">
-            <span class="pager-info">第 <b id="pgNow">—</b> / <span id="pgPages">—</span> 页 · 每页 <span id="pgSize">20</span> 件 · 共 <b id="pgTotal">—</b> 件</span>
-            <div class="pager-btns">
-              <button class="pager-btn" id="pgPrev" type="button" disabled>← 上一页</button>
-              <button class="pager-btn" id="pgNext" type="button" disabled>下一页 →</button>
-            </div>
+        <div class="sel-panel">
+          <span class="sel-k">选中 / SELECTED</span>
+          <div class="sel-row"><span class="sel-no" id="selNo">—</span><span class="g-st" id="selSt"><i aria-hidden="true"></i>—</span></div>
+          <h2 class="sel-name" id="selName">未选择</h2>
+          <p class="sel-meta" id="selMeta">从左侧点一件藏品。</p>
+          <div class="sel-acts">
+            <button class="g-act" id="btnEditSel" type="button" disabled>编辑</button>
+            <button class="g-act" id="btnToggleSel" type="button" disabled>上架</button>
+            <button class="g-act" id="btnDelSel" type="button" disabled>删除</button>
           </div>
         </div>
 
-        <!-- 右侧：排序位 + 选中详情 -->
-        <aside class="gal-side" aria-label="排序位与选中详情">
-          <div class="slot-panel">
-            <div class="sp-h"><span>SLOT MAP / 前九位</span><span class="sp-tag" id="spTag">—</span></div>
-            <h2 class="sp-title">排序位<span class="dot">。</span></h2>
-            <p class="sp-sub">数字即 position，1 最靠前 · 只看本页</p>
+        <p class="gal-note"><b>注意</b> 删除会立即从前台展柜撤下，操作前会二次确认。媒体 key 为空时前台显示「未拍摄」占位。</p>
 
-            <div class="slot-map" id="slotMap" aria-label="排序位示意"></div>
-
-            <div class="sp-legend">
-              <span>已占用 <b id="occCount">0</b> / 9</span>
-              <span>空位 <b id="emptyCount">9</b></span>
-            </div>
-
-            <p class="sp-note">点格子可定位藏品。position 在编辑表单里改；新增的藏品默认不上架，补好展签再开灯。</p>
-          </div>
-
-          <div class="sel-panel">
-            <span class="sel-k">选中 / SELECTED</span>
-            <div class="sel-row"><span class="sel-no" id="selNo">—</span><span class="g-st" id="selSt"><i aria-hidden="true"></i>—</span></div>
-            <h2 class="sel-name" id="selName">未选择</h2>
-            <p class="sel-meta" id="selMeta">从左侧点一件藏品。</p>
-            <div class="sel-acts">
-              <button class="g-act" id="btnEditSel" type="button" disabled>编辑</button>
-              <button class="g-act" id="btnToggleSel" type="button" disabled>上架</button>
-              <button class="g-act" id="btnDelSel" type="button" disabled>删除</button>
-            </div>
-          </div>
-
-          <p class="gal-note"><b>注意</b> 删除会立即从前台展柜撤下，操作前会二次确认。媒体 key 为空时前台显示「未拍摄」占位。</p>
-
-          <div class="recent-panel">
-            <div class="sp-h"><span>RECENT / 最近入藏</span><span class="sp-tag">TOP 3</span></div>
-            <div class="recent-list" id="recentList"></div>
-          </div>
-        </aside>
-      </div>
-    </section>
+        <div class="recent-panel">
+          <div class="sp-h"><span>RECENT / 最近入藏</span><span class="sp-tag">TOP 3</span></div>
+          <div class="recent-list" id="recentList"></div>
+        </div>
+      </aside>
+    </div>
 
   </div>
 
@@ -156,29 +145,29 @@ const statsApi = `${apiBasePath}/stats`;
     <form id="editForm" novalidate>
       <div class="gf-grid">
         <label class="gfld"><span>编号 / NO <b>*</b></span>
-          <input id="fNo" name="no" type="text" maxlength="20" autocomplete="off" spellcheck="false" placeholder="C-001">
+          <input id="fNo" name="no" type="text" maxlength="20" autocomplete="off" spellcheck="false">
         </label>
         <label class="gfld"><span>名称 / NAME <b>*</b></span>
-          <input id="fName" name="name" type="text" maxlength="120" autocomplete="off" placeholder="鬼之根付">
+          <input id="fName" name="name" type="text" maxlength="120" autocomplete="off">
         </label>
         <label class="gfld"><span>分类 / CATEGORY <b>*</b></span>
           <span class="combo">
-            <input id="fCat" name="category" type="text" maxlength="40" autocomplete="off" placeholder="手办" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="catList">
+            <input id="fCat" name="category" type="text" maxlength="40" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="catList">
             <button class="combo-toggle" id="fCatToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
             <span class="combo-list" id="catList" role="listbox" aria-label="已有分类" hidden></span>
           </span>
         </label>
         <label class="gfld"><span>年代 / ERA</span>
-          <input id="fEra" name="era" type="text" maxlength="40" autocomplete="off" placeholder="明治 / 19 世纪">
+          <input id="fEra" name="era" type="text" maxlength="40" autocomplete="off">
         </label>
         <label class="gfld"><span>排序 / POSITION</span>
           <input id="fPos" name="position" type="number" min="0" max="9999" step="1" value="0">
         </label>
         <label class="gfld"><span>媒体 key / MEDIA</span>
-          <input id="fMedia" name="mediaKey" type="text" maxlength="300" autocomplete="off" spellcheck="false" placeholder="gallery/k7-demon.jpg">
+          <input id="fMedia" name="mediaKey" type="text" maxlength="300" autocomplete="off" spellcheck="false">
         </label>
         <label class="gfld gfld--wide"><span>展签 / NOTE</span>
-          <textarea id="fNote" name="note" maxlength="400" rows="3" placeholder="一句为什么留着它。"></textarea>
+          <textarea id="fNote" name="note" maxlength="400" rows="3"></textarea>
         </label>
         <label class="gf-check gfld--wide"><input id="fDisplayed" type="checkbox"><span>直接上架（displayed）：勾选后立刻出现在前台展柜</span></label>
       </div>

@@ -242,7 +242,7 @@ const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，P
           <span class="sticker sticker--paper">本日进行</span>
         </div>
         <h1>总览<span class="dot">。</span></h1>
-        <p class="pdate">{headerDate} <span class="sep">·</span> {headerWeekday} <span class="sep">·</span> 最后更新 {lastUpdatedText}</p>
+        <p class="pdate">{headerDate} <span class="sep">·</span> {headerWeekday} <span class="sep">·</span> 最后更新 {lastUpdatedText} <span class="sep">·</span> 近 {dayCount} 天 PV <b>{num(totals.pv)}</b> <span class="sep">·</span> UV <b>{num(totals.uv)}</b></p>
       </div>
 
       <div class="ph-r">
@@ -298,20 +298,8 @@ const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，P
       </div>
     </section>
 
-    <!-- ---------- 01 访问 ---------- -->
-    <section class="sec" id="traffic" aria-labelledby="h-traffic">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-traffic">访问</h2>
-        <span class="sec-en">TRAFFIC / 30D</span>
-        <div class="sec-r">
-          <span class="legend"><i class="pv" aria-hidden="true"></i><span class="l-k">PV</span><b class="l-v">{num(totals.pv)}</b></span>
-          <span class="legend"><i class="uv" aria-hidden="true"></i><span class="l-k">UV</span><b class="l-v">{num(totals.uv)}</b></span>
-          <span class="sec-note">近 {dayCount} 天 · 只统计前台页面打开</span>
-        </div>
-      </div>
-
-      <div class="chart-panel" id="chart">
+    <!-- ---------- 访问 ---------- -->
+    <div class="chart-panel" id="chart">
         <svg class="chart-svg" viewBox="0 0 1120 236" role="img" aria-labelledby="chartTitle chartDesc">
           <title id="chartTitle">近 {dayCount} 天访问曲线</title>
           <desc id="chartDesc">{chartDesc}</desc>
@@ -384,12 +372,11 @@ const chartDesc = `${monthDay(days[0].date)} 至 ${monthDay(lastPoint.date)}，P
         </div>
       </div>
 
-      <div class="chart-mark">
-        <span>{compactMd(days[0].date)} – {compactMd(lastPoint.date)} / {dayCount} 天</span>
-        <span>{peakText}</span>
-        <span>今日 {num(todayDay.pv)} PV · {num(todayDay.uv)} UV</span>
-      </div>
-    </section>
+    <div class="chart-mark">
+      <span>{compactMd(days[0].date)} – {compactMd(lastPoint.date)} / {dayCount} 天</span>
+      <span>{peakText}</span>
+      <span>今日 {num(todayDay.pv)} PV · {num(todayDay.uv)} UV</span>
+    </div>
 
   </div>
 

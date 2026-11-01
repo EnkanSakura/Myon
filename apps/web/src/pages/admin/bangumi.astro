@@ -32,7 +32,7 @@ const syncApi = `${apiBasePath}/admin/bangumi/sync`;
           <span class="sticker sticker--paper">BANGUMI SYNC</span>
         </div>
         <h1>追番<span class="dot">。</span></h1>
-        <p class="pdate">共 <span id="pTotal">—</span> 条记录 <span class="sep">·</span> 只读 · 由 Bangumi 同步维护</p>
+        <p class="pdate">共 <span id="pTotal">—</span> 条记录 <span class="sep">·</span> 只读 · 由 Bangumi 同步维护 <span class="sep">·</span> 最近更新 <b id="latestUpdated">—</b></p>
       </div>
 
       <div class="ph-r">
@@ -64,39 +64,26 @@ const syncApi = `${apiBasePath}/admin/bangumi/sync`;
       </div>
     </section>
 
-    <!-- ---------- 01 追番记录 ---------- -->
-    <section class="sec" id="records" aria-labelledby="h-records">
-      <div class="sec-h">
-        <span class="sec-num">01</span>
-        <h2 id="h-records">追番记录</h2>
-        <span class="sec-en" id="secEn">ALL / —</span>
-        <div class="sec-r">
-          <span class="sec-note" id="pageState" aria-live="polite">正在读取…</span>
-          <span class="sec-note">最近更新 <b id="latestUpdated">—</b></span>
-        </div>
+    <!-- ---------- 追番记录 ---------- -->
+    <div class="filterbar" aria-label="筛选追番记录">
+      <div class="fb-chips" role="group" aria-label="按类型筛选">
+        <button class="chip is-on" type="button" data-type="all" aria-pressed="true">全部</button>
+        <button class="chip" type="button" data-type="anime" aria-pressed="false">动画</button>
+        <button class="chip" type="button" data-type="book" aria-pressed="false">书籍</button>
+        <button class="chip" type="button" data-type="music" aria-pressed="false">音乐</button>
+        <button class="chip" type="button" data-type="game" aria-pressed="false">游戏</button>
+        <button class="chip" type="button" data-type="real" aria-pressed="false">三次元</button>
       </div>
 
-      <div class="filterbar" aria-label="筛选追番记录">
-        <div class="fb-chips" role="group" aria-label="按类型筛选">
-          <button class="chip is-on" type="button" data-type="all" aria-pressed="true">全部</button>
-          <button class="chip" type="button" data-type="anime" aria-pressed="false">动画</button>
-          <button class="chip" type="button" data-type="book" aria-pressed="false">书籍</button>
-          <button class="chip" type="button" data-type="music" aria-pressed="false">音乐</button>
-          <button class="chip" type="button" data-type="game" aria-pressed="false">游戏</button>
-          <button class="chip" type="button" data-type="real" aria-pressed="false">三次元</button>
-        </div>
+      <span class="fb-count" id="fbCount" aria-live="polite">显示 — 条 · 只读列表</span>
+      <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    </div>
 
-        <span class="fb-count" id="fbCount" aria-live="polite">显示 — 条 · 只读列表</span>
-        <button class="fb-clear" id="clearFilters" type="button">清除</button>
+    <div class="watch-list" id="watchList" aria-live="polite" aria-busy="true">
+      <div class="empty">
+        <div class="empty-c"><p class="empty-d">正在读取追番记录…</p></div>
       </div>
-
-
-      <div class="watch-list" id="watchList" aria-live="polite" aria-busy="true">
-        <div class="empty">
-          <div class="empty-c"><p class="empty-d">正在读取追番记录…</p></div>
-        </div>
-      </div>
-    </section>
+    </div>
 
   </div>
 

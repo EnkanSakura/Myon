@@ -150,7 +150,6 @@
     if (state.loading) return;
     state.loading = true;
     if (listEl) listEl.setAttribute("aria-busy", "true");
-    setText("pageState", "正在读取…");
 
     var all = [];
     function next(offset) {
@@ -177,8 +176,6 @@
           return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
         });
         renderAll();
-        showBanner("info", "只读列表", "条目由 Bangumi 同步维护；修改评分、评论或进度请到 Bangumi，之后点「同步 Bangumi」。", false);
-        setText("pageState", "已加载 · " + new Date().toTimeString().slice(0, 5));
       })
       .catch(function (error) {
         console.error("[admin-bangumi] 读取失败", error);
@@ -284,7 +281,6 @@
     } else {
       filtered.forEach(function (item) { listEl.appendChild(renderRow(item)); });
     }
-    setText("secEn", (state.typeFilter === "all" ? "ALL" : state.typeFilter.toUpperCase()) + " / " + filtered.length);
     setText("fbCount", "显示 " + filtered.length + " 条 · 只读列表");
   }
 

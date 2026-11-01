@@ -172,22 +172,19 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 .m-f .up{color:var(--ppk)}
 .m-f .msep{margin:0 6px;color:var(--pp-55)}
 
-/* ---------- 区块头 ---------- */
-.sec{margin-top:30px;scroll-margin-top:70px}
-.sec-h{display:flex;align-items:center;gap:12px;border-top:2px solid var(--pline);padding-top:12px}
-.sec-num{display:inline-block;background:var(--ppk);color:var(--ink);border:2px solid var(--ink);box-shadow:3px 3px 0 color-mix(in srgb, var(--pp) 28%, transparent);font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.06em;line-height:1.5;padding:1px 7px 2px}
-.sec-h h2{font-size:20px;font-weight:900;letter-spacing:-.01em;line-height:1.25;color:var(--pp)}
-.sec-en{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--pp-55);transform:translateY(1px)}
-.sec-r{margin-left:auto;display:flex;align-items:center;gap:18px;min-width:0;flex-wrap:wrap;justify-content:flex-end}
-.sec-note{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--pp-55);white-space:nowrap}
+/* ---------- 区块标题（轻量） ----------
+   只在同一页面有多个并列区块时使用，用来分隔列表；单区块页面不加标题与编号。
+   不包裹内容，只保留一条细分隔线、小一号标题与编号角标；页面内容仍是 .page 的直接子元素。 */
+.block-h{display:flex;align-items:center;gap:10px;margin-top:28px;padding-bottom:8px;border-bottom:2px solid var(--pline-2)}
+.block-h .num-badge{box-shadow:2px 2px 0 color-mix(in srgb, var(--pp) 22%, transparent)}
+.block-t{font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.3;color:var(--pp)}
+.block-en{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--pp-55);transform:translateY(1px)}
+
+/* ---------- 编号角标 ----------
+   面板头 / 对话框头 / 区块标题共用；旧 .sec-num 已改名，避免与已删除的 .sec 体系混用。 */
+.num-badge{display:inline-block;background:var(--ppk);color:var(--ink);border:2px solid var(--ink);box-shadow:3px 3px 0 color-mix(in srgb, var(--pp) 28%, transparent);font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.06em;line-height:1.5;padding:1px 7px 2px}
 
 /* ---------- 访问曲线 ---------- */
-.legend{display:inline-flex;align-items:center;gap:7px}
-.legend i{width:16px;height:3px;display:inline-block;flex:none}
-.legend i.pv{background:var(--ppk)}
-.legend i.uv{background:repeating-linear-gradient(90deg,color-mix(in srgb, var(--pp) 60%, transparent) 0 3px,transparent 3px 6px)}
-.legend .l-k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--pp-55)}
-.legend .l-v{font-family:var(--disp);font-weight:900;font-size:16px;letter-spacing:-.01em;color:var(--pp)}
 .chart-panel{position:relative;margin-top:12px;background:var(--panel);border:2px solid var(--pline);box-shadow:6px 6px 0 var(--ppk-deep);padding:8px 12px 2px}
 .chart-svg{display:block;width:100%;height:auto;overflow:visible}
 .gl{stroke:color-mix(in srgb, var(--pp) 14%, transparent);stroke-width:1}
@@ -491,7 +488,7 @@ body.admin .arrow-link:hover{color:var(--ppk);border-color:var(--ppk)}
 .md-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-height:0}
 .md-panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);border:2px solid var(--pline);box-shadow:5px 5px 0 var(--ppk-deep)}
 .md-panel-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:2px solid var(--pline-2);flex:none}
-.md-panel-head .sec-num{box-shadow:none}
+.md-panel-head .num-badge{box-shadow:none}
 .md-panel-head h2{font-size:16px;font-weight:900;letter-spacing:.01em;line-height:1.3;color:var(--pp)}
 .md-panel-en{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--pp-55);transform:translateY(1px)}
 .md-panel-file{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--pp-55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -642,9 +639,7 @@ body.md-fs-open{overflow:hidden}
   .metrics{margin-top:20px}
   .metric{padding:12px 16px 13px}
   .m-v{font-size:38px}
-  .sec{margin-top:28px}
-  .sec-h{flex-wrap:wrap;gap:8px 10px}
-  .sec-r{width:100%;margin-left:0;justify-content:flex-start;gap:12px;flex-wrap:wrap}
+  .block-h{margin-top:24px;flex-wrap:wrap;gap:6px 10px}
   .chart-panel{padding:8px 8px 0}
   .ylab,.xlab{font-size:15px}
   .co-k{font-size:13px}

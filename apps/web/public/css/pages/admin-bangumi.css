@@ -5,7 +5,6 @@
 
 /* 页头 */
 .phead h1{font-size:40px}
-.sec-r .sec-note b{font-weight:500;color:var(--pp-62)}
 
 /* 三个指标（看过 / 在追 / 想看） */
 .metrics{grid-template-columns:repeat(3,1fr)}

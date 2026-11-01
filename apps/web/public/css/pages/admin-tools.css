@@ -106,7 +106,7 @@
 /* ---------- 删除确认 ---------- */
 .del-dlg{width:520px}
 .del-head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:2px solid var(--ink);margin-bottom:12px}
-.del-head .sec-num{box-shadow:none}
+.del-head .num-badge{box-shadow:none}
 .del-title{font-size:18px;font-weight:900;letter-spacing:-.01em;color:var(--ink)}
 .del-text{font-size:15px;line-height:1.8;color:var(--ink-80)}
 .del-target{margin-top:8px;padding:7px 9px;background:var(--paper-2);border:2px solid var(--ink);

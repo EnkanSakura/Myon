@@ -116,9 +116,6 @@
   var pTotal = $("pTotal");
   var pEnabled = $("pEnabled");
   var pUpdated = $("pUpdated");
-  var enabledCount = $("enabledCount");
-  var totalCount = $("totalCount");
-  var secEn = $("secEn");
 
   var banner = $("tbanner");
   var bannerK = $("bannerK");
@@ -289,9 +286,6 @@
     pEnabled.textContent = "—";
     pUpdated.textContent = "—";
     pUpdated.removeAttribute("title");
-    enabledCount.textContent = "—";
-    totalCount.textContent = "—";
-    secEn.textContent = "TOOLS / —";
   }
 
   function renderSummary() {
@@ -322,9 +316,6 @@
     pUpdated.textContent = latest ? fmtRelative(latest) : "—";
     if (latest) pUpdated.title = fmtFull(new Date(latest).toISOString());
     else pUpdated.removeAttribute("title");
-    enabledCount.textContent = String(enabled);
-    totalCount.textContent = String(total);
-    secEn.textContent = "TOOLS / " + pad2(total);
   }
 
   function setEmpty(text, actionLabel, fn) {
