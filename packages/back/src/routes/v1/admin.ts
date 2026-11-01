@@ -33,6 +33,16 @@ import type { AppBindings } from '../../types';
 /** 后台接口：挂在 /api/v1/admin 下，整组需要管理员身份。 */
 const admin = new Hono<{ Bindings: AppBindings }>();
 
+/**
+ * 后台响应一律不缓存。后台接口靠 Access cookie 鉴权，但边缘缓存/CDN 按 URL
+ * 命中、不区分请求头：一条 200 被缓存后会原样发给未登录访客，401 也会被缓存
+ * 住挡掉真正的管理员。后台读写都是实时数据，没有任何缓存价值。
+ */
+admin.use('*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'no-store');
+});
+
 admin.use('*', requireAdmin);
 
 type Ctx = Context<{ Bindings: AppBindings }>;

@@ -95,8 +95,17 @@ export async function verifyAccessJwt(
   const exp = payload.exp;
   if (typeof exp === 'number' && exp * 1000 < Date.now()) return false;
 
+  // 只接受 Access 签发给应用的令牌。登录跳转 URL 里的 `meta` 令牌同样由 Access
+  // 签名、`aud` 也对得上，但它是给登录页用的（type=meta，没有 iss/sub），任何
+  // 未登录的人请求一次 /admin 就能从 Location 头里拿到，不能当作登录态。
+  if (payload.type !== 'app') return false;
+
   const iss = payload.iss;
-  if (typeof iss === 'string' && !iss.includes(options.domain)) return false;
+  if (typeof iss !== 'string' || !iss.includes(options.domain)) return false;
+
+  // 应用令牌一定带身份（交互登录是 sub/email，服务令牌是 common_name）。
+  const identity = payload.sub ?? payload.email ?? payload.common_name;
+  if (typeof identity !== 'string' || identity.length === 0) return false;
 
   const keys = await loadJwks(options.domain);
   const kid = typeof header.kid === 'string' ? header.kid : undefined;

@@ -82,6 +82,8 @@
       cache: "no-store"
     })
       .then(function (response) {
+        // 读完响应体，避免 no-store 响应留下悬挂的连接/请求。
+        response.text().catch(function () {});
         if (response.ok) {
           paint("ok");
           return;

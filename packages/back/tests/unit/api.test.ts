@@ -875,6 +875,8 @@ describe('admin access mode', () => {
   async function createAccessToken(options: {
     teamDomain: string;
     aud: string;
+    /** 覆盖默认 claims：用来造 meta 令牌这类「签名有效但用途不对」的令牌。 */
+    claims?: Record<string, unknown>;
   }) {
     const keyPair = (await crypto.subtle.generateKey(
       {
@@ -900,10 +902,14 @@ describe('admin access mode', () => {
     const encode = (value: unknown) =>
       base64Url(new TextEncoder().encode(JSON.stringify(value)));
     const data = `${encode({ alg: 'RS256', kid, typ: 'JWT' })}.${encode({
+      type: 'app',
       aud: [options.aud],
       iss: `https://${options.teamDomain}`,
+      sub: 'unit-test-user',
+      email: 'admin@example.com',
       iat: now,
       exp: now + 600,
+      ...options.claims,
     })}`;
     const signature = await crypto.subtle.sign(
       'RSASSA-PKCS1-v1_5',
@@ -971,6 +977,71 @@ describe('admin access mode', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('rejects the meta token from the Access login redirect', async () => {
+    const teamDomain = 'meta-token.example.com';
+    const aud = 'meta-token-aud';
+    // 登录跳转里的 meta 令牌：Access 签的、aud 对得上，但没有 type/iss/sub，
+    // 任何未登录的人请求一次 /admin 就能拿到，不能当登录态用。
+    const { token, jwks } = await createAccessToken({
+      teamDomain,
+      aud,
+      claims: {
+        type: 'meta',
+        iss: undefined,
+        sub: undefined,
+        email: undefined,
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(jwks), {
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    try {
+      const env = {
+        ...createEnv('test'),
+        ACCESS_TEAM_DOMAIN: teamDomain,
+        ACCESS_AUD: aud,
+      } as unknown as AppBindings;
+
+      for (const header of [
+        { 'cf-access-jwt-assertion': token },
+        { cookie: `CF_Authorization=${token}` },
+      ] as Array<Record<string, string>>) {
+        const res = await app.request(
+          '/api/v1/admin/settings',
+          { headers: header },
+          env,
+        );
+        expect(res.status).toBe(401);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('marks admin responses as non-cacheable', async () => {
+    const unauthorized = await app.request(
+      '/api/v1/admin/settings',
+      {},
+      accessEnv,
+    );
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('cache-control')).toBe('no-store');
+
+    const authorized = await app.request(
+      '/api/v1/admin/settings',
+      { headers: { 'x-admin-token': 'secret-token' } },
+      adminEnv,
+    );
+    expect(authorized.status).toBe(200);
+    expect(authorized.headers.get('cache-control')).toBe('no-store');
   });
 });
 

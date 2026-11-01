@@ -293,6 +293,11 @@ pnpm exec wrangler kv key put site-settings:v1 --path /tmp/myon-settings-kv.json
    `Cf-Access-Jwt-Assertion` 头；`/api/v1/admin/*` 不在 Access 应用范围内，Worker 改为校验
    浏览器同源请求带回的 `CF_Authorization` cookie（同一个应用、同一个 AUD），`ADMIN_TOKEN`
    不再参与；两个变量必须成对配置，只配一个会回退到 `ADMIN_TOKEN` 模式。
+5. Worker 只认 `type: "app"` 的应用令牌：Access 在登录跳转 URL 里下发的 `meta` 令牌同样是
+   Access 签名、AUD 也对得上，但没有 `iss`/`sub`，任何未登录的人请求一次 `/admin` 就能从
+   `Location` 头里拿到它——必须拒绝，否则等于后台接口对公网开放；后台接口响应统一带
+   `Cache-Control: no-store`，防止 CDN / 边缘按 URL 缓存（不区分请求头）把登录后的 200
+   响应原样发给未登录访客。
 
 **不要把 `/api/v1/admin/*` 单独做成第二个 Access 应用**：同一域名下两个应用各有自己的 AUD，
 却共用一个 `CF_Authorization` cookie；后台页面用 `fetch` 请求 API 时会被 Access 302 到登录域，
