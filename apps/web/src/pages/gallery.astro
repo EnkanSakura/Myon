@@ -8,7 +8,7 @@ import type { AppBindings } from '@myon/back/types';
 import type { GalleryItem, Paginated, SiteStats } from '@myon/shared';
 import SiteLayout from '../layouts/SiteLayout.astro';
 import { formatDate } from '../lib/format';
-import { mediaUrl } from '../lib/media';
+import { contentImageUrl } from '../lib/media';
 
 const binding = env as unknown as AppBindings;
 
@@ -74,14 +74,17 @@ const altOf = (item: GalleryItem) =>
   [item.name, item.category, item.era].filter(Boolean).join('，');
 
 const first = items[0] ?? null;
-const firstUrl = first ? mediaUrl(first.mediaKey) : null;
+// 灯箱初始图与网格图用同一套地址规则：点开时脚本直接沿用卡片 img 的 src。
+const firstUrl = first
+  ? contentImageUrl(first.mediaKey, first.mediaSize)
+  : null;
 
 const cards = items.map((item, index) => {
   const main = index === 0;
   return {
     item,
     main,
-    url: mediaUrl(item.mediaKey),
+    url: contentImageUrl(item.mediaKey, item.mediaSize),
     span: main ? 'ex-main' : spans[(index - 1) % spans.length],
     rot: main ? '-.8deg' : rots[(index - 1) % rots.length],
     ratio: ratios[(index - 1) % ratios.length],

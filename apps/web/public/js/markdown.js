@@ -58,6 +58,17 @@
     }
     return u;
   }
+  /* 内容图片默认长边 720：站内 /media/ 与旧 /assets/ 前缀、且还没有 size 参数时
+     补上 ?size=720&q=80；外链与已带 size 参数的地址原样返回。
+     规则与服务端 packages/back/src/markdown.ts 保持一致，预览与正式页才不变形。 */
+  function withDefaultImageSize(src){
+    var url = String(src == null ? '' : src);
+    if (!url) return url;
+    if (/^(?:https?:)?\/\//i.test(url)) return url;
+    if (!/^\/(?:media|assets)\//.test(url)) return url;
+    if (/[?&]size=/.test(url)) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'size=720&q=80';
+  }
   function linkHtml(href, label){
     return '<a href="' + escAttr(href) + '" rel="noopener noreferrer">' + escText(label) + '</a>';
   }
@@ -255,7 +266,7 @@
         var href = safeHref(src);
         var altText = textOf(alt, tokens, depth);
         var title = titleA != null ? titleA : titleB;
-        var out = '<img' + (href ? ' src="' + escAttr(href) + '"' : '') + ' alt="' + escAttr(altText) + '"';
+        var out = '<img' + (href ? ' src="' + escAttr(withDefaultImageSize(href)) + '"' : '') + ' alt="' + escAttr(altText) + '"';
         if (title) out += ' title="' + escAttr(unescapeMd(title)) + '"';
         return hold(out + ' />');
       });

@@ -14,7 +14,7 @@ import type {
 } from '@myon/shared';
 import SiteLayout from '../layouts/SiteLayout.astro';
 import { formatDateTime } from '../lib/format';
-import { mediaUrl } from '../lib/media';
+import { contentImageUrl } from '../lib/media';
 
 const binding = env as unknown as AppBindings;
 
@@ -122,7 +122,7 @@ function cutNo(value: number): string {
 
     <div class="stream" id="stream">
       {items.map((item, index) => {
-        const photo = mediaUrl(item.mediaKey);
+        const photo = contentImageUrl(item.mediaKey, item.mediaSize);
         return (
           <article
             class:list={[

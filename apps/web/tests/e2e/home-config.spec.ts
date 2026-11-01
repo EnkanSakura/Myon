@@ -1,5 +1,28 @@
 import { expect, test } from '@playwright/test';
 
+/** 首页固定长边图位：站内 /media/ 地址追加转换参数，外链原样（对齐 apps/web/src/lib/media.ts）。 */
+function fixedEdgeSrc(src: string, query: string): string {
+  return src.startsWith('/media/') ? `${src}?${query}` : src;
+}
+
+/** 内容图片地址：老数据没有尺寸记录时按默认 720，orig 不带转换参数。 */
+function contentSrc(item: {
+  mediaKey: string | null;
+  mediaSize?: string | null;
+}): string {
+  const key = item.mediaKey ?? '';
+  const base = /^(?:https?:)?\/\//.test(key)
+    ? key
+    : key.startsWith('/assets/')
+      ? `/media/${key.slice('/assets/'.length)}`
+      : key.startsWith('/')
+        ? key
+        : `/media/${key}`;
+  const size = item.mediaSize ?? '720';
+  if (!base.startsWith('/media/') || size === 'orig') return base;
+  return `${base}?size=${size}&q=80`;
+}
+
 // 首页第一页的文案、七页主标签、数据块与联系方式来自后台设置；
 // 窄屏时先滚内容，滚到底才翻页。
 test.describe('首页封面配置', () => {
@@ -42,9 +65,10 @@ test.describe('首页封面配置', () => {
       'href',
       home.links[0]?.href as string,
     );
+    // 封面与装饰图走固定长边转换地址（站内 /media/ 才追加参数，外链原样）
     await expect(page.locator('.p1 .frame img')).toHaveAttribute(
       'src',
-      home.cover.image,
+      fixedEdgeSrc(home.cover.image, 'size=1600&q=82'),
     );
     await expect(page.locator('.p1 .frame-wrap .sticker')).toContainText(
       home.cover.badge,
@@ -53,16 +77,22 @@ test.describe('首页封面配置', () => {
     // 后台留空时 /api/v1/site 已经回退成封面图，所以直接按接口返回值断言。
     const p2Frames = page.locator('.p2 .side .frame img');
     await expect(p2Frames).toHaveCount(2);
-    await expect(p2Frames.nth(0)).toHaveAttribute('src', home.figures.a);
-    await expect(p2Frames.nth(1)).toHaveAttribute('src', home.figures.b);
+    await expect(p2Frames.nth(0)).toHaveAttribute(
+      'src',
+      fixedEdgeSrc(home.figures.a, 'size=1200&q=80'),
+    );
+    await expect(p2Frames.nth(1)).toHaveAttribute(
+      'src',
+      fixedEdgeSrc(home.figures.b, 'size=1200&q=80'),
+    );
     // 第 3/4 页的图位只展示 D1 真实条目自带的图片，不再复用封面图
     const momentsBody = (await (
       await request.get('/api/v1/moments?limit=4')
-    ).json()) as { items: { mediaKey: string | null }[] };
+    ).json()) as {
+      items: { mediaKey: string | null; mediaSize?: string | null }[];
+    };
     const momentSrcs = new Set(
-      momentsBody.items
-        .filter((item) => item.mediaKey)
-        .map((item) => `/media/${item.mediaKey}`),
+      momentsBody.items.filter((item) => item.mediaKey).map(contentSrc),
     );
     for (const img of await page.locator('.p3 .mini-panel .frame img').all()) {
       expect(momentSrcs.has((await img.getAttribute('src')) ?? '')).toBe(true);
@@ -70,12 +100,10 @@ test.describe('首页封面配置', () => {
     const galleryBody = (await (
       await request.get('/api/v1/gallery?limit=3')
     ).json()) as {
-      items: { mediaKey: string | null }[];
+      items: { mediaKey: string | null; mediaSize?: string | null }[];
     };
     const gallerySrcs = new Set(
-      galleryBody.items
-        .filter((item) => item.mediaKey)
-        .map((item) => `/media/${item.mediaKey}`),
+      galleryBody.items.filter((item) => item.mediaKey).map(contentSrc),
     );
     for (const img of await page.locator('.p4 .collage .frame img').all()) {
       expect(gallerySrcs.has((await img.getAttribute('src')) ?? '')).toBe(true);

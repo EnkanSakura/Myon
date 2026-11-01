@@ -1,5 +1,23 @@
 import { expect, test } from '@playwright/test';
 
+/** 内容图片记录 → 前台 URL：老数据没有尺寸记录时按默认 720，orig 不带转换参数（对齐 lib/media.ts）。 */
+function contentSrc(item: {
+  mediaKey: string | null;
+  mediaSize?: string | null;
+}): string {
+  const key = item.mediaKey ?? '';
+  const base = /^(?:https?:)?\/\//.test(key)
+    ? key
+    : key.startsWith('/assets/')
+      ? `/media/${key.slice('/assets/'.length)}`
+      : key.startsWith('/')
+        ? key
+        : `/media/${key}`;
+  const size = item.mediaSize ?? '720';
+  if (!base.startsWith('/media/') || size === 'orig') return base;
+  return `${base}?size=${size}&q=80`;
+}
+
 // 前台房间、工具页与九个后台页面的路由覆盖。
 const routes = [
   { path: '/', heading: '灯下的一格' },
@@ -49,5 +67,63 @@ test.describe('文章详情', () => {
     const res = await page.goto('/articles/no-such-post');
     expect(res?.status()).toBe(404);
     await expect(page.locator('h1')).toContainText('这篇还没写下');
+  });
+});
+
+test.describe('图片转换地址', () => {
+  // 只断言 URL 参数：本地种子图 480×360，720/1600 都会回退原图，像素不可靠。
+  test('动态配图按记录尺寸取图，老数据默认 720', async ({ page, request }) => {
+    await page.goto('/moments');
+    const srcs = await page
+      .locator('.stream .frame.f-photo img')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute('src') ?? ''),
+      );
+    expect(srcs.length).toBeGreaterThan(0);
+
+    // 后台 CRUD 用例会并行增删动态，按集合核对而不是绑定瞬时条数。
+    const body = (await (
+      await request.get('/api/v1/moments?limit=12')
+    ).json()) as {
+      items: { mediaKey: string | null; mediaSize?: string | null }[];
+    };
+    const expected = new Set(
+      body.items.filter((item) => item.mediaKey).map(contentSrc),
+    );
+    for (const src of srcs) expect(expected.has(src)).toBe(true);
+    // 种子里有没记录尺寸档位的旧动态，必须落到默认 720。
+    expect(srcs.some((src) => src.endsWith('?size=720&q=80'))).toBe(true);
+  });
+
+  test('展柜网格与灯箱使用同一张转换图', async ({ page, request }) => {
+    await page.goto('/gallery');
+    const srcs = await page
+      .locator('.gal-grid .ex .frame img')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute('src') ?? ''),
+      );
+    expect(srcs.length).toBeGreaterThan(0);
+
+    const body = (await (
+      await request.get('/api/v1/gallery?limit=24')
+    ).json()) as {
+      items: { mediaKey: string | null; mediaSize?: string | null }[];
+    };
+    const expected = new Set(
+      body.items.filter((item) => item.mediaKey).map(contentSrc),
+    );
+    for (const src of srcs) expect(expected.has(src)).toBe(true);
+    expect(srcs.some((src) => src.endsWith('?size=720&q=80'))).toBe(true);
+
+    // 灯箱不单独拼地址：点开有图的展品后直接沿用卡片 img 的 src。
+    const card = page
+      .locator('.gal-grid .ex')
+      .filter({ has: page.locator('img') })
+      .first();
+    const cardSrc = await card.locator('img').getAttribute('src');
+    expect(cardSrc).toBeTruthy();
+    await card.locator('.ex-open').click();
+    await expect(page.locator('.lb')).toBeVisible();
+    await expect(page.locator('#lbImg')).toHaveAttribute('src', cardSrc ?? '');
   });
 });

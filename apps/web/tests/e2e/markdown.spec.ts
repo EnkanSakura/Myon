@@ -63,6 +63,10 @@ const EXTENDED_MARKDOWN = [
   '![示例图片三](/media/gallery/k7-demon.jpg)',
   '[/grid]',
   '',
+  '站内图片默认补尺寸，外链原样：',
+  '',
+  '![外链图片](https://example.com/photo.jpg)',
+  '',
   '```',
   '> [!NOTE]',
   '::github{repo="a/b"}',
@@ -84,6 +88,16 @@ async function assertExtendedPreview(root: Locator) {
     '示例图片二',
     '示例图片三',
   ]);
+  // 站内图片（含 [grid] 里的）补默认长边 720，外链保持原样：
+  // 服务端 sanitize 与客户端预览必须一致，否则后台预览和文章页会不一样。
+  const gridImages = root.locator('.image-grid-item img');
+  for (let i = 0; i < 3; i += 1) {
+    await expect(gridImages.nth(i)).toHaveAttribute('src', /\?size=720&q=80$/);
+  }
+  await expect(root.locator('img[alt="外链图片"]')).toHaveAttribute(
+    'src',
+    'https://example.com/photo.jpg',
+  );
 
   const card = root.locator('.repo-card');
   await expect(card).toHaveCount(1);

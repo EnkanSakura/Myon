@@ -24,15 +24,16 @@ import SiteBar from '../components/SiteBar.astro';
 import ThemeTokens from '../components/ThemeTokens.astro';
 import { defaultAboutMarkdown } from '../lib/about-default';
 import { formatDate } from '../lib/format';
-import { mediaUrl } from '../lib/media';
+import { contentImageUrl, mediaImageUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
 // 第 2 页右侧装饰图后台可配置（留空时 API 已回退到封面图）；
 // 第 3/4 页只展示真实条目自带的图片，条目为空时不渲染任何图片，改为空态提示。
-const homeCoverImage = mediaUrl(home.cover.image);
-const homeFigureA = mediaUrl(home.figures.a);
-const homeFigureB = mediaUrl(home.figures.b);
+// 封面与装饰图按图位固定长边取转换图，内容图按记录里保存的尺寸档位取。
+const homeCoverImage = mediaImageUrl(home.cover.image, 1600, 82);
+const homeFigureA = mediaImageUrl(home.figures.a, 1200, 80);
+const homeFigureB = mediaImageUrl(home.figures.b, 1200, 80);
 const end = site.end;
 const leadLines = home.lead.split(String.fromCharCode(10));
 const afterwordLines = end.afterword.body.split(String.fromCharCode(10));
@@ -107,7 +108,10 @@ const momentsTotal = momentsData?.total ?? siteStats?.moments.total ?? 0;
 const galleryCards = (galleryData?.items ?? [])
   .filter((item) => item.mediaKey)
   .slice(0, 3)
-  .map((item) => ({ ...item, image: mediaUrl(item.mediaKey) ?? '' }));
+  .map((item) => ({
+    ...item,
+    image: contentImageUrl(item.mediaKey, item.mediaSize) ?? '',
+  }));
 const galleryTotal = siteStats?.gallery.displayed ?? galleryData?.total ?? 0;
 const galleryCategories = siteStats?.gallery.categories ?? [];
 const galleryCategoryRows = galleryCategories.slice(0, 4);
@@ -525,7 +529,7 @@ function presetValue(preset: HomeStatPreset): string {
               <p>{brief(moment.body)}</p>
               {moment.mediaKey && (
                 <div class="frame">
-                  <img src={mediaUrl(moment.mediaKey) ?? ''} alt={`动态配图 · ${moment.category}`} loading="lazy" />
+                  <img src={contentImageUrl(moment.mediaKey, moment.mediaSize) ?? ''} alt={`动态配图 · ${moment.category}`} loading="lazy" />
                   <div class="cap"><span>{moment.category}</span><span>P.03</span></div>
                 </div>
               )}

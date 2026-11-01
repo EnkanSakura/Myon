@@ -39,6 +39,40 @@ test('第 2 页最近文章来自 D1', async ({ page }) => {
   await expect(page.locator('.p2 .home-empty')).toHaveCount(0);
 });
 
+test('封面与第 2 页装饰图走固定长边转换地址', async ({ page, request }) => {
+  const res = await request.get('/api/v1/site');
+  expect(res.status()).toBe(200);
+  const { settings } = (await res.json()) as {
+    settings: {
+      home: { cover: { image: string }; figures: { a: string; b: string } };
+    };
+  };
+  const home = settings.home;
+
+  await page.goto('/');
+  // 站内 /media/ 地址才追加转换参数；后台配了外链时原样输出、跳过参数断言。
+  const coverSrc = await page
+    .locator('.p1 .frame img')
+    .first()
+    .getAttribute('src');
+  if (home.cover.image.startsWith('/media/'))
+    expect(coverSrc ?? '').toMatch(/[?&]size=1600&q=82$/);
+  else expect(coverSrc).toBe(home.cover.image);
+
+  // 第 2 页右侧两张装饰图（留空时 /api/v1/site 已回退成封面图）
+  const figureSrcs = await page
+    .locator('.p2 .side .frame img')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('src') ?? ''),
+    );
+  expect(figureSrcs).toHaveLength(2);
+  for (const [index, figure] of [home.figures.a, home.figures.b].entries()) {
+    if (figure.startsWith('/media/'))
+      expect(figureSrcs[index] ?? '').toMatch(/[?&]size=1200&q=80$/);
+    else expect(figureSrcs[index]).toBe(figure);
+  }
+});
+
 test('第 3–6 页展示 D1 真实数据，空态不再引用封面图', async ({
   page,
   request,
