@@ -220,8 +220,10 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
                 <div class="fld fld--wide">
                   <label for="homeCoverImage">图片路径 / PATH</label>
                   <div class="path-row">
+                    <button class="path-pick" type="button" data-media-pick="homeCoverImage" aria-label="从媒体库选择封面图" title="从媒体库选择封面图">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h9A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-11Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
                     <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
-                    <button class="path-pick" type="button" data-media-pick="homeCoverImage" data-setting>媒体库</button>
                   </div>
                   <p class="fld-err" id="homeCoverImageErr" hidden></p>
                 </div>
@@ -234,7 +236,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
                   <input id="homeCoverNote" name="home_cover_note" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
                 </div>
               </div>
-              <p class="hint">首页封面使用这张图；第 2 页装饰图留空时也沿用这张图，可以单独配置。点「媒体库」可以从已上传的图片里选，选完自动填 <code>/media/&lt;key&gt;</code>。</p>
+              <p class="hint">首页封面使用这张图；第 2 页装饰图留空时也沿用这张图，可以单独配置。点文件夹图标可以从已上传的图片里选，选完自动填 <code>/media/&lt;key&gt;</code>。</p>
             </div>
 
             <div class="hf">
@@ -247,21 +249,25 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
                 <div class="fld fld--wide">
                   <label for="homeFigureA">图 A / FIGURE A</label>
                   <div class="path-row">
+                    <button class="path-pick" type="button" data-media-pick="homeFigureA" aria-label="从媒体库选择第 2 页装饰图 A" title="从媒体库选择第 2 页装饰图 A">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h9A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-11Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
                     <input id="homeFigureA" name="home_p2_figure_a" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
-                    <button class="path-pick" type="button" data-media-pick="homeFigureA" data-setting>媒体库</button>
                   </div>
                   <p class="fld-err" id="homeFigureAErr" hidden></p>
                 </div>
                 <div class="fld fld--wide">
                   <label for="homeFigureB">图 B / FIGURE B</label>
                   <div class="path-row">
+                    <button class="path-pick" type="button" data-media-pick="homeFigureB" aria-label="从媒体库选择第 2 页装饰图 B" title="从媒体库选择第 2 页装饰图 B">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h9A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-11Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
                     <input id="homeFigureB" name="home_p2_figure_b" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
-                    <button class="path-pick" type="button" data-media-pick="homeFigureB" data-setting>媒体库</button>
                   </div>
                   <p class="fld-err" id="homeFigureBErr" hidden></p>
                 </div>
               </div>
-              <p class="hint">留空则沿用封面图；先把图片传到媒体库，再按 <code>/media/&lt;key&gt;</code> 填路径，也可以点「媒体库」直接选。</p>
+              <p class="hint">留空则沿用封面图；先把图片传到媒体库，再按 <code>/media/&lt;key&gt;</code> 填路径，也可以点文件夹图标直接选。</p>
             </div>
 
             <p class="hint">数据块的数值由站点统计实时计算，只需要选预设。</p>

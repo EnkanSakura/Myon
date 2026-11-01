@@ -214,7 +214,7 @@ test.describe('后台设置 · 第 2 页装饰图', () => {
 });
 
 test.describe('后台设置 · 图片路径媒体选择器', () => {
-  test('点「媒体库」选图后填入 /media/<key> 并关闭选择器', async ({
+  test('点文件夹图标选图后填入 /media/<key> 并关闭选择器', async ({
     page,
     request,
   }) => {
@@ -222,8 +222,19 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
     await mockMediaList(page);
     await expect(page.locator('#saveBtn')).toBeEnabled();
 
-    // 封面图的「媒体库」按钮复用共享媒体选择器，现有图片里选一张就填回路径
-    await page.locator('[data-media-pick="homeCoverImage"]').click();
+    // 文件夹图标按钮在输入框前面、同一行，复用共享媒体选择器
+    const picker = page.locator('[data-media-pick="homeCoverImage"]');
+    await expect(picker.locator('svg')).toHaveCount(1);
+    await expect(picker).toHaveAttribute('aria-label', /媒体库/);
+    const order = await page
+      .locator('.path-row')
+      .first()
+      .evaluate((row) =>
+        Array.from(row.children).map((child) => child.tagName),
+      );
+    expect(order.slice(0, 2)).toEqual(['BUTTON', 'INPUT']);
+
+    await picker.click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
 
@@ -236,13 +247,25 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
       '',
     );
 
-    // 另外两个图片路径输入框也各有一个媒体库按钮
+    // 另外两个图片路径输入框也各有一个文件夹图标按钮
     await expect(page.locator('[data-media-pick="homeFigureA"]')).toHaveCount(
       1,
     );
     await expect(page.locator('[data-media-pick="homeFigureB"]')).toHaveCount(
       1,
     );
+  });
+
+  test('未填写管理令牌时文件夹按钮仍可点击并提示需要令牌', async ({ page }) => {
+    // 不注入令牌：设置页进入只读态，但选图按钮不能被一起禁用
+    await page.goto('/admin/settings');
+    const picker = page.locator('[data-media-pick="homeCoverImage"]');
+    await expect(picker).toBeEnabled();
+    await expect(page.locator('#saveBtn')).toBeDisabled();
+
+    await picker.click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await expect(page.locator('#mpNotice')).toBeVisible();
   });
 
   test('同源图片 URL 去域名，外站图片 URL 保持原样', async ({
