@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import type { BangumiStatus, BangumiSubjectType } from './bangumi';
+import type { MediaImageSize } from './media';
 
 /** 全站共用的纯类型与校验，不依赖 Cloudflare 运行时。 */
 
 export * from './admin';
 export * from './bangumi';
 export * from './icons';
+export * from './media';
 export * from './settings';
 export * from './tools';
 
@@ -56,6 +58,8 @@ export interface MomentListItem {
   category: string;
   pinned: boolean;
   mediaKey: string | null;
+  /** 配图尺寸档位；老数据为 null，前台按默认 720 显示。 */
+  mediaSize: MediaImageSize | null;
   createdAt: string;
 }
 
@@ -79,6 +83,8 @@ export interface GalleryItem {
   era: string | null;
   note: string | null;
   mediaKey: string | null;
+  /** 藏品图片尺寸档位；老数据为 null，前台按默认 720 显示。 */
+  mediaSize: MediaImageSize | null;
   displayed: boolean;
   position: number;
   createdAt: string;

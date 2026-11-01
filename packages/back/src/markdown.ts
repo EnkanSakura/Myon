@@ -1,8 +1,32 @@
+import { defaultMediaImageSize, mediaImageQuality } from '@myon/shared';
 import katex from 'katex';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 
 marked.setOptions({ gfm: true, breaks: false });
+
+/** 老文章图片没有写尺寸时的默认查询串：长边取内容图默认档位，质量 80。 */
+const DEFAULT_MEDIA_IMAGE_QUERY = `size=${defaultMediaImageSize}&q=${mediaImageQuality}`;
+
+/** 站内图片前缀：现在的 /media/ 与旧版本的 /assets/。 */
+const SITE_IMAGE_SRC_RE = /^\/(?:media|assets)\//;
+
+/**
+ * 给站内图片补默认尺寸参数。老文章的 Markdown 只写 `/media/x.jpg`，
+ * 没有尺寸就按长边 720 交给 /media 路由转换；外链（http/https/协议相对）
+ * 和已经带 size 参数的地址一律不动。
+ */
+function appendDefaultImageSize(src: string): string {
+  if (!SITE_IMAGE_SRC_RE.test(src)) return src;
+  if (/[?&]size=/.test(src)) return src;
+
+  // #hash 要留在查询串后面：/media/x.jpg?foo=1#h → /media/x.jpg?foo=1&size=…&q=…#h
+  const hashIndex = src.indexOf('#');
+  const hash = hashIndex === -1 ? '' : src.slice(hashIndex);
+  const base = hashIndex === -1 ? src : src.slice(0, hashIndex);
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}${DEFAULT_MEDIA_IMAGE_QUERY}${hash}`;
+}
 
 const allowedTags = [
   'h1',
@@ -48,6 +72,15 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedSchemes: ['http', 'https', 'mailto'],
   transformTags: {
     a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }),
+    // 站内图片统一补默认尺寸；其余属性（alt/title/width/height/loading）原样保留。
+    img: (tagName, attribs) => {
+      const src = attribs.src;
+      if (!src) return { tagName, attribs };
+      return {
+        tagName,
+        attribs: { ...attribs, src: appendDefaultImageSize(src) },
+      };
+    },
   },
 };
 

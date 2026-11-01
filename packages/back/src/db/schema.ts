@@ -32,6 +32,10 @@ export const moments = sqliteTable('moments', {
     .default('public'),
   pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
   mediaKey: text('media_key'),
+  /** 配图尺寸档位（长期只写 mediaImageSizes 的值）；为空按默认 720 处理。 */
+  mediaSize: text('media_size', {
+    enum: ['480', '720', '1080', '1440', 'orig'],
+  }),
   createdAt: text('created_at').notNull(),
 });
 
@@ -43,6 +47,10 @@ export const galleryItems = sqliteTable('gallery_items', {
   era: text('era'),
   note: text('note'),
   mediaKey: text('media_key'),
+  /** 藏品图片尺寸档位（长期只写 mediaImageSizes 的值）；为空按默认 720 处理。 */
+  mediaSize: text('media_size', {
+    enum: ['480', '720', '1080', '1440', 'orig'],
+  }),
   displayed: integer('displayed', { mode: 'boolean' }).notNull().default(false),
   position: integer('position').notNull().default(0),
   createdAt: text('created_at').notNull(),

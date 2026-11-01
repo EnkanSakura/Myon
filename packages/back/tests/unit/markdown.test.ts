@@ -46,7 +46,7 @@ describe('renderMarkdown', () => {
       '![图](/media/test.png "标题")\n\n`code`\n\nhttps://example.com',
     );
     expect(html).toContain(
-      '<img src="/media/test.png" alt="图" title="标题" />',
+      '<img src="/media/test.png?size=720&amp;q=80" alt="图" title="标题" />',
     );
     expect(html).toContain('<code>code</code>');
     expect(html).toContain('<a href="https://example.com"');
@@ -144,6 +144,69 @@ describe('renderMarkdown', () => {
     expect(html).not.toContain('alert--note');
     expect(html).not.toContain('class="spoiler"');
     expect(html).not.toContain('class="repo-card"');
+  });
+});
+
+describe('media image default size', () => {
+  it('appends the default size and quality to /media/ images', () => {
+    const html = renderMarkdown('![a](/media/x.jpg)');
+    expect(html).toContain('src="/media/x.jpg?size=720&amp;q=80"');
+  });
+
+  it('appends the default parameters to legacy /assets/ images', () => {
+    const html = renderMarkdown('![a](/assets/old/x.jpg)');
+    expect(html).toContain('src="/assets/old/x.jpg?size=720&amp;q=80"');
+  });
+
+  it('joins with & when the url already carries a query string', () => {
+    const html = renderMarkdown('![a](/media/x.jpg?foo=1)');
+    expect(html).toContain('src="/media/x.jpg?foo=1&amp;size=720&amp;q=80"');
+  });
+
+  it('keeps the hash fragment at the end', () => {
+    const html = renderMarkdown('![a](/media/x.jpg#part)');
+    expect(html).toContain('src="/media/x.jpg?size=720&amp;q=80#part"');
+  });
+
+  it('does not override an explicit size parameter', () => {
+    const html = renderMarkdown(
+      '![a](/media/x.jpg?size=1080)\n\n![b](/media/y.jpg?size=orig&q=90)',
+    );
+    expect(html).toContain('src="/media/x.jpg?size=1080"');
+    expect(html).toContain('src="/media/y.jpg?size=orig&amp;q=90"');
+    expect(html).not.toContain('size=1080&amp;size=720');
+  });
+
+  it('leaves external and protocol-relative images untouched', () => {
+    const html = renderMarkdown(
+      '![a](https://example.com/a.jpg)\n\n![b](//cdn.example.com/b.jpg)',
+    );
+    expect(html).toContain('src="https://example.com/a.jpg"');
+    expect(html).toContain('src="//cdn.example.com/b.jpg"');
+    expect(html).not.toContain('example.com/a.jpg?');
+  });
+
+  it('keeps the other img attributes while rewriting src', () => {
+    const html = renderMarkdown(
+      '<img src="/media/x.jpg" alt="图" width="320" height="200" loading="lazy">',
+    );
+    expect(html).toContain('src="/media/x.jpg?size=720&amp;q=80"');
+    expect(html).toContain('alt="图"');
+    expect(html).toContain('width="320"');
+    expect(html).toContain('height="200"');
+    expect(html).toContain('loading="lazy"');
+  });
+
+  it('applies to alert bodies, spoilers and the image grid as well', () => {
+    expect(renderMarkdown('> [!NOTE]\n> ![a](/media/a.png)')).toContain(
+      'src="/media/a.png?size=720&amp;q=80"',
+    );
+    expect(renderMarkdown('[grid]\n![a](/media/b.png)\n[/grid]')).toContain(
+      'src="/media/b.png?size=720&amp;q=80"',
+    );
+    expect(renderMarkdown(':spoiler[![a](/media/c.png)]')).toContain(
+      'src="/media/c.png?size=720&amp;q=80"',
+    );
   });
 });
 

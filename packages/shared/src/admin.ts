@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { bangumiSubjectTypes } from './bangumi';
+import { mediaImageSizeSchema } from './media';
 
 /**
  * 后台写接口的入参校验与分页类型。前台只读，不依赖这一层。
@@ -49,6 +50,8 @@ const momentFields = {
   visibility: z.enum(['public', 'private']),
   pinned: z.boolean(),
   mediaKey: z.string().max(300).nullable().optional(),
+  /** 配图尺寸：不传时保持旧行为（不写库，前台按默认 720 显示）。 */
+  mediaSize: mediaImageSizeSchema.nullable().optional(),
 };
 
 export const momentInputSchema = z.object({
@@ -71,6 +74,8 @@ const galleryFields = {
   era: z.string().max(40).nullable().optional(),
   note: z.string().max(400).nullable().optional(),
   mediaKey: z.string().max(300).nullable().optional(),
+  /** 藏品图片尺寸：不传时保持旧行为（不写库，前台按默认 720 显示）。 */
+  mediaSize: mediaImageSizeSchema.nullable().optional(),
   displayed: z.boolean(),
   position: z.number().int().min(0).max(9999),
 };

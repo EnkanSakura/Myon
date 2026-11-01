@@ -197,6 +197,7 @@ v1.get('/moments', async (c) => {
       category: moments.category,
       pinned: moments.pinned,
       mediaKey: moments.mediaKey,
+      mediaSize: moments.mediaSize,
       createdAt: moments.createdAt,
     })
     .from(moments)

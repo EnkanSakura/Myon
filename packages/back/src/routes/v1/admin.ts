@@ -283,6 +283,7 @@ admin.post('/moments', async (c) => {
     visibility: input.visibility,
     pinned: input.pinned,
     mediaKey: input.mediaKey ?? null,
+    mediaSize: input.mediaSize ?? null,
     createdAt: new Date().toISOString(),
   };
 
@@ -361,6 +362,7 @@ admin.post('/gallery', async (c) => {
     era: input.era ?? null,
     note: input.note ?? null,
     mediaKey: input.mediaKey ?? null,
+    mediaSize: input.mediaSize ?? null,
     displayed: input.displayed,
     position: input.position,
     createdAt: new Date().toISOString(),

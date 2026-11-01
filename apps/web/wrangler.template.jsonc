@@ -11,6 +11,12 @@
   "triggers": {
     "crons": ["0 */6 * * *"]
   },
+  // 图片转换：/media/<key>?size=… 用 Images binding 生成低分辨率版本。
+  // 账户需要可用的 Cloudflare Images（免费档每月 5,000 次唯一变换）；
+  // 绑定缺失或转换失败时路由回退为原图，不会破图。
+  "images": {
+    "binding": "IMAGES"
+  },
   "observability": {
     "enabled": true
   },

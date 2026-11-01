@@ -48,24 +48,24 @@ INSERT OR REPLACE INTO posts (id, slug, title, excerpt, body_md, status, categor
 这个夏天只认真追完了三部。',
    'draft', '动画', NULL, '2026-10-18T00:00:00.000Z', 7, NULL, '2026-10-18T00:00:00.000Z');
 
-INSERT OR REPLACE INTO moments (id, body, category, visibility, pinned, media_key, created_at) VALUES
-  ('m_186', '凌晨一点，Worker 的冷启动终于稳定在 40ms 以内。值了。', '技术', 'public', 0, NULL, '2026-10-20T23:10:00.000Z'),
-  ('m_185', '神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。', '收藏', 'public', 0, 'gallery/k6-print.jpg', '2026-10-19T22:41:00.000Z'),
-  ('m_184', '把追番页面重写了。现在从 Bangumi 拉数据，每 6 小时同步一次。', '技术', 'public', 0, NULL, '2026-10-19T18:03:00.000Z'),
-  ('m_183', '去看了个小的浮世绘展，回来把首页的粉调亮了一格。', '日常', 'public', 0, 'moments/w3-museum.jpg', '2026-10-18T15:20:00.000Z'),
-  ('m_182', '最近在补《虫师》，第 12 话的雨声比白噪音好用。', '日常', 'public', 0, NULL, '2026-10-17T23:40:00.000Z'),
-  ('m_181', '给展柜的每件东西补了展签，拍照真的好难。', '收藏', 'public', 0, 'gallery/k3-inro.jpg', '2026-10-16T20:15:00.000Z');
+INSERT OR REPLACE INTO moments (id, body, category, visibility, pinned, media_key, media_size, created_at) VALUES
+  ('m_186', '凌晨一点，Worker 的冷启动终于稳定在 40ms 以内。值了。', '技术', 'public', 0, NULL, NULL, '2026-10-20T23:10:00.000Z'),
+  ('m_185', '神保町买到一本 1987 年的《アイデア》。纸已经黄了，但里面的版式一点不过时。', '收藏', 'public', 0, 'gallery/k6-print.jpg', '1080', '2026-10-19T22:41:00.000Z'),
+  ('m_184', '把追番页面重写了。现在从 Bangumi 拉数据，每 6 小时同步一次。', '技术', 'public', 0, NULL, NULL, '2026-10-19T18:03:00.000Z'),
+  ('m_183', '去看了个小的浮世绘展，回来把首页的粉调亮了一格。', '日常', 'public', 0, 'moments/w3-museum.jpg', NULL, '2026-10-18T15:20:00.000Z'),
+  ('m_182', '最近在补《虫师》，第 12 话的雨声比白噪音好用。', '日常', 'public', 0, NULL, NULL, '2026-10-17T23:40:00.000Z'),
+  ('m_181', '给展柜的每件东西补了展签，拍照真的好难。', '收藏', 'public', 0, 'gallery/k3-inro.jpg', NULL, '2026-10-16T20:15:00.000Z');
 
-INSERT OR REPLACE INTO gallery_items (id, no, name, category, era, note, media_key, displayed, position, created_at) VALUES
-  ('g_005', 'G-005', '鬼之根付', '手办', '明治', '表情用力得过分，每天看一眼，提神。', 'gallery/k7-demon.jpg', 1, 1, '2025-02-21T00:00:00.000Z'),
-  ('a_001', 'A-001', '印笼 · 雀与藤', '小物', '19 世纪', '第一次在东京看到印笼，才知道小东西也值得单独一盏灯。', 'gallery/k3-inro.jpg', 1, 2, '2026-10-12T00:00:00.000Z'),
-  ('b_014', 'B-014', '达摩根付', '手办', '1980s', '买它那天刚下雪，店主说它已经在柜子里坐了七年。', 'gallery/j2-daruma.jpg', 1, 3, '2025-11-03T00:00:00.000Z'),
-  ('c_002', 'C-002', '凯风快晴 · 复刻', '画集', '2024', '', 'gallery/k1-fuji.jpg', 1, 4, '2024-06-18T00:00:00.000Z'),
-  ('e_007', 'E-007', '莳绘文箱', '小物', '19 世纪', '', 'gallery/k4-box.jpg', 1, 5, '2025-03-02T00:00:00.000Z'),
-  ('h_019', 'H-019', '笑面根付', '手办', '江户', '', 'gallery/m7-laugh.jpg', 1, 6, '2025-08-11T00:00:00.000Z'),
-  ('j_003', 'J-003', '人与鼠', '手办', '大正', '', 'gallery/j1-man.jpg', 1, 7, '2025-09-09T00:00:00.000Z'),
-  ('f_021', 'F-021', '青花高足碗', '小物', '清', '', 'gallery/k5-bowl.jpg', 1, 8, '2025-10-01T00:00:00.000Z'),
-  ('d_031', 'D-031', '江户风俗 · 册页', '纸品', '江户', '', 'gallery/k6-print.jpg', 1, 9, '2025-12-12T00:00:00.000Z');
+INSERT OR REPLACE INTO gallery_items (id, no, name, category, era, note, media_key, media_size, displayed, position, created_at) VALUES
+  ('g_005', 'G-005', '鬼之根付', '手办', '明治', '表情用力得过分，每天看一眼，提神。', 'gallery/k7-demon.jpg', 'orig', 1, 1, '2025-02-21T00:00:00.000Z'),
+  ('a_001', 'A-001', '印笼 · 雀与藤', '小物', '19 世纪', '第一次在东京看到印笼，才知道小东西也值得单独一盏灯。', 'gallery/k3-inro.jpg', NULL, 1, 2, '2026-10-12T00:00:00.000Z'),
+  ('b_014', 'B-014', '达摩根付', '手办', '1980s', '买它那天刚下雪，店主说它已经在柜子里坐了七年。', 'gallery/j2-daruma.jpg', NULL, 1, 3, '2025-11-03T00:00:00.000Z'),
+  ('c_002', 'C-002', '凯风快晴 · 复刻', '画集', '2024', '', 'gallery/k1-fuji.jpg', NULL, 1, 4, '2024-06-18T00:00:00.000Z'),
+  ('e_007', 'E-007', '莳绘文箱', '小物', '19 世纪', '', 'gallery/k4-box.jpg', NULL, 1, 5, '2025-03-02T00:00:00.000Z'),
+  ('h_019', 'H-019', '笑面根付', '手办', '江户', '', 'gallery/m7-laugh.jpg', NULL, 1, 6, '2025-08-11T00:00:00.000Z'),
+  ('j_003', 'J-003', '人与鼠', '手办', '大正', '', 'gallery/j1-man.jpg', NULL, 1, 7, '2025-09-09T00:00:00.000Z'),
+  ('f_021', 'F-021', '青花高足碗', '小物', '清', '', 'gallery/k5-bowl.jpg', NULL, 1, 8, '2025-10-01T00:00:00.000Z'),
+  ('d_031', 'D-031', '江户风俗 · 册页', '纸品', '江户', '', 'gallery/k6-print.jpg', NULL, 1, 9, '2025-12-12T00:00:00.000Z');
 
 INSERT OR REPLACE INTO bangumi_shows (id, bangumi_id, title, status, total_eps, watched_eps, score, next_air_at, cover_key, updated_at) VALUES
   ('bg_frieren_s2', 400602, '葬送的芙莉莲 第二季', 'watching', 12, 7, 9, '2026-10-23T15:00:00.000Z', 'gallery/k7-demon.jpg', '2026-10-20T19:02:00.000Z'),

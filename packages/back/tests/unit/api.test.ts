@@ -13,6 +13,14 @@ interface EnvStubs {
   bangumiList?: unknown[][];
   /** 后台 PATCH 读取单条追番时返回的行（按 schema 列顺序的 values 数组）。 */
   bangumiRow?: unknown[];
+  /** 公开 /moments 列表返回的行（列顺序：id、body、category、pinned、media_key、media_size、created_at）。 */
+  momentsList?: unknown[][];
+  /** 后台读取单条动态时返回的行（按 moments 全列顺序）。 */
+  momentsRow?: unknown[];
+  /** 公开 /gallery 列表返回的行（按 gallery_items 全列顺序）。 */
+  galleryList?: unknown[][];
+  /** 后台读取单件藏品时返回的行（按 gallery_items 全列顺序）。 */
+  galleryRow?: unknown[];
 }
 
 function createEnv(
@@ -22,6 +30,8 @@ function createEnv(
 ) {
   /** 执行过的 SQL，供「确实写了 site_content」这类断言用。 */
   const statements: string[] = [];
+  /** 执行过的语句与绑定参数，供「确实写了 media_size」这类断言用。 */
+  const bound: Array<{ sql: string; params: unknown[] }> = [];
 
   const statement = (sql: string) => {
     const normalized = sql.toLowerCase();
@@ -37,6 +47,16 @@ function createEnv(
       !isBangumiGroup &&
       !isBangumiById &&
       !normalized.includes('count(*)');
+    const isMomentsTable = normalized.includes('from "moments"');
+    const isMomentsById =
+      isMomentsTable && normalized.includes('"moments"."id" =');
+    const isMomentsList =
+      isMomentsTable && !isMomentsById && !normalized.includes('count(*)');
+    const isGalleryTable = normalized.includes('from "gallery_items"');
+    const isGalleryById =
+      isGalleryTable && normalized.includes('"gallery_items"."id" =');
+    const isGalleryList =
+      isGalleryTable && !isGalleryById && !normalized.includes('count(*)');
 
     // drizzle 的 select 带字段时走 raw()；行是 values 数组而不是对象。
     const rows = isBangumiGroup
@@ -45,10 +65,21 @@ function createEnv(
         ? [stubs.bangumiRow]
         : isBangumiList && stubs.bangumiList
           ? stubs.bangumiList
-          : [];
+          : isMomentsById && stubs.momentsRow
+            ? [stubs.momentsRow]
+            : isMomentsList && stubs.momentsList
+              ? stubs.momentsList
+              : isGalleryById && stubs.galleryRow
+                ? [stubs.galleryRow]
+                : isGalleryList && stubs.galleryList
+                  ? stubs.galleryList
+                  : [];
 
     const stmt = {
-      bind: () => stmt,
+      bind: (...params: unknown[]) => {
+        bound.push({ sql: normalized, params });
+        return stmt;
+      },
       first: async () => (isHealth ? { ok: 1 } : null),
       all: async () => ({ results: [], success: true, meta: {} }),
       raw: async () => rows,
@@ -113,7 +144,11 @@ function createEnv(
     ENVIRONMENT: environment,
     ADMIN_TOKEN: adminToken,
     statements,
-  } as unknown as AppBindings & { statements: string[] };
+    bound,
+  } as unknown as AppBindings & {
+    statements: string[];
+    bound: Array<{ sql: string; params: unknown[] }>;
+  };
 }
 
 const env = createEnv();
@@ -1146,5 +1181,296 @@ describe('bangumi cover proxy', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('mediaSize on moments and gallery', () => {
+  const auth = { 'x-admin-token': 'secret-token' };
+  const json = { ...auth, 'content-type': 'application/json' };
+
+  /** 找执行过的某类语句（如 insert into "moments"）。 */
+  function findStatements(
+    target: ReturnType<typeof createEnv>,
+    fragment: string,
+  ) {
+    return target.bound.filter((entry) => entry.sql.includes(fragment));
+  }
+
+  /**
+   * INSERT 语句的列名顺序与绑定参数一一对应：取出某一列实际写入的值，
+   * 确认 media_size 不是「列名在 SQL 里、参数却错位」。
+   */
+  function insertedValue(
+    entry: { sql: string; params: unknown[] } | undefined,
+    table: string,
+    column: string,
+  ) {
+    if (!entry) return undefined;
+    const match = new RegExp(`insert into "${table}" \\((.+?)\\) values`).exec(
+      entry.sql,
+    );
+    const columns =
+      match?.[1]?.split(',').map((name) => name.trim().replace(/"/g, '')) ?? [];
+    return entry.params[columns.indexOf(column)];
+  }
+
+  // 后台读取单条动态：moments 全列顺序。
+  function momentRow(mediaSize: string | null) {
+    return [
+      'm_1',
+      '一条动态',
+      '日常',
+      'public',
+      0,
+      'uploads/moment.webp',
+      mediaSize,
+      '2026-10-20T00:00:00.000Z',
+    ];
+  }
+
+  // 公开 /moments 的字段顺序：id、body、category、pinned、media_key、media_size、created_at。
+  function publicMomentRow(mediaSize: string | null) {
+    return [
+      'm_1',
+      '一条动态',
+      '日常',
+      0,
+      'uploads/moment.webp',
+      mediaSize,
+      '2026-10-20T00:00:00.000Z',
+    ];
+  }
+
+  // gallery_items 全列顺序：id、no、name、category、era、note、media_key、media_size、displayed、position、created_at。
+  function galleryRow(mediaSize: string | null) {
+    return [
+      'g_1',
+      'G-001',
+      '藏品',
+      '小物',
+      null,
+      null,
+      'uploads/gallery.webp',
+      mediaSize,
+      1,
+      1,
+      '2026-10-20T00:00:00.000Z',
+    ];
+  }
+
+  it('stores mediaSize when creating a moment, null when omitted', async () => {
+    const writeEnv = createEnv('test', 'secret-token');
+
+    const sized = await app.request(
+      '/api/v1/admin/moments',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          body: '带尺寸的动态',
+          category: '日常',
+          mediaKey: 'uploads/a.webp',
+          mediaSize: '1080',
+        }),
+      },
+      writeEnv,
+    );
+    expect(sized.status).toBe(201);
+    const sizedItem = (
+      (await sized.json()) as {
+        item: { mediaKey: string | null; mediaSize: string | null };
+      }
+    ).item;
+    expect(sizedItem.mediaKey).toBe('uploads/a.webp');
+    expect(sizedItem.mediaSize).toBe('1080');
+
+    const inserts = findStatements(writeEnv, 'insert into "moments"');
+    expect(inserts).toHaveLength(1);
+    expect(insertedValue(inserts[0], 'moments', 'media_size')).toBe('1080');
+
+    const plain = await app.request(
+      '/api/v1/admin/moments',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ body: '不带尺寸的动态', category: '日常' }),
+      },
+      writeEnv,
+    );
+    expect(plain.status).toBe(201);
+    const plainItem = (
+      (await plain.json()) as { item: { mediaSize: string | null } }
+    ).item;
+    expect(plainItem.mediaSize).toBeNull();
+
+    const allInserts = findStatements(writeEnv, 'insert into "moments"');
+    expect(allInserts).toHaveLength(2);
+    expect(insertedValue(allInserts[1], 'moments', 'media_size')).toBeNull();
+  });
+
+  it('rejects an unknown mediaSize before touching the database', async () => {
+    const writeEnv = createEnv('test', 'secret-token');
+    const res = await app.request(
+      '/api/v1/admin/moments',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          body: '动态',
+          category: '日常',
+          mediaSize: '999',
+        }),
+      },
+      writeEnv,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: string;
+      issues: Array<{ path: string }>;
+    };
+    expect(body.error).toBe('validation_failed');
+    expect(body.issues[0]?.path).toBe('mediaSize');
+    expect(findStatements(writeEnv, 'insert into "moments"')).toHaveLength(0);
+  });
+
+  it('returns mediaSize from the public moments list, null for legacy rows', async () => {
+    const readEnv = createEnv('test', undefined, {
+      momentsList: [publicMomentRow('1080'), publicMomentRow(null)],
+    });
+    const res = await app.request('/api/v1/moments', {}, readEnv);
+    expect(res.status).toBe(200);
+    const items = (
+      (await res.json()) as {
+        items: Array<{ mediaSize: string | null; mediaKey: string | null }>;
+      }
+    ).items;
+    expect(items[0]?.mediaSize).toBe('1080');
+    expect(items[0]?.mediaKey).toBe('uploads/moment.webp');
+    expect(items[1]?.mediaSize).toBeNull();
+
+    // 公开接口的 select 真的把 media_size 查出来了（老数据是 NULL）。
+    const selects = readEnv.statements
+      .map((sql) => sql.toLowerCase())
+      .filter(
+        (sql) => sql.includes('select') && sql.includes('from "moments"'),
+      );
+    expect(selects.some((sql) => sql.includes('media_size'))).toBe(true);
+  });
+
+  it('updates mediaSize with a moment PATCH', async () => {
+    const writeEnv = createEnv('test', 'secret-token', {
+      momentsRow: momentRow(null),
+    });
+    const res = await app.request(
+      '/api/v1/admin/moments/m_1',
+      {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ mediaSize: 'orig' }),
+      },
+      writeEnv,
+    );
+    expect(res.status).toBe(200);
+    const item = (
+      (await res.json()) as {
+        item: { id: string; body: string; mediaSize: string | null };
+      }
+    ).item;
+    expect(item.id).toBe('m_1');
+    expect(item.body).toBe('一条动态');
+    expect(item.mediaSize).toBe('orig');
+
+    const updates = findStatements(writeEnv, 'update "moments"');
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.sql).toContain('"media_size" = ?');
+    expect(updates[0]?.params).toContain('orig');
+  });
+
+  it('writes mediaSize on gallery items and exposes it publicly', async () => {
+    const createTarget = createEnv('test', 'secret-token');
+    const created = await app.request(
+      '/api/v1/admin/gallery',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          no: 'T-001',
+          name: '测试藏品',
+          category: '小物',
+          mediaKey: 'uploads/g.webp',
+          mediaSize: 'orig',
+        }),
+      },
+      createTarget,
+    );
+    expect(created.status).toBe(201);
+    const createdItem = (
+      (await created.json()) as {
+        item: { mediaKey: string | null; mediaSize: string | null };
+      }
+    ).item;
+    expect(createdItem.mediaKey).toBe('uploads/g.webp');
+    expect(createdItem.mediaSize).toBe('orig');
+
+    const inserts = findStatements(createTarget, 'insert into "gallery_items"');
+    expect(inserts).toHaveLength(1);
+    expect(insertedValue(inserts[0], 'gallery_items', 'media_size')).toBe(
+      'orig',
+    );
+
+    const readEnv = createEnv('test', undefined, {
+      galleryList: [galleryRow('1440')],
+    });
+    const listed = await app.request('/api/v1/gallery', {}, readEnv);
+    expect(listed.status).toBe(200);
+    const items = (
+      (await listed.json()) as {
+        items: Array<{ mediaKey: string | null; mediaSize: string | null }>;
+      }
+    ).items;
+    expect(items[0]?.mediaSize).toBe('1440');
+    expect(items[0]?.mediaKey).toBe('uploads/gallery.webp');
+
+    const patchEnv = createEnv('test', 'secret-token', {
+      galleryRow: galleryRow(null),
+    });
+    const patched = await app.request(
+      '/api/v1/admin/gallery/g_1',
+      {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ mediaSize: '720' }),
+      },
+      patchEnv,
+    );
+    expect(patched.status).toBe(200);
+    const patchedItem = (
+      (await patched.json()) as {
+        item: { id: string; mediaSize: string | null };
+      }
+    ).item;
+    expect(patchedItem.id).toBe('g_1');
+    expect(patchedItem.mediaSize).toBe('720');
+
+    const updates = findStatements(patchEnv, 'update "gallery_items"');
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.sql).toContain('"media_size" = ?');
+    expect(updates[0]?.params).toContain('720');
+
+    const invalid = await app.request(
+      '/api/v1/admin/gallery',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          no: 'T-002',
+          name: '测试藏品',
+          category: '小物',
+          mediaSize: '999',
+        }),
+      },
+      createTarget,
+    );
+    expect(invalid.status).toBe(400);
   });
 });

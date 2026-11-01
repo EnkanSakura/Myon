@@ -16,4 +16,9 @@ export interface AppBindings {
   BANGUMI_USERNAME?: string;
   /** GIF → animated WebP 外部服务的 Bearer token；未配置时该接口返回 503。 */
   IMG2WEBP_TOKEN?: string;
+  /**
+   * Cloudflare Images 绑定：/media/<key>?size=N 用它生成低分辨率 WebP。
+   * 本机开发没有真实转换服务时缺失，路由会回退原图。
+   */
+  IMAGES?: ImagesBinding;
 }
