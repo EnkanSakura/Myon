@@ -106,6 +106,36 @@ async function dragRowByHandle(
   await page.mouse.up();
 }
 
+// 媒体选择器 mock 用的一条图：选中后应该填 /media/<key>
+const PICK_MEDIA_ITEM = {
+  id: 'media-e2e-pick',
+  key: 'uploads/202601/e2e-pick.webp',
+  filename: 'e2e-pick.webp',
+  mime: 'image/webp',
+  size: 3072,
+  width: 640,
+  height: 480,
+  createdAt: '2026-01-03T00:00:00.000Z',
+};
+
+/** 「媒体库」按钮打开共享媒体选择器后会按需请求媒体列表，这里只 mock 列表接口。 */
+async function mockMediaList(page: Page) {
+  await page.route('**/api/v1/admin/media**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        items: [PICK_MEDIA_ITEM],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+  });
+}
+
 test.describe('后台设置 · 清理后的页面', () => {
   test('已删除的字段与面板不再出现，尾页/后记可以保存', async ({
     page,
@@ -159,6 +189,82 @@ test.describe('后台设置 · 清理后的页面', () => {
     await page.reload();
     await expect(page.locator('#homeEndTitle')).toHaveValue(title);
     await expect(page.locator('#homeAfterwordSign')).toHaveValue(sign);
+  });
+});
+
+test.describe('后台设置 · 第 2 页装饰图', () => {
+  test('两个装饰图输入框随设置一起保存', async ({ page, request }) => {
+    const { readSettings } = await openMockedSettings(page, request);
+
+    const figureA = page.locator('#homeFigureA');
+    const figureB = page.locator('#homeFigureB');
+    await expect(figureA).toHaveAttribute('name', 'home_p2_figure_a');
+    await expect(figureB).toHaveAttribute('name', 'home_p2_figure_b');
+
+    // 留空是允许的（前台沿用封面图）；填了站内路径就随设置保存
+    await figureA.fill('/media/p2-figure-a.webp');
+    await figureB.fill('https://example.com/p2-figure-b.webp');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#saveState')).toContainText('最后保存');
+
+    const saved = readSettings();
+    expect(saved.home_p2_figure_a).toBe('/media/p2-figure-a.webp');
+    expect(saved.home_p2_figure_b).toBe('https://example.com/p2-figure-b.webp');
+  });
+});
+
+test.describe('后台设置 · 图片路径媒体选择器', () => {
+  test('点「媒体库」选图后填入 /media/<key> 并关闭选择器', async ({
+    page,
+    request,
+  }) => {
+    await openMockedSettings(page, request);
+    await mockMediaList(page);
+    await expect(page.locator('#saveBtn')).toBeEnabled();
+
+    // 封面图的「媒体库」按钮复用共享媒体选择器，现有图片里选一张就填回路径
+    await page.locator('[data-media-pick="homeCoverImage"]').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
+
+    await page.locator('#mpGrid .mp-item').first().click();
+    await expect(page.locator('#homeCoverImage')).toHaveValue(
+      '/media/uploads/202601/e2e-pick.webp',
+    );
+    await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
+      'open',
+      '',
+    );
+
+    // 另外两个图片路径输入框也各有一个媒体库按钮
+    await expect(page.locator('[data-media-pick="homeFigureA"]')).toHaveCount(
+      1,
+    );
+    await expect(page.locator('[data-media-pick="homeFigureB"]')).toHaveCount(
+      1,
+    );
+  });
+
+  test('同源图片 URL 去域名，外站图片 URL 保持原样', async ({
+    page,
+    request,
+  }) => {
+    await openMockedSettings(page, request);
+    await expect(page.locator('#saveBtn')).toBeEnabled();
+
+    const origin = await page.evaluate(() => window.location.origin);
+
+    // 同源完整 URL：只保留 path + query + hash
+    const figureA = page.locator('#homeFigureA');
+    await figureA.fill(`${origin}/media/a/b.webp`);
+    await figureA.blur();
+    await expect(figureA).toHaveValue('/media/a/b.webp');
+
+    // 外站图片 URL 不在站内媒体库，原样保留
+    const figureB = page.locator('#homeFigureB');
+    await figureB.fill('https://example.com/photo.jpg');
+    await figureB.blur();
+    await expect(figureB).toHaveValue('https://example.com/photo.jpg');
   });
 });
 

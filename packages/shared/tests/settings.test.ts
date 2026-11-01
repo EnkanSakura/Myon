@@ -80,14 +80,24 @@ describe('admin patch schemas', () => {
     });
   });
 
-  it('still apply defaults when creating', () => {
-    expect(postInputSchema.parse({ slug: 'a-b', title: 't' })).toMatchObject({
+  it('still apply non-category defaults when creating', () => {
+    // category 是必填项，不再有服务端默认值
+    expect(postInputSchema.safeParse({ slug: 'a-b', title: 't' }).success).toBe(
+      false,
+    );
+    expect(momentInputSchema.safeParse({ body: 'm' }).success).toBe(false);
+
+    expect(
+      postInputSchema.parse({ slug: 'a-b', title: 't', category: '随笔' }),
+    ).toMatchObject({
       excerpt: '',
       bodyMd: '',
       status: 'draft',
       category: '随笔',
     });
-    expect(momentInputSchema.parse({ body: 'm' })).toMatchObject({
+    expect(
+      momentInputSchema.parse({ body: 'm', category: '日常' }),
+    ).toMatchObject({
       category: '日常',
       visibility: 'public',
       pinned: false,

@@ -167,6 +167,10 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     await expect(page.locator('#sortSel-combo')).toHaveValue('标题 A→Z');
     await page.locator('#btnNew').click();
     await expect(page.locator('#postDlg')).toHaveAttribute('open', '');
+    // 正文区与预览区的文件标签、底部字数提示已移除；新建文章不再预设分类
+    await expect(page.locator('#postDlg .md-panel-file')).toHaveCount(0);
+    await expect(page.locator('#postDlg .md-panel-foot')).toHaveCount(0);
+    await expect(page.locator('#postDlg #fCategory')).toHaveValue('');
     await expect(page.locator('#postDlg .md-split')).toBeVisible();
     // 文章预览按前台文章页的「一页纸」渲染，不再复用带阴影的纸卡
     await expect(page.locator('#postDlg .art-preview')).toBeVisible();
@@ -574,7 +578,6 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     id: 'moment-e2e',
     body: '测试动态正文',
     category: '日常',
-    tag: null,
     visibility: 'public',
     pinned: false,
     mediaKey: null,
@@ -613,6 +616,10 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.goto('/admin/moments');
     // 页面内不再有发布面板，只有列表
     await expect(page.locator('.compose')).toHaveCount(0);
+    // 后台页面不再有 .sec / .sec-h 区块头；分类筛选换成原生 select（combo.js 增强为 MyonCombo 外观）
+    await expect(page.locator('.sec, .sec-h')).toHaveCount(0);
+    await expect(page.locator('#catSel')).toHaveClass(/combo-native/);
+    await expect(page.locator('#catSel-combo')).toBeVisible();
     await expect(page.locator('.filterbar')).toBeVisible();
     await expect(page.locator('.note-r')).toHaveCount(1);
 
@@ -620,6 +627,9 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.locator('.note-r [data-act="edit"]').click();
     await expect(page.locator('#momentDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#noteText')).toHaveValue('测试动态正文');
+    // 「标签」项目已彻底移除，只剩分类
+    await expect(page.locator('#momentDlg #noteTag')).toHaveCount(0);
+    await expect(page.locator('#momentDlg #tagQuick')).toHaveCount(0);
     // 分类候选：自绘组合框（服务端 /api/v1/categories 数据）
     await expect(page.locator('#momentDlg datalist')).toHaveCount(0);
     await page.locator('#noteCategoryToggle').click();
@@ -649,6 +659,11 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.locator('#btnCompose').click();
     await expect(page.locator('#momentDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#noteText')).toHaveValue('');
+    await expect(page.locator('#momentDlg #noteTag')).toHaveCount(0);
+    await expect(page.locator('#momentDlg #tagQuick')).toHaveCount(0);
+    // 分类不再有默认值：新建时为空，要手动填写后才允许发布
+    await expect(page.locator('#noteCategory')).toHaveValue('');
+    await page.locator('#noteCategory').fill('日常');
     await page.locator('#noteText').fill('新的一条动态');
     await page.locator('#btnPublish').click();
     await expect(page.locator('#momentDlg')).not.toHaveAttribute('open', '');
@@ -687,6 +702,8 @@ test.describe('后台展柜 · 分类组合框', () => {
     });
 
     await page.goto('/admin/gallery');
+    // 后台页面不再有 .sec / .sec-h 区块头，区块直接平铺到 .page
+    await expect(page.locator('.sec, .sec-h')).toHaveCount(0);
     await expect(page.locator('#btnAdd')).toBeEnabled();
     await page.locator('#btnAdd').click();
     await expect(page.locator('#editDlg')).toHaveAttribute('open', '');

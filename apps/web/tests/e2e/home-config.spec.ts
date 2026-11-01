@@ -18,6 +18,7 @@ test.describe('首页封面配置', () => {
           stats: { preset: string; label: string; unit: string }[];
           links: { label: string; href: string }[];
           cover: { image: string; badge: string; note: string };
+          figures: { a: string; b: string };
         };
       };
     };
@@ -48,12 +49,12 @@ test.describe('首页封面配置', () => {
     await expect(page.locator('.p1 .frame-wrap .sticker')).toContainText(
       home.cover.badge,
     );
-    // 第 2 页右侧装饰框仍用后台配置的封面图
+    // 第 2 页右侧两张装饰图来自后台「第 2 页装饰图」设置；
+    // 后台留空时 /api/v1/site 已经回退成封面图，所以直接按接口返回值断言。
     const p2Frames = page.locator('.p2 .side .frame img');
-    expect(await p2Frames.count()).toBeGreaterThan(0);
-    for (let i = 0; i < (await p2Frames.count()); i += 1) {
-      await expect(p2Frames.nth(i)).toHaveAttribute('src', home.cover.image);
-    }
+    await expect(p2Frames).toHaveCount(2);
+    await expect(p2Frames.nth(0)).toHaveAttribute('src', home.figures.a);
+    await expect(p2Frames.nth(1)).toHaveAttribute('src', home.figures.b);
     // 第 3/4 页的图位只展示 D1 真实条目自带的图片，不再复用封面图
     const momentsBody = (await (
       await request.get('/api/v1/moments?limit=4')

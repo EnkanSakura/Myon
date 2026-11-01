@@ -462,6 +462,30 @@ describe('admin content write API', () => {
     expect(body.issues.length).toBeGreaterThan(0);
   });
 
+  it('requires an explicit category when creating posts and moments', async () => {
+    const postRes = await app.request(
+      '/api/v1/admin/posts',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ slug: 'no-category', title: '没有分类' }),
+      },
+      adminEnv,
+    );
+    expect(postRes.status).toBe(400);
+
+    const momentRes = await app.request(
+      '/api/v1/admin/moments',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ body: '没有分类的动态' }),
+      },
+      adminEnv,
+    );
+    expect(momentRes.status).toBe(400);
+  });
+
   it('creates a post and a moment', async () => {
     const postRes = await app.request(
       '/api/v1/admin/posts',
@@ -472,6 +496,7 @@ describe('admin content write API', () => {
           slug: 'e2e-draft',
           title: '草稿标题',
           status: 'draft',
+          category: '随笔',
         }),
       },
       adminEnv,
@@ -493,6 +518,13 @@ describe('admin content write API', () => {
       adminEnv,
     );
     expect(momentRes.status).toBe(201);
+    const moment = (await momentRes.json()) as {
+      item: { body: string; category: string; tag?: unknown };
+    };
+    expect(moment.item.body).toBe('今天的动态');
+    expect(moment.item.category).toBe('日常');
+    // 动态的 tag 字段已从数据层与接口移除，响应里不应再出现
+    expect(moment.item).not.toHaveProperty('tag');
   });
 
   it('no longer exposes admin bangumi edit endpoints', async () => {

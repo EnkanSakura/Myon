@@ -58,6 +58,13 @@ const LEGACY_SELECTORS = [
   '.tk-bar',
   '.tk-input',
   '.syncbar',
+  // 旧的 .sec / .sec-h 区块头体系已删除；编号角标改用 .num-badge，这里把旧类名全部禁用
+  '.sec',
+  '.sec-h',
+  '.sec-r',
+  '.sec-en',
+  '.sec-note',
+  '.sec-num',
 ];
 
 test.describe('后台共享组件', () => {
@@ -73,6 +80,32 @@ test.describe('后台共享组件', () => {
         LEGACY_SELECTORS,
       );
       expect(legacyCount, `${route} 仍有旧组件类名`).toBe(0);
+    }
+  });
+
+  test('单区块列表页不加区块标题与编号', async ({ page }) => {
+    // 这些页面只有一个列表区块，不需要 .block-h / 编号；多区块页面才用轻量区块标题
+    const routes = [
+      '/admin',
+      '/admin/moments',
+      '/admin/gallery',
+      '/admin/bangumi',
+      '/admin/tools',
+    ];
+    for (const route of routes) {
+      await page.goto(route);
+      await expect(
+        page.locator('.block-h'),
+        `${route} 不该有 .block-h`,
+      ).toHaveCount(0);
+      await expect(
+        page.locator('.block-t'),
+        `${route} 不该有区块标题`,
+      ).toHaveCount(0);
+      await expect(
+        page.locator('.page > .num-badge'),
+        `${route} 不该有区块编号`,
+      ).toHaveCount(0);
     }
   });
 
@@ -107,7 +140,8 @@ test.describe('后台共享组件', () => {
         .count(),
     ).toBe(0);
     await expect(page.locator('#cfmDlg')).toHaveCount(0);
-    await expect(page.locator('.notice')).toContainText('只读');
+    // 页面级提示条（.notice）已删除：只读说明改由 toast 反馈
+    await expect(page.locator('.notice')).toHaveCount(0);
   });
 
   test('空状态、分页、提示条在媒体库是同一套结构', async ({ page }) => {
@@ -131,10 +165,12 @@ test.describe('后台共享组件', () => {
       await page.goto(route);
       const filterbar = page.locator('.filterbar').first();
       await expect(filterbar, `${route} 缺 .filterbar`).toBeVisible();
-      await expect(
-        filterbar.locator('.fb-chips'),
-        `${route} 缺 chips`,
-      ).toBeVisible();
+      // chips 是可选项：动态页的分类筛选已改成原生 select，只有存在的页面才校验顺序
+      const chips = filterbar.locator('.fb-chips');
+      const hasChips = (await chips.count()) > 0;
+      if (hasChips) {
+        await expect(chips, `${route} 缺 chips`).toBeVisible();
+      }
       await expect(
         filterbar.locator('.fb-count'),
         `${route} 缺计数`,
@@ -158,21 +194,40 @@ test.describe('后台共享组件', () => {
         }),
       );
       const index = (name: string) => (order as string[]).indexOf(name);
-      expect(index('chips'), `${route} chips 不在最前`).toBeLessThan(
-        index('count'),
-      );
+      if (hasChips) {
+        expect(index('chips'), `${route} chips 不在最前`).toBeLessThan(
+          index('count'),
+        );
+      }
       expect(index('count'), `${route} 计数不在清除前`).toBeLessThan(
         index('clear'),
       );
       for (const name of ['search', 'sort']) {
         if (index(name) >= 0) {
-          expect(index(name), `${route} ${name} 顺序不对`).toBeGreaterThan(
-            index('chips'),
-          );
+          if (hasChips) {
+            expect(index(name), `${route} ${name} 顺序不对`).toBeGreaterThan(
+              index('chips'),
+            );
+          }
           expect(index(name), `${route} ${name} 顺序不对`).toBeLessThan(
             index('count'),
           );
         }
+      }
+
+      if (route === '/admin/moments') {
+        // 动态页分类筛选换成原生 select（由 combo.js 增强为 MyonCombo 外观），
+        // 原生控件被隐藏，可见的是 #catSel-combo；不再有 chips。
+        await expect(chips, '动态页不该再有分类 chips').toHaveCount(0);
+        await expect(filterbar.locator('#catSel')).toHaveCount(1);
+        await expect(filterbar.locator('#catSel-combo')).toBeVisible();
+        expect(
+          index('sort'),
+          '动态页分类下拉不在计数之前',
+        ).toBeGreaterThanOrEqual(0);
+        expect(index('sort'), '动态页分类下拉不在计数之前').toBeLessThan(
+          index('count'),
+        );
       }
     }
   });
@@ -213,14 +268,13 @@ test.describe('后台共享组件', () => {
     await expect(page.locator('#adminTokenState')).toHaveText('未填写');
   });
 
-  test('六个有异步数据的后台页都有 .notice，四个分页页都有 .pager', async ({
+  test('五个有异步数据的后台页都有 .notice，四个分页页都有 .pager', async ({
     page,
   }) => {
     const withNotice = [
       '/admin/articles',
       '/admin/moments',
       '/admin/gallery',
-      '/admin/bangumi',
       '/admin/media',
       '/admin/settings',
     ];

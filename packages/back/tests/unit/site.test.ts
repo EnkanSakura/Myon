@@ -1,3 +1,4 @@
+import { toPublicSiteSettings } from '@myon/shared';
 import { describe, expect, it } from 'vitest';
 import {
   readSiteSettings,
@@ -162,5 +163,28 @@ describe('site settings in KV', () => {
     const settings = await readSiteSettings(kv);
     expect(settings.theme_color).toBe('#112233');
     expect(settings.site_name).toBe('Myon');
+  });
+
+  it('defaults the page-2 figures to empty and falls back to the cover image', async () => {
+    const { kv } = createKv();
+    const settings = await readSiteSettings(kv);
+    expect(settings.home_p2_figure_a).toBe('');
+    expect(settings.home_p2_figure_b).toBe('');
+
+    const publicSettings = toPublicSiteSettings(settings);
+    expect(publicSettings.home.figures.a).toBe(publicSettings.home.cover.image);
+    expect(publicSettings.home.figures.b).toBe(publicSettings.home.cover.image);
+  });
+
+  it('uses configured page-2 figures and rewrites legacy /assets/ paths', async () => {
+    const { kv } = createKv();
+    const written = await writeSiteSettings(kv, {
+      home_p2_figure_a: '/media/figure-a.webp',
+      home_p2_figure_b: '/assets/figure-b.webp',
+    });
+    const publicSettings = toPublicSiteSettings(written);
+    expect(publicSettings.home.figures.a).toBe('/media/figure-a.webp');
+    // 旧设置里的 /assets/<key> 仍要改写成 /media/<key>
+    expect(publicSettings.home.figures.b).toBe('/media/figure-b.webp');
   });
 });
