@@ -138,7 +138,6 @@
   var fStatus = $("fStatus");
   var fExcerpt = $("fExcerpt");
   var fBody = $("fBody");
-  var bodyHint = $("bodyHint");
   var postMeta = $("postMeta");
   var formSave = $("formSave");
   var formCancel = $("formCancel");
@@ -839,11 +838,6 @@
     fTitle.focus();
   }
 
-  function updateBodyHint() {
-    var chars = charCount(fBody.value);
-    bodyHint.textContent = fmtNumber(chars) + " 字 · 约 " + Math.max(1, Math.ceil(chars / 400)) + " 分钟";
-  }
-
   /* ---------------- Markdown 编辑器（共享组件） ----------------
      /js/markdown-editor.js 负责工具栏、预览渲染与图片选择；
      本页只负责把 textarea / 预览容器和媒体配置交给它，不自己造工具栏。
@@ -860,9 +854,8 @@
     });
   }
 
-  /** 字数立即更新；编辑器就绪时同步刷新预览。 */
+  /** 编辑器就绪时刷新预览。 */
   function renderPreview() {
-    updateBodyHint();
     if (mdEditor && typeof mdEditor.render === "function") mdEditor.render();
   }
 
@@ -876,7 +869,7 @@
     if (post) {
       fTitle.value = post.title || "";
       fSlug.value = post.slug || "";
-      fCategory.value = post.category || "随笔";
+      fCategory.value = post.category || "";
       fStatus.value = post.status || "draft";
       fExcerpt.value = post.excerpt || "";
       fBody.value = post.bodyMd || "";
@@ -888,7 +881,7 @@
       var data = prefill || {};
       fTitle.value = data.title || "";
       fSlug.value = data.slug || "";
-      fCategory.value = data.category || "随笔";
+      fCategory.value = data.category || "";
       fStatus.value = data.status || "draft";
       fExcerpt.value = data.excerpt || "";
       fBody.value = data.bodyMd || "";
@@ -1086,7 +1079,6 @@
       openForm(null, {
         title: title,
         slug: slugify(name) || "imported-post",
-        category: "随笔",
         status: "draft",
         excerpt: stripMarkdown(text).slice(0, 120),
         bodyMd: text
@@ -1155,7 +1147,6 @@
   postDlg.addEventListener("close", function () {
     if (!state.saving) state.editing = null;
   });
-  fBody.addEventListener("input", updateBodyHint);
 
   delCancel.addEventListener("click", closeDelete);
   delOk.addEventListener("click", confirmDelete);

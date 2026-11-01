@@ -80,7 +80,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <label class="fb-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M15.6 15.6 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span class="sr-only">搜索文章标题或 slug</span>
-        <input id="q" type="search" placeholder="搜索标题 / slug" autocomplete="off" spellcheck="false" />
+        <input id="q" type="search" autocomplete="off" spellcheck="false" />
       </label>
 
       <label class="fb-sort">分类
@@ -155,7 +155,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <form class="dlg-box post-box" id="postForm" novalidate>
       <span class="dlg-tab">ARTICLE / 文章</span>
       <div class="post-head">
-        <span class="sec-num" id="postDlgNo">NEW</span>
+        <span class="num-badge" id="postDlgNo">NEW</span>
         <h2 class="post-title" id="postDlgTitle">新建文章</h2>
         <span class="post-dlg-state" id="postDlgState">未保存</span>
       </div>
@@ -207,34 +207,25 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <div class="md-split post-md">
         <section class="md-panel" aria-labelledby="fBodyLabel">
           <div class="md-panel-head">
-            <span class="sec-num">01</span>
+            <span class="num-badge">01</span>
             <h2 id="fBodyLabel">编辑器</h2>
             <span class="md-panel-en">MARKDOWN</span>
-            <span class="md-panel-file">body.md</span>
           </div>
           <div class="md-panel-body md-panel-body--editor">
             <label class="sr-only" for="fBody">正文 Markdown 内容</label>
-            <textarea class="md-input" id="fBody" maxlength="200000" spellcheck="false" placeholder="## 小标题&#10;&#10;正文段落……&#10;&#10;- 列表项&#10;- [ ] 任务项"></textarea>
-          </div>
-          <div class="md-panel-foot">
-            <span>工具栏插入语法；公式 / 提醒框 / 剧透 / 网格 / GitHub 卡片在工具栏末组</span>
-            <span id="bodyHint">0 字 · 约 1 分钟</span>
+            <textarea class="md-input" id="fBody" maxlength="200000" spellcheck="false"></textarea>
           </div>
         </section>
 
         <section class="md-panel" aria-labelledby="fPreviewLabel">
           <div class="md-panel-head">
-            <span class="sec-num">02</span>
+            <span class="num-badge">02</span>
             <h2 id="fPreviewLabel">预览</h2>
             <span class="md-panel-en">LIVE</span>
-            <span class="md-panel-file">前台文章页</span>
           </div>
           <div class="md-panel-body md-panel-body--preview is-page">
             <!-- 文章预览按「前台文章页的一页纸」排版：没有纸卡边框/阴影，正文排版来自 article.css 的 .body -->
             <div class="art-preview"><div class="body" id="fPreview"></div></div>
-          </div>
-          <div class="md-panel-foot">
-            <span>与前台文章页同款排版；省略目录 / 阅读进度 / 复制按钮</span>
           </div>
         </section>
       </div>
@@ -254,7 +245,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <div class="dlg-box">
       <span class="dlg-tab">DELETE / 删除</span>
       <div class="del-head">
-        <span class="sec-num">!</span>
+        <span class="num-badge">!</span>
         <h2 class="del-title" id="delDlgTitle">删除这篇文章？</h2>
       </div>
       <p class="del-text">删除后文章会从前台和后台一起消失，操作不可撤销。</p>

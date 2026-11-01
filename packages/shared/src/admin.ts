@@ -34,7 +34,7 @@ export const postInputSchema = z.object({
   excerpt: postFields.excerpt.default(''),
   bodyMd: postFields.bodyMd.default(''),
   status: postFields.status.default('draft'),
-  category: postFields.category.default('随笔'),
+  // category 不给默认值：新建文章必须显式带分类。
 });
 export const postPatchSchema = z.object(postFields).partial();
 export type PostInput = z.infer<typeof postInputSchema>;
