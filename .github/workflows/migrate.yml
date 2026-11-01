@@ -1,10 +1,13 @@
 name: Database Migrate
 
-# 生产 D1 迁移：push main 或手动触发；成功后由 Deploy workflow 继续部署。
-# 迁移必须先于新 Worker 生效（例如新增列、删表），所以触发链是：
-# push main → Database Migrate → Deploy → Smoke Test。
+# 生产 D1 迁移：由 Deploy 成功触发（或手动触发）。
+# 先部署后迁移：新 Worker 已经不读写待删除的列/表，迁移只是收尾；这样即使
+# 迁移失败或延迟，线上也不会因为旧 Worker 读旧列而 500。
+# 触发链：push main → Deploy → Database Migrate。
 on:
-  push:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -18,6 +21,7 @@ permissions:
 jobs:
   migrate:
     name: Apply D1 migrations
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: production
@@ -26,6 +30,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

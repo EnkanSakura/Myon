@@ -1,12 +1,11 @@
 name: Deploy
 
 # 只负责部署：构建 + 上传 Worker。
-# D1 迁移在 Database Migrate workflow 里，健康检查在 Smoke Test workflow 里。
-# 触发链：push main → Database Migrate → Deploy → Smoke Test。
+# 先部署新 Worker、再跑 D1 迁移：新 Worker 必须能容忍旧表结构（例如已删除的列
+# 不再出现在 SELECT 里），这样迁移失败或稍晚执行时线上不会直接 500。
+# 触发链：push main → Deploy → Database Migrate。
 on:
-  workflow_run:
-    workflows: [Database Migrate]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -20,7 +19,6 @@ permissions:
 jobs:
   deploy:
     name: Deploy Worker
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -29,8 +27,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
