@@ -159,6 +159,8 @@ const tail = [
     <ThemeTokens themeColor={themeColor} metaColor="#17131A" />
     <slot name="head" />
     <script is:inline src="/js/combo.js"></script>
+    <!-- 媒体图片转换地址（MyonImage），所有后台页共用；必须排在页面脚本之前 -->
+    <script is:inline src="/js/image-transform.js"></script>
   </head>
   <body class="admin" data-token-check={tokenCheckUrl}>
     <aside class="side" aria-label="制作进行侧栏">

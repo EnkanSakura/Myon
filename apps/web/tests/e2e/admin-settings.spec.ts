@@ -236,6 +236,9 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
 
     await picker.click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    // 设置页只选图片路径，不传尺寸档位：尺寸栏整条隐藏，行为与改版前一致
+    await expect(page.locator('#mpSize')).toBeHidden();
+    await expect(page.locator('#mpSize .mp-size-btn')).toHaveCount(0);
     await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
 
     await page.locator('#mpGrid .mp-item').first().click();

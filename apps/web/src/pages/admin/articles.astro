@@ -1,7 +1,7 @@
 ---
 // 后台 · 文章台账：列表从 /api/v1/admin/posts 读取，页面内完成增删改。
 // 样式：public/css/pages/admin-articles.css；脚本：public/js/pages/admin-articles.js
-import { apiBasePath } from '@myon/shared';
+import { apiBasePath, mediaImageSizes } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { mediaUrl } from '../../lib/media';
 
@@ -31,6 +31,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     data-api-media={mediaApi}
     data-gif-api={gifWebpApi}
     data-media-base={mediaBase}
+    data-image-sizes={JSON.stringify(mediaImageSizes)}
   >
 
     <!-- ---------- 页头 ---------- -->

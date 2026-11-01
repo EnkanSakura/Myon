@@ -77,6 +77,38 @@
       return [];
     }
   })();
+  // 配图尺寸档位：由页面用 @myon/shared 的 mediaImageSizes 渲染成 JSON。
+  var IMAGE_SIZES = (function () {
+    var raw = pageEl ? pageEl.getAttribute("data-image-sizes") : "";
+    var image = window.MyonImage;
+    if (image && typeof image.parseSizes === "function") return image.parseSizes(raw);
+    return ["480", "720", "1080", "1440", "orig"];
+  })();
+  // 老数据没有 mediaSize 时按默认 720 显示；与 @myon/shared 的 defaultMediaImageSize 一致。
+  var DEFAULT_MEDIA_SIZE = "720";
+
+  /** 站内图片低清预览地址；外链 / 空值由 MyonImage 原样返回。 */
+  function previewSrc(src, width) {
+    var image = window.MyonImage;
+    return image && typeof image.preview === "function"
+      ? image.preview(src, width)
+      : src;
+  }
+
+  /** 内容图按尺寸档位取转换地址（orig 时带 size=orig）。 */
+  function contentSrc(src, size) {
+    var image = window.MyonImage;
+    return image && typeof image.content === "function"
+      ? image.content(src, size || DEFAULT_MEDIA_SIZE)
+      : src;
+  }
+
+  /** 尺寸档位文案：「长边 720px」/「原图」。 */
+  function sizeText(size) {
+    var image = window.MyonImage;
+    if (image && typeof image.describe === "function") return image.describe(size);
+    return String(size) === "orig" ? "原图" : "长边 " + size + "px";
+  }
 
   /* ================= 元素 ================= */
   var btnCompose = $("btnCompose");
@@ -151,6 +183,7 @@
     q: "",
     editingId: null,
     mediaKey: null,
+    mediaSize: DEFAULT_MEDIA_SIZE,
     mediaName: "",
     visibility: "public",
     pinned: false,
@@ -277,7 +310,8 @@
     var src = mediaSrc(item.mediaKey);
     if (src) {
       var img = document.createElement("img");
-      img.src = src;
+      // 列表缩略图走低清预览（长边 240px），不拉原图。
+      img.src = previewSrc(src, 240);
       img.alt = "动态配图缩略";
       img.loading = "lazy";
       thumb.appendChild(img);
@@ -511,7 +545,8 @@
     if (!attachBox) return;
     if (state.mediaKey) {
       attachBox.classList.add("is-on");
-      attachImg.src = mediaSrc(state.mediaKey);
+      // 配图预览与写入正文的地址一致：按 mediaSize 取转换图。
+      attachImg.src = contentSrc(mediaSrc(state.mediaKey), state.mediaSize);
       attachName.textContent = state.mediaName || fileName(state.mediaKey);
       attachName.title = state.mediaKey;
     } else {
@@ -520,6 +555,15 @@
       attachName.textContent = "未选图";
       attachName.removeAttribute("title");
     }
+    paintMediaSize();
+  }
+
+  /** 配图尺寸文案：没选图时也展示当前档位，方便发布前确认。 */
+  function paintMediaSize() {
+    var label = $("attachSize");
+    if (!label) return;
+    label.textContent = sizeText(state.mediaSize || DEFAULT_MEDIA_SIZE);
+    label.title = "配图长边像素 · " + sizeText(state.mediaSize || DEFAULT_MEDIA_SIZE);
   }
 
   function paintPublishLabel() {
@@ -553,6 +597,8 @@
     state.visibility = editing && item.visibility === "private" ? "private" : "public";
     state.pinned = editing ? !!item.pinned : false;
     state.mediaKey = editing ? item.mediaKey || null : null;
+    // 老数据没有 mediaSize：编辑时回填默认 720，新建也默认 720。
+    state.mediaSize = editing && item.mediaSize ? item.mediaSize : DEFAULT_MEDIA_SIZE;
     state.mediaName = state.mediaKey ? fileName(state.mediaKey) : "";
     noteText.value = editing ? item.body || "" : "";
     // 新建动态不预设分类；编辑时保留原分类（缺失才留空）。
@@ -621,7 +667,9 @@
       category: category,
       visibility: state.visibility,
       pinned: state.pinned,
-      mediaKey: state.mediaKey
+      mediaKey: state.mediaKey,
+      // 没选图时不写尺寸，避免给空配图留一个无意义的档位。
+      mediaSize: state.mediaKey ? state.mediaSize || DEFAULT_MEDIA_SIZE : null
     };
   }
 
@@ -724,13 +772,17 @@
       api: MEDIA_API,
       gifApi: GIF_API,
       base: MEDIA_BASE,
+      sizes: IMAGE_SIZES,
+      defaultSize: DEFAULT_MEDIA_SIZE,
+      size: state.mediaSize || DEFAULT_MEDIA_SIZE,
       selectedKey: state.mediaKey,
-      onPick: function (item) {
+      onPick: function (item, size) {
         if (!item || !item.key) return;
         state.mediaKey = item.key;
+        if (size) state.mediaSize = size;
         state.mediaName = item.filename || fileName(item.key);
         paintMedia();
-        toast("已选配图 · " + (state.mediaName || "图片"));
+        toast("已选配图 · " + (state.mediaName || "图片") + " · " + sizeText(state.mediaSize));
       }
     });
   }
@@ -741,13 +793,14 @@
     state.busy = true;
     btn.disabled = true;
     // PATCH 的 zod schema 对缺省字段会套默认值（category 会变回「日常」），
-    // 所以这里显式带上整条动态，只改 pinned。
+    // 所以这里显式带上整条动态，只改 pinned；mediaSize 也要带上，避免编辑尺寸被旧值覆盖。
     var payload = {
       body: item.body,
       category: item.category,
       visibility: item.visibility,
       pinned: !item.pinned,
-      mediaKey: item.mediaKey || null
+      mediaKey: item.mediaKey || null,
+      mediaSize: item.mediaSize || null
     };
     api("PATCH", MOMENTS_API + "/" + encodeURIComponent(item.id), payload).then(function (res) {
       if (handleAuth(res)) return;

@@ -8,7 +8,7 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
 import type { CategoriesResponse } from '@myon/shared';
-import { apiBasePath } from '@myon/shared';
+import { apiBasePath, mediaImageSizes } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { mediaUrl } from '../../lib/media';
 
@@ -50,7 +50,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <link rel="stylesheet" href="/css/pages/admin-moments.css" />
   </Fragment>
 
-<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase} data-cat-options={JSON.stringify(categoryOptions)}>
+<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase} data-cat-options={JSON.stringify(categoryOptions)} data-image-sizes={JSON.stringify(mediaImageSizes)}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -167,6 +167,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
           <span class="moment-attach-name" id="attachName">未选图</span>
           <button class="moment-act" id="btnRemoveImg" type="button">移除</button>
         </div>
+        <span class="moment-size" id="attachSize" title="配图的长边像素">长边 720px</span>
       </div>
     </div>
 

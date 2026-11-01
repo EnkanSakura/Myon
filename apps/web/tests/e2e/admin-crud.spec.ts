@@ -38,6 +38,17 @@ interface MomentItem {
   id: string;
   body: string;
   pinned: boolean;
+  mediaKey: string | null;
+  mediaSize: string | null;
+}
+
+interface GalleryItem {
+  id: string;
+  no: string;
+  name: string;
+  mediaKey: string | null;
+  mediaSize: string | null;
+  displayed: boolean;
 }
 
 interface MediaItem {
@@ -383,6 +394,112 @@ test.describe('后台展柜读取', () => {
     const publicBody = (await publicRes.json()) as Paginated<unknown>;
     expect(Array.isArray(publicBody.items)).toBe(true);
     expect(publicBody.total).toBeLessThanOrEqual(adminBody.total);
+  });
+});
+
+test.describe('后台动态图片尺寸', () => {
+  test('新建 / 编辑动态写入 mediaSize，公开列表返回同一档位', async ({
+    request,
+  }) => {
+    const marker = uniqueSuffix();
+    let id: string | undefined;
+
+    try {
+      const created = await request.post('/api/v1/admin/moments', {
+        headers: ADMIN_HEADERS,
+        data: {
+          body: `E2E 尺寸动态 ${marker}`,
+          category: '碎念',
+          mediaKey: 'moments/w3-museum.jpg',
+          mediaSize: '1080',
+        },
+      });
+      expect(created.status()).toBe(201);
+      const createdBody = (await created.json()) as { item: MomentItem };
+      id = createdBody.item.id;
+      // 新建时选的尺寸必须落库，不能被 POST 静默丢弃
+      expect(createdBody.item.mediaSize).toBe('1080');
+
+      const listed = await request.get('/api/v1/moments?limit=100');
+      expect(listed.status()).toBe(200);
+      const listedBody = (await listed.json()) as Paginated<MomentItem>;
+      const listedItem = listedBody.items.find((item) => item.id === id);
+      expect(listedItem?.mediaSize).toBe('1080');
+
+      // 编辑改成「原图」：接口与公开列表同步
+      const patched = await request.patch(`/api/v1/admin/moments/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { mediaSize: 'orig' },
+      });
+      expect(patched.status()).toBe(200);
+      const patchedBody = (await patched.json()) as { item: MomentItem };
+      expect(patchedBody.item.mediaSize).toBe('orig');
+
+      const after = await request.get('/api/v1/moments?limit=100');
+      const afterBody = (await after.json()) as Paginated<MomentItem>;
+      expect(afterBody.items.find((item) => item.id === id)?.mediaSize).toBe(
+        'orig',
+      );
+    } finally {
+      if (id) await deleteQuietly(request, `/api/v1/admin/moments/${id}`);
+    }
+  });
+});
+
+test.describe('后台展柜图片尺寸', () => {
+  test('新增 / 编辑藏品写入 mediaSize，后台列表往返一致', async ({
+    request,
+  }) => {
+    const no = `E2E-${Date.now().toString(36)}`;
+    let id: string | undefined;
+
+    try {
+      const created = await request.post('/api/v1/admin/gallery', {
+        headers: ADMIN_HEADERS,
+        data: {
+          no,
+          name: 'E2E 尺寸藏品',
+          category: '画集',
+          mediaKey: 'gallery/k6-print.jpg',
+          mediaSize: '480',
+          // 不陈列：本套用例 fullyParallel，避免并发改动公开列表总量，
+          // 让「后台展柜读取」里的 public.total <= admin.total 断言互相干扰。
+          displayed: false,
+        },
+      });
+      expect(created.status()).toBe(201);
+      const createdBody = (await created.json()) as { item: GalleryItem };
+      id = createdBody.item.id;
+      // 新建时选的尺寸必须落库，不能被 POST 静默丢弃
+      expect(createdBody.item.mediaSize).toBe('480');
+
+      const listed = await request.get('/api/v1/admin/gallery?limit=100', {
+        headers: ADMIN_HEADERS,
+      });
+      expect(listed.status()).toBe(200);
+      const listedBody = (await listed.json()) as Paginated<GalleryItem>;
+      const listedItem = listedBody.items.find((item) => item.id === id);
+      expect(listedItem?.mediaSize).toBe('480');
+
+      // 编辑改成 1080：后台列表同步（公开列表只返回陈列项，由前台用例覆盖）
+      const patched = await request.patch(`/api/v1/admin/gallery/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { mediaSize: '1080' },
+      });
+      expect(patched.status()).toBe(200);
+      const patchedBody = (await patched.json()) as { item: GalleryItem };
+      expect(patchedBody.item.mediaSize).toBe('1080');
+
+      const after = await request.get('/api/v1/admin/gallery?limit=100', {
+        headers: ADMIN_HEADERS,
+      });
+      const afterBody = (await after.json()) as Paginated<GalleryItem>;
+      expect(afterBody.items.find((item) => item.id === id)?.mediaSize).toBe(
+        '1080',
+      );
+    } finally {
+      if (id) await deleteQuietly(request, `/api/v1/admin/gallery/${id}`);
+    }
   });
 });
 

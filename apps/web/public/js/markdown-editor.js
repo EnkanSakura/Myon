@@ -9,7 +9,8 @@
      - 编辑后派发 textarea 的 input 事件（页面已有的字数、脏状态逻辑照常工作）
      - 预览：about 模式用 MyonMarkdown.render()，article 模式用
        MyonMarkdown.renderArticle()（去 h1、h2 编号、代码块卡片，对齐前台正文）
-     - 图片按钮复用 MyonMediaPicker（现有 R2 图片 + 上传）
+     - 图片按钮复用 MyonMediaPicker（现有 R2 图片 + 上传）；传了 media.sizes 时
+       选择器带尺寸档位，插入 Markdown 会按所选档位生成 ?size=…&q=80
      - 面板头的「全屏」按钮把编辑区 + 预览区两栏一起铺满视口，Esc 退出
        （弹窗关闭时会自动退出，避免页面被锁滚动）
 
@@ -18,9 +19,19 @@
          textarea: "#mdInput",
          preview: "#mdPreview",
          mode: "about" | "article",
-         media: { api, gifApi, base }   // 可省略；省略时「图片」按钮禁用
+         // 可省略；省略时「图片」按钮禁用
+         media: {
+           api, gifApi, base,              // 必填（api 为空则按钮禁用）
+           sizes: ["480", "720", "1080", "1440", "orig"], // 可选；传了才显示尺寸栏
+           defaultSize: "720"              // 可选；默认插入档位
+         }
        })  ->  { render(), focus() }
      ========================================================================== */
+
+  // 内容图片默认档位与质量：和 @myon/shared 的 defaultMediaImageSize / mediaImageQuality 一致。
+  // 关于页不传 sizes 时仍插入普通 /media/<key>（不追加转换参数）。
+  var DEFAULT_IMAGE_SIZE = "720";
+  var IMAGE_QUALITY = 80;
 
   var TOOL_GROUPS = [
     [
@@ -310,25 +321,50 @@
       replaceRange(range.start, range.end, block, start, range.start + lead.length + innerEnd);
     }
 
+    /* ---------- 正文图片地址：传了尺寸档位才追加 ?size=…&q=80 ---------- */
+    function imageSizes() {
+      return media && Array.isArray(media.sizes) ? media.sizes : [];
+    }
+
+    function imageMarkdownUrl(key, size) {
+      var base = media.base || "/media/";
+      var url = String(base) + key;
+      var sizes = imageSizes();
+      // 关于页 / 未接入尺寸档位的调用：保持旧行为，插入普通 /media/<key>。
+      if (!sizes.length) return url;
+      var image = window.MyonImage;
+      if (!image || typeof image.withSize !== "function") return url;
+      var edge = size || media.defaultSize || DEFAULT_IMAGE_SIZE;
+      return image.withSize(url, edge, IMAGE_QUALITY);
+    }
+
     function insertImage() {
       if (!picker) return;
       savedRange = caret();
-      picker.open({
+      var sizes = imageSizes();
+      var opts = {
         mode: "insert",
         api: media.api,
         gifApi: media.gifApi || "",
         base: media.base || "/media/",
-        onPick: function (item) {
+        onPick: function (item, size) {
           if (!item || !item.key) return;
           var range = savedRange || caret();
           var alt = String(item.filename || item.key).replace(/\.[a-z0-9]{1,8}$/i, "").replace(/[[\]()]/g, "").trim() || "图片";
-          var markdown = "![" + alt + "](" + String(media.base || "/media/") + item.key + ")";
+          var markdown = "![" + alt + "](" + imageMarkdownUrl(item.key, size) + ")";
           savedRange = null;
           textarea.value = value().slice(0, range.start) + markdown + value().slice(range.end);
           focusRange(range.start + markdown.length, range.start + markdown.length);
           fireInput();
         }
-      });
+      };
+      // 尺寸档位只在文章编辑器启用；关于页不传 sizes，选择器不显示尺寸栏。
+      if (sizes.length) {
+        opts.sizes = sizes;
+        opts.defaultSize = media.defaultSize || DEFAULT_IMAGE_SIZE;
+        opts.size = media.defaultSize || DEFAULT_IMAGE_SIZE;
+      }
+      picker.open(opts);
     }
 
     function insertAlert(type) {

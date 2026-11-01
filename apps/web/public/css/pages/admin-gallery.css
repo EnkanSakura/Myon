@@ -164,6 +164,21 @@
 .gfld > span b{color:var(--ppk-deep)}
 .gfld input,.gfld textarea{width:100%;border:2px solid var(--ink);border-radius:0;background:var(--paper);
   font-family:var(--sans);font-size:15px;color:var(--ink);padding:7px 9px;line-height:1.5}
+/* 媒体 key 行：输入框 + 「媒体库」图标按钮 */
+.gfld-row{display:flex;align-items:stretch;gap:6px;min-width:0}
+.gfld-row input{flex:1;min-width:0}
+.gf-pick{
+  flex:none;display:grid;place-items:center;width:42px;padding:0;border:2px solid var(--ink);border-radius:0;
+  background:var(--paper);color:var(--ink);cursor:pointer;
+  transition:background .13s var(--ease),color .13s var(--ease),border-color .13s var(--ease);
+}
+.gf-pick svg{display:block;width:18px;height:18px}
+.gf-pick:hover{background:var(--ppk);border-color:var(--ink)}
+.gf-pick:focus-visible{outline:2px solid var(--ppk-deep);outline-offset:2px}
+.gf-media-size{
+  margin:2px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.04em;line-height:1.6;
+  color:var(--ink-62);white-space:nowrap;
+}
 .gfld textarea{resize:vertical;min-height:72px;font-size:14px;line-height:1.7}
 .gfld input:focus,.gfld textarea:focus{outline:none;border-color:var(--ppk-deep);box-shadow:3px 3px 0 var(--ppk)}
 .gfld.is-invalid input,.gfld.is-invalid textarea{border-color:var(--ppk-deep);box-shadow:3px 3px 0 var(--ppk)}

@@ -153,6 +153,14 @@
     return MEDIA_BASE + String(key).replace(/^\/+/, "");
   }
   function absoluteUrl(key) { return location.origin + mediaUrl(key); }
+  /** 网格缩略图走低清预览（长边 360px），不拉原图；外链 / 空值原样返回。 */
+  function previewUrl(key) {
+    var src = mediaUrl(key);
+    var image = window.MyonImage;
+    return image && typeof image.preview === "function"
+      ? image.preview(src, 360)
+      : src;
+  }
   function isImage(item) {
     if (!item) return false;
     if (item.mime && String(item.mime).indexOf("image/") === 0) return true;
@@ -320,7 +328,7 @@
 
     if (isImage(item) && item.key) {
       var img = el("img");
-      img.src = mediaUrl(item.key);
+      img.src = previewUrl(item.key);
       img.alt = item.filename || item.key;
       img.loading = "lazy";
       img.addEventListener("error", function () {

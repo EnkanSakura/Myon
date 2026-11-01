@@ -75,10 +75,26 @@
   var STATS_URL = pageEl ? pageEl.getAttribute("data-api-stats") || "" : "";
 
   // 正文编辑器的图片按钮复用共享媒体选择器（只把服务端渲染的地址透传给共享组件）。
+  // 尺寸档位来自 @myon/shared 的 mediaImageSizes（页面用 data-image-sizes 渲染成 JSON）。
+  var IMAGE_SIZES = (function () {
+    var raw = pageEl ? pageEl.getAttribute("data-image-sizes") : "";
+    var image = window.MyonImage;
+    if (image && typeof image.parseSizes === "function") return image.parseSizes(raw);
+    try {
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  })();
+
   var MEDIA_CONFIG = {
     api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
     gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
-    base: pageEl ? pageEl.getAttribute("data-media-base") || "" : ""
+    base: pageEl ? pageEl.getAttribute("data-media-base") || "" : "",
+    sizes: IMAGE_SIZES,
+    // 文章正文的默认档位：与 @myon/shared 的 defaultMediaImageSize 一致。
+    defaultSize: "720"
   };
 
   var rowsEl = $("rows");

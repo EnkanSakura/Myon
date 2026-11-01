@@ -112,6 +112,12 @@
   min-width:0;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-family:var(--mono);font-size:12px;letter-spacing:.03em;color:var(--ink-62);
 }
+/* 配图尺寸文案：硬边框 + 等宽小字，和后台其它元信息标签一致 */
+.moment-size{
+  display:inline-block;flex:none;padding:3px 7px;border:2px solid var(--pline);border-radius:0;
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;line-height:1.5;color:var(--ink-62);
+  white-space:nowrap;
+}
 
 /* 单行输入 + 可见性 / 置顶开关 */
 .moment-input{

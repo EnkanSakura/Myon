@@ -8,6 +8,19 @@
   var pageEl = document.querySelector(".page[data-api]");
   var API = pageEl ? pageEl.getAttribute("data-api") : "";
   var STATS_API = pageEl ? pageEl.getAttribute("data-stats-api") : "";
+  // 「媒体库」按钮复用共享选择器（接口地址与图片前缀都由服务端渲染）。
+  var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
+  var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
+  var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/";
+  // 尺寸档位：由页面用 @myon/shared 的 mediaImageSizes 渲染成 JSON。
+  var IMAGE_SIZES = (function () {
+    var raw = pageEl ? pageEl.getAttribute("data-image-sizes") : "";
+    var image = window.MyonImage;
+    if (image && typeof image.parseSizes === "function") return image.parseSizes(raw);
+    return ["480", "720", "1080", "1440", "orig"];
+  })();
+  // 老数据没有 mediaSize 时按默认 720 处理；与 @myon/shared 的 defaultMediaImageSize 一致。
+  var DEFAULT_MEDIA_SIZE = "720";
 
   function $(id) { return document.getElementById(id); }
   function each(list, fn) { Array.prototype.forEach.call(list, fn); }
@@ -94,7 +107,9 @@
     loading: false,
     saving: false,
     editing: null,
-    pendingDelete: null
+    pendingDelete: null,
+    // 当前编辑表单里的图片尺寸档位（新建 / 老数据默认 720）
+    mediaSize: DEFAULT_MEDIA_SIZE
   };
 
   var toastTimer = null;
@@ -156,6 +171,49 @@
   function mediaUrl(key) {
     if (!key) return "";
     return MEDIA_PREFIX + String(key).replace(/^\/+/, "");
+  }
+
+  /** 站内图片低清预览地址；外链 / 空值由 MyonImage 原样返回。 */
+  function previewSrc(src, width) {
+    var image = window.MyonImage;
+    return image && typeof image.preview === "function"
+      ? image.preview(src, width)
+      : src;
+  }
+
+  /** 内容图按尺寸档位取转换地址（orig 时带 size=orig）。 */
+  function contentSrc(src, size) {
+    var image = window.MyonImage;
+    return image && typeof image.content === "function"
+      ? image.content(src, size || DEFAULT_MEDIA_SIZE)
+      : src;
+  }
+
+  /** 尺寸档位文案：「长边 720px」/「原图」。 */
+  function sizeText(size) {
+    var image = window.MyonImage;
+    if (image && typeof image.describe === "function") return image.describe(size);
+    return String(size) === "orig" ? "原图" : "长边 " + size + "px";
+  }
+
+  /** 从表单里的媒体地址反推媒体库 key（兼容站内路径 / 旧 /assets/ / 纯 key）。 */
+  function mediaKeyOf(value) {
+    var raw = String(value || "").trim();
+    if (!raw || /^(https?:)?\/\//.test(raw)) return "";
+    var base = MEDIA_BASE || "/media/";
+    if (raw.indexOf(base) === 0) return raw.slice(base.length);
+    if (raw.indexOf("/assets/") === 0) return raw.slice("/assets/".length);
+    if (raw.indexOf("/media/") === 0) return raw.slice("/media/".length);
+    return raw.replace(/^\/+/, "");
+  }
+
+  /** 表单里的尺寸文案：跟着 state.mediaSize 走。 */
+  function paintMediaSizeText() {
+    var label = $("fMediaSize");
+    if (!label) return;
+    var size = state.mediaSize || DEFAULT_MEDIA_SIZE;
+    label.textContent = sizeText(size);
+    label.title = "藏品图片长边像素 · " + sizeText(size);
   }
   function formatDate(value) {
     return value ? String(value).slice(0, 10).replace(/-/g, ".") : "—";
@@ -301,7 +359,8 @@
       var img = el("img");
       img.alt = item.name;
       img.loading = "lazy";
-      img.src = mediaUrl(item.mediaKey);
+      // 列表缩略图走低清预览（长边 480px），不拉原图。
+      img.src = previewSrc(mediaUrl(item.mediaKey), 480);
       img.addEventListener("error", function () {
         img.hidden = true;
         if (!thumb.querySelector(".g-nofig")) thumb.appendChild(noFig());
@@ -561,19 +620,50 @@
 
   function updatePreview() {
     var key = $("fMedia").value.trim();
+    paintMediaSizeText();
     if (!key) {
       editPreview.hidden = true;
       return;
     }
+    var size = state.mediaSize || DEFAULT_MEDIA_SIZE;
+    // 预览地址与前台展柜一致：按 mediaSize 取转换图（orig 时带 size=orig）。
+    var src = contentSrc(mediaUrl(key), size);
     editPreview.hidden = false;
-    editPreviewText.textContent = key + " → " + mediaUrl(key);
+    editPreviewText.textContent = key + " → " + src;
     editPreviewImg.hidden = false;
     editPreviewImg.onload = function () { editPreviewImg.hidden = false; };
     editPreviewImg.onerror = function () {
       editPreviewImg.hidden = true;
-      editPreviewText.textContent = key + " · 图片加载失败（key 可能不存在）";
+      editPreviewText.textContent =
+        key + " · " + sizeText(size) + " · 图片加载失败（key 可能不存在）";
     };
-    editPreviewImg.src = mediaUrl(key);
+    editPreviewImg.src = src;
+  }
+
+  /** 打开共享媒体选择器：回填媒体 key 与尺寸档位，再刷新预览。 */
+  function openMediaPicker() {
+    var picker = window.MyonMediaPicker;
+    if (!picker || typeof picker.open !== "function") {
+      toast("媒体选择器未加载，请刷新页面");
+      return;
+    }
+    picker.open({
+      mode: "pick",
+      api: MEDIA_API,
+      gifApi: GIF_API,
+      base: MEDIA_BASE,
+      sizes: IMAGE_SIZES,
+      defaultSize: DEFAULT_MEDIA_SIZE,
+      size: state.mediaSize || DEFAULT_MEDIA_SIZE,
+      selectedKey: mediaKeyOf($("fMedia").value),
+      onPick: function (item, size) {
+        if (!item || !item.key) return;
+        if (size) state.mediaSize = size;
+        $("fMedia").value = item.key;
+        updatePreview();
+        toast("已选藏品图片 · " + sizeText(state.mediaSize));
+      }
+    });
   }
 
   function openEditor(item) {
@@ -589,6 +679,8 @@
     $("fEra").value = item && item.era ? item.era : "";
     $("fPos").value = String(item ? item.position : 0);
     $("fMedia").value = item && item.mediaKey ? item.mediaKey : "";
+    // 编辑回填尺寸档位；老数据没有 mediaSize 时按默认 720。
+    state.mediaSize = item && item.mediaSize ? item.mediaSize : DEFAULT_MEDIA_SIZE;
     $("fNote").value = item && item.note ? item.note : "";
     $("fDisplayed").checked = item ? !!item.displayed : false;
     hideFormError();
@@ -608,13 +700,16 @@
   function readForm() {
     var position = parseInt($("fPos").value, 10);
     if (isNaN(position)) position = 0;
+    var mediaKey = $("fMedia").value.trim() || null;
     return {
       no: $("fNo").value.trim(),
       name: $("fName").value.trim(),
       category: $("fCat").value.trim(),
       era: $("fEra").value.trim() || null,
       note: $("fNote").value.trim() || null,
-      mediaKey: $("fMedia").value.trim() || null,
+      mediaKey: mediaKey,
+      // 没填媒体 key 时不写尺寸，避免给空图位留一个无意义的档位。
+      mediaSize: mediaKey ? state.mediaSize || DEFAULT_MEDIA_SIZE : null,
       displayed: $("fDisplayed").checked,
       position: position
     };
@@ -843,6 +938,7 @@
   editForm.addEventListener("submit", submitEditor);
   editCancel.addEventListener("click", closeEditor);
   $("fMedia").addEventListener("input", updatePreview);
+  $("fMediaPick").addEventListener("click", openMediaPicker);
   editDlg.addEventListener("click", function (event) {
     if (event.target === editDlg) closeEditor();
   });

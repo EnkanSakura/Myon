@@ -333,9 +333,37 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     await page.locator('.md-tool[data-md-act="bold"]').click();
     await expect(page.locator('#fBody')).toHaveValue(/^\*\*加粗文字\*\*/);
 
-    // 媒体选择器：现有图片里选一张，插入 Markdown 图片语法
+    // 媒体选择器：默认 720 档位，插入带转换参数的 Markdown 图片语法
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    // 尺寸栏：五个档位、默认 720 高亮、角色是 radio
+    const sizeBar = page.locator('#mpSize');
+    await expect(sizeBar).toBeVisible();
+    await expect(page.locator('#mpSizeOpts')).toHaveAttribute(
+      'role',
+      'radiogroup',
+    );
+    const sizeButtons = page.locator('#mpSize .mp-size-btn');
+    await expect(sizeButtons).toHaveCount(5);
+    await expect(sizeButtons).toHaveText([
+      '480',
+      '720',
+      '1080',
+      '1440',
+      '原图',
+    ]);
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(sizeBar).toContainText('长边像素 · 默认 720px');
+    // 媒体库网格缩略图走低清预览（size=320&q=70），不拉原图
+    const pickerThumb = page.locator('#mpGrid .mp-item img').first();
+    await expect(pickerThumb).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-a\.webp\?size=320&q=70/,
+    );
     await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
@@ -343,7 +371,29 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
       '',
     );
     await expect(page.locator('#fBody')).toHaveValue(
-      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\)/,
+      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=720&q=80\)/,
+    );
+
+    // 切到 1080：插入的地址跟着档位走
+    await page.locator('.md-tool[data-md-act="image"]').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpSize .mp-size-btn[data-size="1080"]').click();
+    await expect(
+      page.locator('#mpSize .mp-size-btn[data-size="1080"]'),
+    ).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#mpGrid .mp-item').first().click();
+    await expect(page.locator('#fBody')).toHaveValue(
+      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=1080&q=80\)/,
+    );
+
+    // 切到「原图」：只带 size=orig（不带 q），和默认 720 区分
+    await page.locator('.md-tool[data-md-act="image"]').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpSize .mp-size-btn[data-size="orig"]').click();
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('原图');
+    await page.locator('#mpGrid .mp-item').first().click();
+    await expect(page.locator('#fBody')).toHaveValue(
+      /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=orig\)/,
     );
 
     const saveRequest = page.waitForRequest(
@@ -359,7 +409,13 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     expect(payload.title).toBe('E2E 文章');
     expect(payload.bodyMd).toContain('~~删除线~~');
     expect(payload.bodyMd).toContain(
-      '![e2e-a](/media/uploads/202601/e2e-a.webp)',
+      '![e2e-a](/media/uploads/202601/e2e-a.webp?size=720&q=80)',
+    );
+    expect(payload.bodyMd).toContain(
+      '![e2e-a](/media/uploads/202601/e2e-a.webp?size=1080&q=80)',
+    );
+    expect(payload.bodyMd).toContain(
+      '![e2e-a](/media/uploads/202601/e2e-a.webp?size=orig)',
     );
     await expect(page.locator('#postDlg')).not.toHaveAttribute('open', '');
   });
@@ -394,6 +450,8 @@ test.describe('后台关于页 · 共享编辑器', () => {
 
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    // 关于页不传尺寸档位：尺寸栏整条隐藏，插入普通 /media/<key>
+    await expect(page.locator('#mpSize')).toBeHidden();
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#mdInput')).toHaveValue(
       /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\)/,
@@ -580,7 +638,9 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     category: '日常',
     visibility: 'public',
     pinned: false,
-    mediaKey: null,
+    // 老数据：有配图但 mediaSize 为空，列表按默认 720 / 低清预览显示
+    mediaKey: MEDIA_ITEMS[1].key,
+    mediaSize: null,
     createdAt: '2026-01-02T03:04:05.000Z',
   };
 
@@ -622,6 +682,11 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await expect(page.locator('#catSel-combo')).toBeVisible();
     await expect(page.locator('.filterbar')).toBeVisible();
     await expect(page.locator('.note-r')).toHaveCount(1);
+    // 后台列表缩略图走低清预览（长边 240px），不拉原图
+    await expect(page.locator('.nr-thumb img').first()).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-b\.webp\?size=240&q=70/,
+    );
 
     // 编辑：呼出对话框并预填
     await page.locator('.note-r [data-act="edit"]').click();
@@ -640,10 +705,20 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#categoryList')).toBeHidden();
     await page.locator('#noteText').fill('更新后的正文');
+    // 配图尺寸：默认 720，可在选择器里切换；预览地址跟着档位走
+    await expect(page.locator('#attachSize')).toHaveText('长边 720px');
     await page.locator('#btnPickImage').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await expect(page.locator('#mpSize')).toBeVisible();
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await page.locator('#mpSize .mp-size-btn[data-size="1080"]').click();
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#attachBox')).toHaveClass(/is-on/);
+    await expect(page.locator('#attachSize')).toHaveText('长边 1080px');
+    await expect(page.locator('#attachImg')).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-a\.webp\?size=1080&q=80/,
+    );
     await page.locator('#btnPublish').click();
     await expect(page.locator('#momentDlg')).not.toHaveAttribute('open', '');
     expect(saved.at(-1)).toMatchObject({
@@ -652,6 +727,7 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
         body: '更新后的正文',
         category: '日常',
         mediaKey: MEDIA_ITEMS[0].key,
+        mediaSize: '1080',
       },
     });
 
@@ -676,16 +752,41 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
 
 test.describe('后台展柜 · 分类组合框', () => {
   test('新增藏品对话框用自绘候选列表，不再出现 datalist', async ({ page }) => {
+    // 列表里放一件带图的藏品：验证卡片缩略图走低清预览（长边 480px）
+    const galleryItem = {
+      id: 'g_e2e_a',
+      no: 'C-01',
+      name: '测试藏品',
+      category: '手办',
+      era: null,
+      note: null,
+      mediaKey: MEDIA_ITEMS[0].key,
+      mediaSize: null,
+      displayed: true,
+      position: 0,
+      createdAt: '2026-01-02T00:00:00.000Z',
+    };
+    const saved: { method: string; payload: Record<string, unknown> }[] = [];
+
     await initToken(page);
     await mockAdminChrome(page);
     await page.route('**/api/v1/admin/gallery**', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
-          json: { items: [], total: 0, limit: 20, offset: 0 },
+          json: {
+            items: [galleryItem],
+            total: 1,
+            limit: 20,
+            offset: 0,
+          },
         });
         return;
       }
-      await route.fulfill({ json: { item: {} } });
+      saved.push({
+        method: route.request().method(),
+        payload: route.request().postDataJSON() as Record<string, unknown>,
+      });
+      await route.fulfill({ json: { item: galleryItem } });
     });
     await page.route('**/api/v1/stats', async (route) => {
       await route.fulfill({
@@ -704,6 +805,11 @@ test.describe('后台展柜 · 分类组合框', () => {
     await page.goto('/admin/gallery');
     // 后台页面不再有 .sec / .sec-h 区块头，区块直接平铺到 .page
     await expect(page.locator('.sec, .sec-h')).toHaveCount(0);
+    await expect(page.locator('.g-card')).toHaveCount(1);
+    await expect(page.locator('.g-thumb img').first()).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-a\.webp\?size=480&q=70/,
+    );
     await expect(page.locator('#btnAdd')).toBeEnabled();
     await page.locator('#btnAdd').click();
     await expect(page.locator('#editDlg')).toHaveAttribute('open', '');
@@ -716,5 +822,37 @@ test.describe('后台展柜 · 分类组合框', () => {
     await page.locator('#catList .combo-item[data-value="画集"]').click();
     await expect(page.locator('#fCat')).toHaveValue('画集');
     await expect(page.locator('#catList')).toBeHidden();
+
+    // 媒体库按钮：选择器带尺寸档位，回填媒体 key + 尺寸，预览走转换地址
+    await expect(page.locator('#fMediaSize')).toHaveText('长边 720px');
+    await page.locator('#fMediaPick').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await expect(page.locator('#mpSize')).toBeVisible();
+    await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await page.locator('#mpSize .mp-size-btn[data-size="1440"]').click();
+    await page.locator('#mpGrid .mp-item').first().click();
+    await expect(page.locator('#fMedia')).toHaveValue(
+      'uploads/202601/e2e-a.webp',
+    );
+    await expect(page.locator('#fMediaSize')).toHaveText('长边 1440px');
+    await expect(page.locator('#editPreviewImg')).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-a\.webp\?size=1440&q=80/,
+    );
+
+    // 保存：提交 payload 带上媒体 key 与尺寸档位
+    await page.locator('#fNo').fill('E2E-01');
+    await page.locator('#fName').fill('E2E 藏品');
+    await page.locator('#editSubmit').click();
+    await expect(page.locator('#editDlg')).not.toHaveAttribute('open', '');
+    expect(saved.at(-1)).toMatchObject({
+      method: 'POST',
+      payload: {
+        no: 'E2E-01',
+        name: 'E2E 藏品',
+        mediaKey: 'uploads/202601/e2e-a.webp',
+        mediaSize: '1440',
+      },
+    });
   });
 });

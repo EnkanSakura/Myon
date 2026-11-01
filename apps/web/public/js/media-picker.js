@@ -11,9 +11,14 @@
          gifApi: ".../media/gif-webp",// GIF 转码代理（可空）
          base: "/media/",             // 图片地址前缀，来自 mediaUrl()
          selectedKey: "uploads/xx",   // pick 模式下的已选图
-         onPick: function (item) {}   // item = MediaItem { id, key, filename, mime, size, ... }
+         sizes: ["480", "720", "1080", "1440", "orig"], // 可选；传了才显示尺寸栏
+         defaultSize: "720",          // 尺寸栏默认高亮档位
+         size: "720",                 // 初始选中档位（优先于 defaultSize）
+         onPick: function (item, size) {} // item = MediaItem；size = 当前尺寸档位
        })
 
+     尺寸档位来自页面 data-image-sizes（@myon/shared 的 mediaImageSizes），
+     不传 sizes 时整条尺寸栏隐藏，行为与旧版一致（设置页 / 关于页）。
      图片处理复用 /js/image-upload.js（MyonImageUpload.prepareImage），
      令牌仍是顶栏的 localStorage['myon-admin-token']，这里只读不写。
      ========================================================================== */
@@ -93,6 +98,12 @@
       '<div class="notice-c"><b>需要管理令牌</b><p>读取媒体库和上传图片都要先在顶栏填写「管理令牌」。</p></div>' +
       '<button class="notice-btn" type="button" data-token-open>管理令牌</button>' +
       "</div>" +
+      // 尺寸栏：不传 sizes 的调用（设置页 / 关于页）整条隐藏，保持旧行为。
+      '<div class="mp-size" id="mpSize" hidden>' +
+      '<div class="mp-size-row"><span class="mp-size-k">尺寸</span>' +
+      '<div class="mp-size-opts" id="mpSizeOpts" role="radiogroup" aria-label="图片尺寸"></div></div>' +
+      '<p class="mp-size-hint">长边像素 · 默认 720px</p>' +
+      "</div>" +
       '<div class="dlg-f"><span class="mp-selected" id="mpSelected">—</span>' +
       '<div class="dlg-a"><button class="p-btn" id="mpCancel" type="button">关闭</button></div></div>' +
       "</div>";
@@ -113,6 +124,8 @@
       pickFile: document.getElementById("mpPickFile"),
       upList: document.getElementById("mpUpList"),
       notice: document.getElementById("mpNotice"),
+      sizeBar: document.getElementById("mpSize"),
+      sizeOpts: document.getElementById("mpSizeOpts"),
       selected: document.getElementById("mpSelected"),
       cancel: document.getElementById("mpCancel")
     };
@@ -153,6 +166,70 @@
     return String(state.base || "/media/") + item.key;
   }
 
+  /** 选择器网格的缩略图：站内低清预览（size=320&q=70），外链原样。 */
+  function previewSrc(item) {
+    var src = mediaSrc(item);
+    var image = window.MyonImage;
+    return image && typeof image.preview === "function"
+      ? image.preview(src, 320)
+      : src;
+  }
+
+  /** 尺寸档位文案：orig →「原图」，数字原样。 */
+  function sizeLabel(size) {
+    var image = window.MyonImage;
+    if (image && typeof image.label === "function") return image.label(size);
+    return String(size) === "orig" ? "原图" : String(size);
+  }
+
+  /** 当前选中的尺寸：没传 sizes 的调用返回空串（回调第二参为 undefined）。 */
+  function activeSize() {
+    return state && state.sizes && state.sizes.length ? state.size : "";
+  }
+
+  function paintSizes() {
+    if (!refs || !refs.sizeBar || !refs.sizeOpts) return;
+    if (!state.sizes || !state.sizes.length) {
+      refs.sizeBar.hidden = true;
+      refs.sizeOpts.innerHTML = "";
+      return;
+    }
+    refs.sizeBar.hidden = false;
+    refs.sizeOpts.innerHTML = "";
+    var frag = document.createDocumentFragment();
+    state.sizes.forEach(function (size) {
+      var btn = el(
+        "button",
+        "mp-size-btn" + (size === state.size ? " is-on" : ""),
+        sizeLabel(size)
+      );
+      btn.type = "button";
+      btn.setAttribute("role", "radio");
+      btn.setAttribute("aria-checked", size === state.size ? "true" : "false");
+      btn.setAttribute("data-size", size);
+      btn.title =
+        String(size) === "orig" ? "保持原图尺寸" : "长边 " + size + "px";
+      // 点选只切换高亮，真正的取值在点击图片 / 上传成功时随 onPick 回传。
+      btn.addEventListener("click", function () {
+        selectSize(size);
+      });
+      frag.appendChild(btn);
+    });
+    refs.sizeOpts.appendChild(frag);
+  }
+
+  function selectSize(size) {
+    if (!state || !size) return;
+    state.size = size;
+    if (!refs || !refs.sizeOpts) return;
+    var buttons = refs.sizeOpts.querySelectorAll(".mp-size-btn");
+    Array.prototype.forEach.call(buttons, function (btn) {
+      var on = btn.getAttribute("data-size") === size;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
   function renderGrid() {
     var q = state.q.trim().toLowerCase();
     var items = state.items.filter(function (item) {
@@ -170,7 +247,7 @@
       btn.title = imageName(item) + " · " + formatSize(item.size);
       if (state.selectedKey && item.key === state.selectedKey) btn.classList.add("is-on");
       var img = document.createElement("img");
-      img.src = mediaSrc(item);
+      img.src = previewSrc(item);
       img.alt = imageName(item);
       img.loading = "lazy";
       img.decoding = "async";
@@ -261,8 +338,9 @@
   /* ---------------- 选择 / 上传 ---------------- */
   function pick(item) {
     if (!item || state.busy) return;
+    var size = activeSize();
     state.selectedKey = item.key;
-    if (typeof state.onPick === "function") state.onPick(item);
+    if (typeof state.onPick === "function") state.onPick(item, size || undefined);
     closeDialog();
   }
 
@@ -342,8 +420,10 @@
         state.busy = false;
         refs.pickFile.disabled = false;
         if (uploaded.length) {
+          var size = activeSize();
           uploaded.forEach(function (item) {
-            if (typeof state.onPick === "function") state.onPick(item);
+            if (typeof state.onPick === "function")
+              state.onPick(item, size || undefined);
           });
           closeDialog();
         }
@@ -391,12 +471,18 @@
   function open(opts) {
     buildDialog();
     opts = opts || {};
+    // 尺寸档位：只在调用方传了非空数组时启用；默认高亮 720，初始选中优先用 size。
+    var sizes = Array.isArray(opts.sizes) ? opts.sizes.slice() : [];
+    var wanted = String(opts.size || opts.defaultSize || "720");
+    if (sizes.length && sizes.indexOf(wanted) < 0) wanted = sizes[0];
     state = {
       mode: opts.mode === "pick" ? "pick" : "insert",
       api: opts.api || "",
       gifApi: opts.gifApi || "",
       base: opts.base || "/media/",
       selectedKey: opts.selectedKey || null,
+      sizes: sizes.length ? sizes : null,
+      size: sizes.length ? wanted : "",
       onPick: typeof opts.onPick === "function" ? opts.onPick : null,
       token: readToken(),
       items: [],
@@ -411,6 +497,7 @@
     refs.upList.innerHTML = "";
     refs.state.textContent = "—";
     refs.grid.innerHTML = "";
+    paintSizes();
     paintNotice();
     paintSelected();
     setTab("existing");
