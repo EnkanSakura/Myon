@@ -113,8 +113,6 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 | `ADMIN_TOKEN` | 否 | GitHub Secret → Worker secret | 后台写接口的临时门禁；Deploy 时自动同步到 Worker，见 3.3 |
 | `ACCESS_TEAM_DOMAIN` | 否 | GitHub Secret → Worker secret | Cloudflare Access 团队域名，如 `myon.cloudflareaccess.com`；配置后改用 Access JWT 鉴权 |
 | `ACCESS_AUD` | 否 | GitHub Secret → Worker secret | 后台 Access 应用（`/admin*` 那个）的 Audience Tag，与 `ACCESS_TEAM_DOMAIN` 成对配置 |
-| `CF_ACCESS_CLIENT_ID` | 否 | GitHub Secret | Cloudflare Access Service Token 的 Client ID；配了之后 smoke test 会带上 Access 头（与下一项成对） |
-| `CF_ACCESS_CLIENT_SECRET` | 否 | GitHub Secret | 与上一项成对配置；用于让 CI 的 smoke test 通过 Access 保护 |
 | `BANGUMI_ACCESS_TOKEN` | 否 | GitHub Secret → Worker secret | Bangumi 同步令牌（Cron 与后台手动同步用） |
 | `BANGUMI_USERNAME` | 否 | GitHub Secret → Worker secret | Bangumi 用户名；与上者成对配置，缺一则自动跳过同步 |
 | `IMG2WEBP_TOKEN` | 否 | GitHub Secret → Worker secret | GIF → animated WebP 外部服务的 Bearer token；未配置时后台 GIF 上传返回 503 |
@@ -132,8 +130,6 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 | 名称 | 必填 | 用途 |
 | --- | --- | --- |
-| `PRODUCTION_URL` | 建议 | 生产站点地址（如 `https://myon.top`），Deploy 的 smoke test 默认 curl `<PRODUCTION_URL>/api/health`；不填则跳过 smoke |
-| `SMOKE_URL` | 否 | smoke test 使用的地址（默认取 `PRODUCTION_URL`）。生产域名被 WAF / Bot Fight / 地区限制拦住 CI 时，可指向 `*.workers.dev` 等绕过边缘的地址，见第 9 节 |
 | `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.top`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
 | `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
 
@@ -217,44 +213,45 @@ pnpm dev
 
 ---
 
-## 5. 部署流程（三个 workflow 串联）
+## 5. 部署流程（两个 workflow 串联）
 
-生产步骤拆成三个 workflow，push `main` 后自动串联：
+生产步骤拆成两个 workflow，push `main` 后自动串联，**先部署后迁移**：
 
 ```text
 push main
-  └─ Database Migrate（D1 迁移，成功后触发下一步）
-       └─ Deploy（构建 + 上传 Worker）
-            └─ Smoke Test（等待 3 分钟 → curl /api/health）
+  └─ Deploy（构建 + 上传 Worker，新代码必须能容忍旧表结构）
+       └─ Database Migrate（D1 迁移收尾）
 ```
 
 | Workflow | 文件 | 做什么 | 触发 |
 | --- | --- | --- | --- |
-| Database Migrate | `.github/workflows/migrate.yml` | 应用 `packages/back/migrations/` 到生产 D1 | push `main` / 手动 |
-| Deploy | `.github/workflows/deploy.yml` | 生成配置、构建、同步 Worker secret、`wrangler deploy` | Database Migrate 成功后 / 手动 |
-| Smoke Test | `.github/workflows/smoke.yml` | 等待 3 分钟，再请求 `/api/health` | Deploy 成功后 / 手动 |
+| Deploy | `.github/workflows/deploy.yml` | 生成配置、构建、同步 Worker secret、`wrangler deploy` | push `main` / 手动 |
+| Database Migrate | `.github/workflows/migrate.yml` | 应用 `packages/back/migrations/` 到生产 D1 | Deploy 成功后 / 手动 |
 
-`Database Migrate` 与 `Deploy` 使用 GitHub Environment `production`（可在仓库里配置审批人）；
-`Smoke Test` 只读健康探针，不额外审批。
-手动发布时按顺序 Run：先 `Database Migrate`，再 `Deploy`，最后 `Smoke Test`（或等前一个成功后自动触发）。
+`Database Migrate` 与 `Deploy` 使用 GitHub Environment `production`（可在仓库里配置审批人）。
+手动发布时按顺序 Run：先 `Deploy`，再 `Database Migrate`（或等 Deploy 成功后自动触发）。
 
-### 5.1 Database Migrate
+为什么先部署：新 Worker 上线后必须**不再读写即将删除的列/表**（例如删 `moments.tag` 时，
+新版接口已经不 SELECT 它）。这样迁移延后或失败时，线上仍有旧数据但不会因为缺列/多列直接 500；
+Worker 回滚也不会回滚 D1，涉及表结构变更时仍要单独评估。
+
+### 5.1 Deploy
+
+1. `pnpm install --frozen-lockfile`；
+2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空；
+3. `pnpm wrangler:config`（注入 `D1_DATABASE_ID`/`KV_SETTINGS_ID`，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
+4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
+5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`/`IMG2WEBP_TOKEN` 写成临时 JSON（未配置的项跳过，值不会打印）；
+6. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
+7. 删除临时密钥文件。
+
+### 5.2 Database Migrate
 
 1. `pnpm install --frozen-lockfile`；
 2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空；
 3. `pnpm wrangler:config` 生成生产配置（`D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
 4. `wrangler d1 migrations apply myon-blog --remote`（按 migration 编号顺序应用 `packages/back/migrations/`：
-   0013/0014 删 `media`/`settings` 表，0015 给 `bangumi_shows` 加 `subject_type`，0016 加 `comment`，0017 加 `cover_source`）。
-
-### 5.2 Deploy
-
-1. `pnpm install --frozen-lockfile`；
-2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空；
-3. `pnpm wrangler:config`（同上，另外注入 `KV_SETTINGS_ID` 生成 `SETTINGS` 绑定）；
-4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
-5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`/`IMG2WEBP_TOKEN` 写成临时 JSON（未配置的项跳过，值不会打印）；
-6. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
-7. 删除临时密钥文件。
+   0013/0014 删 `media`/`settings` 表，0015 给 `bangumi_shows` 加 `subject_type`，0016 加 `comment`，0017 加 `cover_source`，0018 删 `moments.tag`）。
 
 ### 5.3 旧站点设置迁移（仅从 D1 settings 版本升级时需要）
 
@@ -274,15 +271,6 @@ pnpm exec wrangler kv key put site-settings:v1 --path /tmp/myon-settings-kv.json
 
 全新环境不需要这一步：KV 为空时前台使用 `@myon/shared` 里的默认设置，之后在后台重新填写即可。
 若已经跑了删除 `settings` 表的 migration 且没有备份，只能从 D1 备份恢复或后台重新填写。
-
-### 5.4 Smoke Test
-
-Deploy 成功后触发；**先等待 3 分钟**让新 Worker 版本在边缘生效，再请求 `/api/health`。
-如果配置了 `PRODUCTION_URL`（或 `SMOKE_URL`），会 curl 健康探针并打印结果；
-遇到 Cloudflare 挑战/拦截时会输出响应头与排查提示。未配置 URL 时该 workflow 直接跳过。
-
-**操作**：把改动 push 到 `main` → 打开仓库 Actions → 依次看 `Database Migrate`/`Deploy`/`Smoke Test` 的 run。
-失败时先看红叉 step，常见原因见第 9 节。
 
 ---
 
@@ -313,10 +301,6 @@ Deploy 成功后触发；**先等待 3 分钟**让新 Worker 版本在边缘生�
 验证：无痕窗口打开 `https://<站点>/admin` 应跳转 Access 登录；登录后后台接口正常（Network 里
 `/api/v1/admin/settings` 返回 200）；不带 cookie / JWT 直接 curl `/api/v1/admin/settings` 时由
 Worker 返回 401（API 路径没有单独的 Access 应用，边缘不拦截，鉴权在 Worker 里完成）。
-
-如果 Deploy 的 smoke test 需要访问受 Access 保护的路径：在 Zero Trust → Access → Service Auth
-建一个 Service Token，把 Client ID / Client Secret 配到 Repository Secrets 的
-`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`，smoke 步骤会自动带上 Access 头。
 
 ---
 
@@ -356,9 +340,6 @@ curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/rss.xml
 curl -fsS -o /dev/null -w '%{http_code}\n' https://<域名>/admin   # 开了 Access 时是 302 跳登录
 ```
 
-> CI 的 smoke test 若返回 403、但本机浏览器/`curl` 正常，通常是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP，
-> 不是 Worker 问题；按第 9 节处理。
-
 人工检查：
 
 - [ ] 首页、文章、动态、展柜、追番、工具六个前台页面可打开，样式正常；图片 404 说明 R2 里还没有对应对象（后台媒体库上传）。
@@ -393,7 +374,6 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 | 设置页保存后刷新丢失，或一直显示默认值 | 检查 Worker 是否有 `SETTINGS` KV 绑定（生成配置里的 `kv_namespaces`）；本地可用 `wrangler kv key get site-settings:v1 --local --namespace-id <id>` 验证；生产检查 Secret `CLOUDFLARE_KV_SETTINGS_ID` |
 | 从旧版本升级后站点设置变回默认值 | 升级前未把旧 D1 `settings` 导入 KV。仓库不再内置导入脚本，做法见第 5.3 节；若 `settings` 表已被 migration 删除，只能从 D1 备份恢复或后台重新填写 |
 | Deploy 在生成配置/构建后失败 | 看 step 日志；本地复现：`D1_DATABASE_ID=xxx pnpm wrangler:config && pnpm build`（脚本读的是 `D1_DATABASE_ID`，不是 GitHub Secret 名 `CLOUDFLARE_D1_DATABASE_ID`） |
-| Deploy 在 `Smoke test` 收到 403、但本机浏览器/`curl` 正常 | 大概率是 Cloudflare 边缘拦了 GitHub Actions 的出口 IP（WAF 自定义规则 / Bot Fight Mode / Security Level / 地区·ASN 限制），不是 Worker 返回的 403。看 step 日志里的 `cf-ray`、`cf-mitigated` 与错误页：① 给 `/api/health` 加 WAF Skip 规则，或把 GitHub Actions IP 段（`https://api.github.com/meta` 的 `actions`）加入允许列表；② 站点在 Access 后面时，建一个 Access Service Token 并把 `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` 配到 Repository Secrets；③ 或把 Variable `SMOKE_URL` 指向绕过边缘的地址（如 `*.workers.dev`） |
 | `wrangler deploy` 鉴权失败（401/403） | 检查 `CLOUDFLARE_API_TOKEN` 权限与 `CLOUDFLARE_ACCOUNT_ID`；token 是否过期 |
 | D1 迁移报找不到数据库 | `database_name` 应为 `myon-blog`；确认 Secret 里的 database_id 与账号一致；本地可 `cd apps/web && pnpm exec wrangler d1 migrations list myon-blog --remote`（要在 `apps/web` 下执行，根目录会回退到全局 wrangler） |
 | 部署成功但 Cron 不触发 | 确认生成配置里有 `triggers.crons`（模板固定配置，别手改生成文件）；重新 deploy；Dashboard → Triggers 是否有记录；Cron 只在生产 Worker 上跑 |

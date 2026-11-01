@@ -23,9 +23,9 @@
 - **访问统计写 D1**：`apps/web/src/worker.ts` 对前台 HTML GET 请求写 `page_views`（Asia/Shanghai 天 / 访客指纹 / path），后台总览只用 `GET /api/v1/traffic`（最近 30 天聚合）显示访问数据；后台总览不再展示 D1/R2 资源用量，也不要写设计稿假 PV/UV、假存储额度、假部署哈希。
 - **媒体只存 R2**：`GET /media/<key>` 只从 R2 读；媒体库列表/删除直接操作 R2 对象（`id` 是 key 的 base64url），**D1 里没有 `media` 表，仓库内不保存任何图片资源**。上传前浏览器统一处理：WebP / AVIF / SVG 直传，JPEG / PNG 用 Canvas 转 WebP（q85、最长边 2560px），GIF 先经 Worker 代理 `POST /api/v1/admin/media/gif-webp` 调 `img2webp` 换 animated WebP；后端 `POST /api/v1/admin/media` 只接受 WebP / AVIF / SVG，gif 转码 Secret 是 `IMG2WEBP_TOKEN`，不能下发到浏览器。Bangumi 封面走站内代理与边缘缓存，不再写入 R2，也不会出现在媒体库。
 - **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
-- **发布流程拆成三个 workflow**：push `main` 后按 `Database Migrate`（D1 迁移）→ `Deploy`（只构建 + 部署）→ `Smoke Test`（等待 3 分钟后 curl `/api/health`）串联；`deploy.yml` 不再做迁移和 smoke。
+- **发布流程拆成两个 workflow**：push `main` 后按 `Deploy`（只构建 + 部署）→ `Database Migrate`（D1 迁移）串联，**先部署后迁移**：新 Worker 必须能容忍旧表结构（不再读写待删除的列/表），迁移延后或失败时线上不会因为缺列/多列 500；`deploy.yml` 不做迁移，也不再跑 smoke。
 - **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
-- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图与贴纸文案都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。首页第 2–6 页的数据都来自服务端 `/api/v1/*`（posts / moments / gallery / bangumi / tools / stats）：第 2 页右侧装饰框使用 `home_cover_image`；第 3/4 页的图位只展示真实条目自带的图片（动态 `mediaKey`、藏品 `media_key`），不要再用封面图冒充内容图；第 5 页的「本周放送表」只在同步数据带回 `nextAirAt` 时渲染，不要自行推算放送日。任一页条目为空时统一显示「暂无内容 + 入口」空态，不渲染任何内容图或封面装饰图。
+- **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图、贴纸文案与第 2 页两张装饰图（`home_p2_figure_a` / `home_p2_figure_b`，留空时前台沿用封面图）都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。首页第 2–6 页的数据都来自服务端 `/api/v1/*`（posts / moments / gallery / bangumi / tools / stats）：第 2 页右侧装饰图使用 `home_p2_figure_a` / `home_p2_figure_b`（未配置时回退 `home_cover_image`）；第 3/4 页的图位只展示真实条目自带的图片（动态 `mediaKey`、藏品 `media_key`），不要再用封面图冒充内容图；第 5 页的「本周放送表」只在同步数据带回 `nextAirAt` 时渲染，不要自行推算放送日。任一页条目为空时统一显示「暂无内容 + 入口」空态，不渲染任何内容图或封面装饰图。
 - **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
 - **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
 - **首页窄屏交互**：面板内容高于一屏时先内部滚动，滚到底/顶才翻页，并显示「本页还有内容」提示；不要改回“滚轮直接翻页”。
@@ -39,7 +39,7 @@
 
 1. 不新增部署单元：不新增 Worker、Pages、第二个 `wrangler` 配置，也不把 API 拆成独立服务。
 2. 不改已发布的 API 契约：`/api/v1` 的任何字段/语义变更都必须是新增字段或新增版本；破坏性改动一律新增 `/api/v2` 并同时挂载。
-3. 始终保持 `/api/health` 不版本化、路径不变（监控与部署 smoke test 依赖它）。
+3. 始终保持 `/api/health` 不版本化、路径不变（监控与部署验收依赖它）。
 4. TypeScript 固定在 6.x，不要升级到 7。
 5. 包管理器只用 pnpm（版本见 `packageManager` 字段），Node ≥ 22.22。不要引入 `package-lock.json`、`yarn.lock`、npm/pnpm 混用。
 6. 视觉基线不可动摇：主题色默认 `#EC88C2`、无圆角、硬边框 + 硬阴影的「同人志」风格、中文界面。主题色可由后台配置，页面一律用 `--pink` / `--pink-soft` / `--pink-wash` / `--pink-deep` / `--on-pink` 变量，不写死色值。
