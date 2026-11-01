@@ -113,6 +113,40 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 本地与 CI 不需要任何 Images 配置：Wrangler/Workerd 用内置的离线 Images 实现
 （支持 width/height/format，`wrangler dev` 与 Playwright e2e 里都能真的转图）。
 
+### 2.5 静态资源缓存与按标签清理
+
+`apps/web/public/_headers` 把静态资源分成几组缓存配置，并在响应里带 `Cache-Tag`：
+
+| 路径 | `Cache-Control` | `Cache-Tag` |
+| --- | --- | --- |
+| `/assets/*`（字体、图片） | `public, max-age=31536000, immutable` | `myon-assets` |
+| `/css/*` | `public, max-age=3600` | `myon-css` |
+| `/js/*` | `public, max-age=3600` | `myon-js` |
+| `/_astro/*`（构建产物，文件名带 hash） | `public, max-age=31536000, immutable`（构建器注入） | `myon-astro` |
+| 其余静态资源（favicon 等） | 默认 `max-age=0, must-revalidate` | `myon-static`（`/*` 兜底，会和其他标签叠加） |
+
+> 所有静态资源都会带上兜底标签 `myon-static`，所以一条响应可能同时有多个标签，
+> 例如 `myon-static, myon-css`。`/_astro/*` 的 `Cache-Control` 由 `@astrojs/cloudflare`
+> 在构建时注入，仓库里的规则用 `/_astro/:file` 只补 `Cache-Tag`，不要再写一条
+> 完全相同的 `/_astro/*`（同 pattern 会覆盖构建器注入的 `immutable`）。
+
+`Cache-Tag` 只在 Cloudflare 边缘生效，到达访客前会被移除。部署后要让线上立刻换新样式/脚本：
+
+- Dashboard → **Caching → Configuration → Purge Cache → Custom Purge**，`Purge by` 选 **Tag**，
+  填 `myon-css,myon-js`（只改了 CSS/JS）或 `myon-static`（整组静态资源）。
+- 或调用 API（`CLOUDFLARE_API_TOKEN` 需要该 Zone 的 **Cache Purge** 权限）：
+
+  ```bash
+  curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"tags":["myon-css","myon-js"]}'
+  ```
+
+> purge 只清 Cloudflare 边缘缓存。访客浏览器里已经缓存的旧 CSS/JS 仍会按
+> `max-age=3600` 使用到自然过期；要访客立刻看到新样式就硬刷新，或改成
+> `no-cache` / 给文件名加内容 hash。当前配置优先静态资源的缓存性能。
+
 ---
 
 ## 3. GitHub 配置
