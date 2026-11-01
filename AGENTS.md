@@ -25,6 +25,7 @@
 - **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
 - **发布流程拆成两个 workflow**：push `main` 后按 `Deploy`（只构建 + 部署）→ `Database Migrate`（D1 迁移）串联，**先部署后迁移**：新 Worker 必须能容忍旧表结构（不再读写待删除的列/表），迁移延后或失败时线上不会因为缺列/多列 500；`deploy.yml` 不做迁移，也不再跑 smoke。
 - **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
+- **图片转换走 `/media/<key>?size=`**：`GET /media/<key>?size=<480|720|1080|1440|orig>&q=<1-100>` 由 Worker 用 `env.IMAGES`（Cloudflare Images binding，在 `wrangler.template.jsonc` 的 `images.binding` 声明）生成低分辨率 WebP；`size=orig`、原图本来小于目标、绑定缺失或转换失败时直接回退原图（短缓存 5 分钟），不会破图。**不要用 `/cdn-cgi/image/` URL**：整站由 Worker 接管（`/*`）时 Resizing 会报 9524。前端用 `contentImageUrl()`（内容图，缺省长边 720）/ `mediaImageUrl()`（固定宽高的封面、装饰图）生成地址；后台用 `public/js/image-transform.js` 的 `MyonImage`（媒体库、选择器、后台列表缩略图一律低清预览，如 `?size=360&q=70`）。文章正文里的老图片由 `packages/back/src/markdown.ts` 的 sanitize 自动补默认 `?size=720&q=80`，客户端预览 `public/js/markdown.js` 同步实现。档位与默认值以 `@myon/shared` 的 `mediaImageSizes` / `defaultMediaImageSize` 为准；`moments` / `gallery_items` 各有一列 `media_size`（历史数据为空 → 前台按 720 显示），后台编辑时写入。账户需要有可用的 Cloudflare Images（免费档每月 5,000 次唯一变换，超出按量计费，旧版 Image Resizing 订阅会报 9432 需在 Dashboard 切换）；本地/CI 用 Miniflare 的离线 Images 实现，同样能转换。
 - **首页封面可配置**：标题、导语、七页主标签（`home_page_labels`）、最多 4 个数据块（`home_stats` 只存统计预设，数值实时取 `/api/v1/stats`）、最多 6 个联系方式（`home_links` 每条可带 `icon`，值是 Iconify 名称如 `ri:rss-fill`；前台经 `/api/v1/icons` 取回 SVG，后端 `sanitizeIconSvg` 白名单过滤；留空按链接自动识别）、封面图、贴纸文案与第 2 页两张装饰图（`home_p2_figure_a` / `home_p2_figure_b`，留空时前台沿用封面图）都存在 KV 站点设置（`home_` 前缀），后台「设置 → 首页」编辑（数据块与联系方式可用行首把手拖拽或每行 ↑ ↓ 调整顺序，顺序即数组顺序；移动端隐藏把手，用按钮排序）。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。首页第 2–6 页的数据都来自服务端 `/api/v1/*`（posts / moments / gallery / bangumi / tools / stats）：第 2 页右侧装饰图使用 `home_p2_figure_a` / `home_p2_figure_b`（未配置时回退 `home_cover_image`）；第 3/4 页的图位只展示真实条目自带的图片（动态 `mediaKey`、藏品 `media_key`），不要再用封面图冒充内容图；第 5 页的「本周放送表」只在同步数据带回 `nextAirAt` 时渲染，不要自行推算放送日。任一页条目为空时统一显示「暂无内容 + 入口」空态，不渲染任何内容图或封面装饰图。
 - **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
 - **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
@@ -92,7 +93,7 @@
 - 页面样式必须在 `v2.css` 之后加载，不要写进 `v2.css`。
 - 不出现指向 `.html` 的链接；一律用路由（如 `/articles`、`/admin/about`）。
 - 不在页面里硬编码 API 路径，用 `@myon/shared` 的 `API_VERSION` / `apiBasePath`；站点设置从 `Astro.locals.site` 取（middleware 已注入）。
-- 列表页在 frontmatter 里进程内 `app.request('/api/v1/...')` 取数后直接渲染，不要客户端二次请求首屏数据；图片用 `mediaUrl()`，数量统计用 `/api/v1/stats`，不要在页面里自己数字段。
+- 列表页在 frontmatter 里进程内 `app.request('/api/v1/...')` 取数后直接渲染，不要客户端二次请求首屏数据；内容图片用 `contentImageUrl()`（默认长边 720，需要原图时才用 `mediaUrl()`），数量统计用 `/api/v1/stats`，不要在页面里自己数字段。
 - 工具页一律放 `src/pages/tools/`：索引用 `index.astro`，单工具用 `[slug].astro`；新增内置工具时同步 `@myon/shared` 的 `builtinToolKeys`、后台表单与页面，不要在 `/tools` 单页里堆工作台。
 - 列表页分页用 `Astro.url.searchParams.get('page')` 算 `offset`，把 `total` 写进“共 N 条”，用 `?page=N` 链接翻页；筛选只在当页数据上做，计数用 `total`。
 - 新增前台路由必须同时在 `apps/web/tests/e2e/pages.spec.ts` 里加一条覆盖；每个工具页（`/tools/<slug>`）由工具索引与 `tools.spec.ts` 覆盖；底栏、主题色、RSS 这类全站行为写到 `tests/e2e/site.spec.ts`。

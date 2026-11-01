@@ -1,10 +1,15 @@
 # 部署指南 · Myon
 
 本仓库是单 Worker 部署：`@myon/web`（Astro）在构建时把 `@myon/back`（Hono）打进同一个 Worker，
-运行时绑定 D1（`DB`，内容数据）、R2（`MEDIA`，图片与附件）、KV（`SETTINGS`，站点设置）与静态资产（`ASSETS`）。
+运行时绑定 D1（`DB`，内容数据）、R2（`MEDIA`，图片与附件）、KV（`SETTINGS`，站点设置）、
+Images（`IMAGES`，图片转换）与静态资产（`ASSETS`）。
 
 > 站点设置（主题色、页脚、首页文案等）存在 **Workers KV**，D1 里没有 `settings` 表；
 > 媒体库直接读 **R2 对象**，D1 里没有 `media` 表。仓库内不保存任何图片资源。
+>
+> 图片转换用 Cloudflare Images：`/media/<key>?size=…` 由 Worker 通过 `IMAGES` 绑定生成
+> 低分辨率 WebP，账户未开通或转换失败时自动回退原图。**不要用 `/cdn-cgi/image/` URL**：
+> 整站由 Worker 接管（`/*`）时 Image Resizing 会报 9524。
 
 部署配置由 `apps/web/wrangler.template.jsonc` + 环境变量生成，**`apps/web/wrangler.jsonc`
 是生成文件、不进仓库**。GitHub Actions 在 CI / Deploy 里统一跑 `pnpm wrangler:config` 生成它。
@@ -91,6 +96,22 @@ pnpm exec wrangler kv namespace create myon-blog-settings
 > 本地开发用生成的 `wrangler.jsonc` 里的全 0 占位 id，Wrangler 会在本地模拟 KV，不碰线上。
 
 D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
+
+### 2.4 Cloudflare Images（图片转换）
+
+图片转换不需要新建资源，绑定写在 `apps/web/wrangler.template.jsonc` 的
+`images.binding`（`IMAGES`），部署时自动生效。账户侧需要满足：
+
+- 使用 Cloudflare 现在的 **Images 计划**（默认免费档：每月 5,000 次唯一变换；
+  超出按 $0.50 / 1,000 次计费，同一张图同一组参数每月只计一次）。
+- 如果账号还停留在旧的 **Image Resizing** 订阅，`IMAGES` 绑定会报 9432：
+  在 Dashboard 的 Images 页按提示切到 Images 计划即可；切换前 Worker 会记录
+  `media image transform failed` 并回退原图，不会破图。
+- 绑定在部署后立即生效；同一个媒体地址首次访问时转换，浏览器按
+  `Cache-Control: immutable` 长期缓存，之后不再重复转换。
+
+本地与 CI 不需要任何 Images 配置：Wrangler/Workerd 用内置的离线 Images 实现
+（支持 width/height/format，`wrangler dev` 与 Playwright e2e 里都能真的转图）。
 
 ---
 
