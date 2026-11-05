@@ -20,6 +20,7 @@ export const siteSettingKeys = [
   'home_title',
   'home_lead',
   'home_page_labels',
+  'home_page_notes',
   'home_stats',
   'home_links',
   'home_cover_image',
@@ -53,6 +54,26 @@ export const defaultHomePageLabels = [
   'CH.05 放送',
   'CH.06 部室',
   'CH.07 后记',
+];
+
+/**
+ * 首页第 2–6 页页头（.head.reveal）里的说明文字，后台逐页配置。
+ * 顺序对应第 2/3/4/5/6 页；空字符串表示该页不显示说明。
+ * 第 3 页默认保留原文案；第 6 页默认留空，前台会按工具数量生成默认文案。
+ */
+export const homePageNoteSlots = 5;
+
+export const defaultHomePageNotes = [
+  // 第 2 页：文章
+  '',
+  // 第 3 页：动态
+  '写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。',
+  // 第 4 页：展柜
+  '',
+  // 第 5 页：追番
+  '',
+  // 第 6 页：工具（留空时按工具数量自动生成）
+  '',
 ];
 
 /**
@@ -129,6 +150,7 @@ export const defaultSiteSettings: SiteSettings = {
   home_lead:
     '写字、看番、存图、做点小工具。\n一个人的二次元生活志，自己画、自己印，一共七页。',
   home_page_labels: JSON.stringify(defaultHomePageLabels),
+  home_page_notes: JSON.stringify(defaultHomePageNotes),
   home_stats: JSON.stringify(defaultHomeStats),
   home_links: JSON.stringify(defaultHomeLinks),
   home_cover_image: '/media/cabinet.jpg',
@@ -232,6 +254,7 @@ export const siteSettingsPatchSchema = z
     home_title: text(60),
     home_lead: text(240),
     home_page_labels: jsonArrayText(text(40), 7),
+    home_page_notes: jsonArrayText(text(240), homePageNoteSlots),
     home_stats: jsonArrayText(homeStatSettingSchema, 4),
     home_links: jsonArrayText(homeLinkSchema, 6),
     home_cover_image: z
@@ -271,6 +294,8 @@ export interface HomeCoverSettings {
   lead: string;
   /** 七页的主标签，长度固定为 7。 */
   pages: string[];
+  /** 第 2–6 页页头说明（顺序固定 5 项）；空字符串表示该页不显示。 */
+  pageNotes: string[];
   stats: HomeStatView[];
   links: HomeLink[];
   cover: { image: string; badge: string; note: string };
@@ -346,6 +371,14 @@ function normalizePageLabels(labels: string[]): string[] {
   });
 }
 
+/** 第 2–6 页页头说明：固定 5 项，去掉首尾空白；空字符串保留为空（前台不渲染）。 */
+function normalizePageNotes(notes: string[]): string[] {
+  return Array.from({ length: homePageNoteSlots }, (_, index) => {
+    const value = notes[index];
+    return typeof value === 'string' ? value.trim() : '';
+  });
+}
+
 const presetByKey = new Map(
   homeStatPresets.map((preset) => [preset.key as string, preset]),
 );
@@ -407,6 +440,9 @@ export function toPublicSiteSettings(
       lead: settings.home_lead,
       pages: normalizePageLabels(
         parseJsonArray(settings.home_page_labels, defaultHomePageLabels),
+      ),
+      pageNotes: normalizePageNotes(
+        parseJsonArray(settings.home_page_notes, defaultHomePageNotes),
       ),
       stats: normalizeStats(
         parseJsonArray(settings.home_stats, defaultHomeStats),

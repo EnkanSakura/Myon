@@ -28,6 +28,9 @@ import { contentImageUrl, mediaImageUrl } from '../lib/media';
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 const home = site.home;
+// 第 2–6 页页头说明来自后台设置，顺序固定；空字符串表示该页不显示。
+// 老 KV 里没有这个键时按空数组处理，页面结构不变。
+const pageNotes = home.pageNotes ?? [];
 // 第 2 页右侧装饰图后台可配置（留空时 API 已回退到封面图）；
 // 第 3/4 页只展示真实条目自带的图片，条目为空时不渲染任何图片，改为空态提示。
 // 封面与装饰图按图位固定长边取转换图，内容图按记录里保存的尺寸档位取。
@@ -470,6 +473,7 @@ function presetValue(preset: HomeStatPreset): string {
         <div>
           <div class="kicker" style="margin-bottom:12px"><span class="sticker">{home.pages[1]}</span></div>
           <h2>最近写的<span class="hl">。</span></h2>
+          {pageNotes[0] && <p class="head-note">{pageNotes[0]}</p>}
         </div>
         <span class="sticker sticker--paper">{publishedCount} 篇 / {formatWords(siteStats?.posts.words ?? 0)} 字</span>
       </div>
@@ -512,7 +516,7 @@ function presetValue(preset: HomeStatPreset): string {
       <div class="head reveal" style="--i:0">
         <span class="sticker">{home.pages[2]}</span>
         <h2 style="margin-top:12px">最近发生的<span class="hl">。</span></h2>
-        <p>写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。</p>
+        {pageNotes[1] && <p>{pageNotes[1]}</p>}
         <div class="count"><b>{momentsTotal}</b><span class="mono">条 / NOTES</span></div>
         {latestMoments.length > 0 && (
           <a class="arrow-link" href="/moments" style="margin-top:18px">全部动态 <span class="ar">→</span></a>
@@ -555,6 +559,7 @@ function presetValue(preset: HomeStatPreset): string {
       <div class="head reveal" style="--i:0">
         <div class="kicker"><span class="sticker">{home.pages[3]}</span></div>
         <h2>收藏<span class="hl">。</span></h2>
+        {pageNotes[2] && <p>{pageNotes[2]}</p>}
         <div class="big"><b>{galleryTotal}</b><span class="u">件 / {galleryCategories.length} 类</span></div>
         {galleryCategoryRows.length > 0 && (
           <div class="cat-list">
@@ -596,6 +601,7 @@ function presetValue(preset: HomeStatPreset): string {
         <div>
           <div class="kicker" style="margin-bottom:10px"><span class="sticker">{home.pages[4]}</span></div>
           <h2>在追<span class="hl">。</span></h2>
+          {pageNotes[3] && <p>{pageNotes[3]}</p>}
         </div>
         <div class="onair">
           <span class="dot"></span>
@@ -661,7 +667,11 @@ function presetValue(preset: HomeStatPreset): string {
       <div class="head reveal" style="--i:0">
         <div class="kicker"><span class="sticker">{home.pages[5]}</span></div>
         <h2>工具箱<span class="hl">。</span></h2>
-        <p>{homeTools.length > 0 ? `${homeTools.length} 个自己会用的东西，顺手放在部室的抽屉里。` : '抽屉还空着，等登记了工具再打开。'}</p>
+        {pageNotes[4] ? (
+          <p>{pageNotes[4]}</p>
+        ) : (
+          <p>{homeTools.length > 0 ? `${homeTools.length} 个自己会用的东西，顺手放在部室的抽屉里。` : '抽屉还空着，等登记了工具再打开。'}</p>
+        )}
         <div class="open"><b>{String(homeTools.length).padStart(2, '0')}</b><span>个 / TOOLS</span></div>
         {homeTools.length > 0 && (
           <a class="arrow-link" href="/tools" style="margin-top:12px">打开工具台 <span class="ar">→</span></a>

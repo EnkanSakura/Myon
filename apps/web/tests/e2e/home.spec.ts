@@ -73,6 +73,51 @@ test('封面与第 2 页装饰图走固定长边转换地址', async ({ page, re
   }
 });
 
+test('第 2–6 页页头说明来自后台设置，照片按原色显示', async ({
+  page,
+  request,
+}) => {
+  const res = await request.get('/api/v1/site');
+  expect(res.status()).toBe(200);
+  const { settings } = (await res.json()) as {
+    settings: { home: { pageNotes: string[] } };
+  };
+  const pageNotes = settings.home.pageNotes;
+  expect(pageNotes).toHaveLength(5);
+
+  await page.goto('/');
+
+  // 第 3 页默认有文案；后台清空后整段不渲染。
+  const p3Note = page.locator('.p3 .head p');
+  await expect(p3Note).toHaveCount(pageNotes[1] ? 1 : 0);
+  if (pageNotes[1]) await expect(p3Note).toHaveText(pageNotes[1]);
+
+  // 第 2/4/5 页：有配置才渲染说明，空字符串不显示。
+  for (const [selector, note] of [
+    ['.p2 .head p', pageNotes[0]],
+    ['.p4 .head p', pageNotes[2]],
+    ['.p5 .head p', pageNotes[3]],
+  ] as const) {
+    const noteLocator = page.locator(selector);
+    await expect(noteLocator).toHaveCount(note ? 1 : 0);
+    if (note) await expect(noteLocator).toHaveText(note);
+  }
+
+  // 第 6 页留空时保留按工具数量生成的动态文案；配置了就用配置值。
+  const p6Note = page.locator('.p6 .head p');
+  await expect(p6Note).toHaveCount(1);
+  if (pageNotes[4]) await expect(p6Note).toHaveText(pageNotes[4]);
+
+  // 去滤镜：封面与第 2 页装饰图 computed filter 为 none，不再有 grayscale。
+  for (const img of await page
+    .locator('.p1 .frame img, .p2 .side .frame img')
+    .all()) {
+    expect(await img.evaluate((el) => getComputedStyle(el).filter)).toBe(
+      'none',
+    );
+  }
+});
+
 test('第 3–6 页展示 D1 真实数据，空态不再引用封面图', async ({
   page,
   request,

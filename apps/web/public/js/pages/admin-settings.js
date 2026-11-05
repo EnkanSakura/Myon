@@ -84,6 +84,19 @@
   var HOME_PRESET_MAP = {};
   each(HOME_PRESETS, function (preset) { HOME_PRESET_MAP[preset.key] = preset; });
   var DEFAULT_PAGE_LABELS = Array.isArray(HOME_CONFIG.pageLabels) ? HOME_CONFIG.pageLabels : [];
+  // 第 2–6 页页头说明的默认值来自 @myon/shared（服务端注入 data-home-config.pageNotes）；
+  // 注入缺失时退回同一份文案，保证设置页至少能按 5 项渲染。
+  var DEFAULT_PAGE_NOTES = (function () {
+    var injected = HOME_CONFIG.pageNotes;
+    if (Array.isArray(injected) && injected.length === 5) return injected;
+    return [
+      "",
+      "写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。",
+      "",
+      "",
+      ""
+    ];
+  })();
 
   var saveBtn = $("saveBtn");
   var saveState = $("saveState");
@@ -107,6 +120,8 @@
 
   var homePageLabels = $("homePageLabels");
   var homePageLabelsErr = $("homePageLabelsErr");
+  var homePageNotes = $("homePageNotes");
+  var homePageNotesErr = $("homePageNotesErr");
   var homeStatsRows = $("homeStatsRows");
   var homeStatsEmpty = $("homeStatsEmpty");
   var homeStatsAdd = $("homeStatsAdd");
@@ -691,6 +706,24 @@
     });
   }
 
+  /** 读第 2–6 页页头说明：固定按 DOM 顺序输出 5 项，去掉首尾空白。 */
+  function readPageNotes() {
+    var out = [];
+    each(homePageNotes.querySelectorAll(".page-note-input"), function (input) {
+      out.push(input.value.trim());
+    });
+    return out;
+  }
+
+  /** 回填页头说明：JSON 容错、固定 5 项；缺失项用共享默认值补齐。 */
+  function renderPageNotes(raw) {
+    var notes = parseJsonArray(raw);
+    each(homePageNotes.querySelectorAll(".page-note-input"), function (input, index) {
+      var value = notes[index];
+      input.value = typeof value === "string" ? value : (DEFAULT_PAGE_NOTES[index] || "");
+    });
+  }
+
   function readStats() {
     var out = [];
     each(homeStatsRows.querySelectorAll(".row"), function (row) {
@@ -770,6 +803,7 @@
     var color = themeColorText.value.trim();
     data.theme_color = THEME_COLOR_RE.test(color) ? color.toUpperCase() : color;
     data.home_page_labels = JSON.stringify(readPageLabels());
+    data.home_page_notes = JSON.stringify(readPageNotes());
     data.home_stats = JSON.stringify(readStats());
     data.home_links = JSON.stringify(readLinks());
     return data;
@@ -784,6 +818,7 @@
     });
     applyColor(typeof settings.theme_color === "string" ? settings.theme_color : THEME_COLOR_DEFAULT);
     renderPageLabels(settings.home_page_labels);
+    renderPageNotes(settings.home_page_notes);
     renderStats(settings.home_stats);
     renderLinks(settings.home_links);
     clearFieldErrors();
@@ -800,6 +835,7 @@
     themeColorErr.hidden = true;
     footerRssErr.hidden = true;
     homePageLabelsErr.hidden = true;
+    homePageNotesErr.hidden = true;
     homeCoverImageErr.hidden = true;
     homeFigureAErr.hidden = true;
     homeFigureBErr.hidden = true;
@@ -813,6 +849,11 @@
       if (issue.path === "home_page_labels") {
         homePageLabelsErr.textContent = issue.message;
         homePageLabelsErr.hidden = false;
+        return;
+      }
+      if (issue.path === "home_page_notes") {
+        homePageNotesErr.textContent = issue.message;
+        homePageNotesErr.hidden = false;
         return;
       }
       if (issue.path === "home_stats") {
@@ -935,9 +976,15 @@
     var statsJson = JSON.stringify(readStats());
     var linksJson = JSON.stringify(readLinks());
     var labelsJson = JSON.stringify(readPageLabels());
+    var notesJson = JSON.stringify(readPageNotes());
     if (labelsJson.length > HOME_JSON_MAX) {
       homePageLabelsErr.textContent = "七页主标签内容太长，最多 " + HOME_JSON_MAX + " 个字符";
       homePageLabelsErr.hidden = false;
+      ok = false;
+    }
+    if (notesJson.length > HOME_JSON_MAX) {
+      homePageNotesErr.textContent = "页头说明内容太长，最多 " + HOME_JSON_MAX + " 个字符";
+      homePageNotesErr.hidden = false;
       ok = false;
     }
     if (statsJson.length > HOME_JSON_MAX) {
@@ -1144,6 +1191,13 @@
     input.addEventListener("input", function () {
       input.closest(".fld").classList.remove("is-invalid");
       homePageLabelsErr.hidden = true;
+      dirty();
+    });
+  });
+  each(homePageNotes.querySelectorAll(".page-note-input"), function (input) {
+    input.addEventListener("input", function () {
+      input.closest(".fld").classList.remove("is-invalid");
+      homePageNotesErr.hidden = true;
       dirty();
     });
   });

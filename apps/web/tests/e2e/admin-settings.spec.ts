@@ -213,6 +213,59 @@ test.describe('后台设置 · 第 2 页装饰图', () => {
   });
 });
 
+test.describe('后台设置 · 页头说明', () => {
+  test('第 2–6 页各一段，保存时写回 5 项 JSON', async ({ page, request }) => {
+    const { readSettings } = await openMockedSettings(page, request);
+
+    // 5 个输入与第 2–6 页一一对应
+    const notes = page.locator('#homePageNotes .page-note-input');
+    await expect(notes).toHaveCount(5);
+    for (const id of [
+      'homeNoteP2',
+      'homeNoteP3',
+      'homeNoteP4',
+      'homeNoteP5',
+      'homeNoteP6',
+    ]) {
+      await expect(page.locator(`#${id}`)).toHaveCount(1);
+    }
+    await expect(page.locator('label[for="homeNoteP2"]')).toHaveText(
+      '第 2 页 / PAGE 02 · 文章',
+    );
+    await expect(page.locator('label[for="homeNoteP3"]')).toHaveText(
+      '第 3 页 / PAGE 03 · 动态',
+    );
+    await expect(page.locator('label[for="homeNoteP4"]')).toHaveText(
+      '第 4 页 / PAGE 04 · 展柜',
+    );
+    await expect(page.locator('label[for="homeNoteP5"]')).toHaveText(
+      '第 5 页 / PAGE 05 · 追番',
+    );
+    await expect(page.locator('label[for="homeNoteP6"]')).toHaveText(
+      '第 6 页 / PAGE 06 · 工具',
+    );
+    // 默认第 3 页有文案，其它页为空
+    await expect(page.locator('#homeNoteP3')).not.toHaveValue('');
+    await expect(page.locator('#homeNoteP2')).toHaveValue('');
+
+    const note = `第 2 页说明 ${Date.now()}`;
+    await page.locator('#homeNoteP2').fill(note);
+    await page.locator('#homeNoteP6').fill('工具页说明');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#saveState')).toContainText('最后保存');
+
+    const saved = JSON.parse(
+      readSettings().home_page_notes ?? '[]',
+    ) as string[];
+    expect(saved).toHaveLength(5);
+    // 顺序对应第 2/3/4/5/6 页：index 0 是第 2 页，index 4 是第 6 页
+    expect(saved[0]).toBe(note);
+    expect(saved[4]).toBe('工具页说明');
+    // 未改动的第 3 页仍是默认文案
+    expect(saved[1]).not.toBe('');
+  });
+});
+
 test.describe('后台设置 · 图片路径媒体选择器', () => {
   test('点文件夹图标选图后填入 /media/<key> 并关闭选择器', async ({
     page,
@@ -265,6 +318,12 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
     const picker = page.locator('[data-media-pick="homeCoverImage"]');
     await expect(picker).toBeEnabled();
     await expect(page.locator('#saveBtn')).toBeDisabled();
+    // 只读态下带 [data-setting] 的控件（含新增的页头说明 textarea）一起禁用
+    await expect(page.locator('#homePageNotes .page-note-input')).toHaveCount(
+      5,
+    );
+    await expect(page.locator('#homeNoteP2')).toBeDisabled();
+    await expect(page.locator('#homeNoteP6')).toBeDisabled();
 
     await picker.click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');

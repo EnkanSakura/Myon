@@ -38,6 +38,7 @@ test.describe('首页封面配置', () => {
           title: string;
           lead: string;
           pages: string[];
+          pageNotes: string[];
           stats: { preset: string; label: string; unit: string }[];
           links: { label: string; href: string }[];
           cover: { image: string; badge: string; note: string };
@@ -136,6 +137,12 @@ test.describe('首页封面配置', () => {
     await expect(page.locator('.p1 .kicker .sticker--paper')).toHaveText(
       `VOL. ${year}`,
     );
+
+    // 第 2–6 页页头说明：接口固定返回 5 项，页面按第 3 页的配置值渲染（默认非空）。
+    expect(home.pageNotes).toHaveLength(5);
+    const p3Note = page.locator('.p3 .head p');
+    await expect(p3Note).toHaveCount(home.pageNotes[1] ? 1 : 0);
+    if (home.pageNotes[1]) await expect(p3Note).toHaveText(home.pageNotes[1]);
     await expect(page.locator('.p1 .frame .cap')).toHaveCount(0);
     await expect(page.locator('.p1 .cover-year')).toContainText(year);
     await expect(page.locator('.p1 .about-card .ah')).not.toContainText(
@@ -144,6 +151,8 @@ test.describe('首页封面配置', () => {
   });
 });
 
+// 自定义 pageNotes 的渲染路径由 packages/back/tests/unit/site.test.ts（toPublicSiteSettings）
+// 与 admin-settings.spec.ts（保存 payload）覆盖；e2e 不写全局 KV，避免并行用例读到中间态。
 test.describe('窄屏翻页', () => {
   test('内容高于一屏时先滚动，滚到底才翻页', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 700 });

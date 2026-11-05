@@ -4,6 +4,7 @@
 import {
   apiBasePath,
   defaultHomePageLabels,
+  defaultHomePageNotes,
   defaultThemeColor,
   homeStatPresets,
 } from '@myon/shared';
@@ -15,6 +16,7 @@ const settingsApi = `${apiBasePath}/admin/settings`;
 const homeConfig = JSON.stringify({
   presets: homeStatPresets,
   pageLabels: defaultHomePageLabels,
+  pageNotes: defaultHomePageNotes,
 });
 // 图片路径可以走共享媒体选择器：媒体接口与 GIF 转码地址由服务端渲染。
 const mediaApi = `${apiBasePath}/admin/media`;
@@ -171,6 +173,38 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
                   <textarea id="homeLead" name="home_lead" rows="3" maxlength="240" spellcheck="false" data-setting></textarea>
                 </div>
               </div>
+            </div>
+
+            <div class="hf">
+              <div class="hf-head">
+                <b>页头说明</b>
+                <span>PAGE NOTES</span>
+                <span class="hf-note">第 2–6 页页头里的说明段落</span>
+              </div>
+              <div class="page-notes" id="homePageNotes">
+                <div class="fld">
+                  <label for="homeNoteP2">第 2 页 / PAGE 02 · 文章</label>
+                  <textarea id="homeNoteP2" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+                <div class="fld">
+                  <label for="homeNoteP3">第 3 页 / PAGE 03 · 动态</label>
+                  <textarea id="homeNoteP3" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+                <div class="fld">
+                  <label for="homeNoteP4">第 4 页 / PAGE 04 · 展柜</label>
+                  <textarea id="homeNoteP4" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+                <div class="fld">
+                  <label for="homeNoteP5">第 5 页 / PAGE 05 · 追番</label>
+                  <textarea id="homeNoteP5" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+                <div class="fld">
+                  <label for="homeNoteP6">第 6 页 / PAGE 06 · 工具</label>
+                  <textarea id="homeNoteP6" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+                </div>
+              </div>
+              <p class="hint">每页一段，留空则该页不显示说明；第 3 页默认已有一段文案；第 6 页留空时前台按工具数量自动生成。单页最多 240 字。</p>
+              <p class="fld-err" id="homePageNotesErr" hidden></p>
             </div>
 
             <div class="hf">

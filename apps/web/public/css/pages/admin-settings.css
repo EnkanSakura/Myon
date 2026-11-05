@@ -89,6 +89,12 @@ body.admin :focus-visible{outline:3px solid var(--ppk);outline-offset:3px}
 .page-labels .fld{min-width:0}
 .page-labels .fld label{font-size:11px;letter-spacing:.06em;white-space:nowrap}
 
+/* 第 2–6 页页头说明：每页一段，五列排布 */
+.page-notes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 12px;margin-bottom:12px}
+.page-notes .fld{min-width:0}
+.page-notes .fld label{font-size:11px;letter-spacing:.06em;white-space:nowrap}
+.page-notes .fld textarea{min-height:64px}
+
 /* 多行文本 */
 .fld textarea{
   display:block;width:100%;padding:9px 11px;min-height:78px;
@@ -150,6 +156,7 @@ body.is-row-dragging{user-select:none;cursor:grabbing}
   .set-grid{grid-template-columns:1fr}
   .sp--wide{grid-column:auto}
   .set-cat-note{display:none}
+  .page-notes{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:760px){
   .color-row{flex-wrap:wrap}
@@ -171,4 +178,5 @@ body.is-row-dragging{user-select:none;cursor:grabbing}
 @media (max-width:600px){
   .fields{grid-template-columns:1fr}
   .ph-note{text-align:left}
+  .page-notes{grid-template-columns:1fr}
 }

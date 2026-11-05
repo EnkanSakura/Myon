@@ -77,6 +77,8 @@
 .p2 .inner{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center}
 .p2 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:var(--border) solid var(--ink);padding-bottom:14px;margin-bottom:6px}
 .p2 h2{font-size:clamp(40px,4.6vw,64px)}
+/* 页头说明：后台可配置，空字符串时整段不渲染 */
+.p2 .head p{margin-top:10px;font-size:14px;line-height:1.85;color:var(--ink-62);max-width:26ch}
 .p2 .head .sticker{margin-bottom:8px}
 .p2 .rows{margin-top:0}
 .p2 .more{margin-top:22px}
@@ -110,6 +112,7 @@
 /* ================= 04 展柜 ================= */
 .p4 .inner{display:grid;grid-template-columns:300px 1fr;gap:40px;align-items:center}
 .p4 h2{font-size:clamp(40px,4.6vw,64px)}
+.p4 .head p{margin-top:12px;font-size:14px;line-height:1.85;color:var(--ink-62);max-width:22ch}
 .p4 .cat-list{margin-top:22px;border-top:2px solid var(--ink)}
 .p4 .cat-list span{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line-2);padding:8px 2px;font-size:13px;font-weight:700}
 .p4 .cat-list span b{font-family:var(--disp);font-size:14px;color:var(--pink-deep)}
@@ -138,6 +141,7 @@
 .p5 .inner{display:flex;flex-direction:column;gap:26px}
 .p5 .head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;border-bottom:var(--border) solid var(--ink);padding-bottom:14px}
 .p5 h2{font-size:clamp(40px,4.6vw,64px)}
+.p5 .head p{margin-top:10px;font-size:14px;line-height:1.85;color:var(--ink-62);max-width:28ch}
 .p5 .onair{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em}
 .p5 .onair .dot{width:10px;height:10px;background:var(--pink);border:2px solid var(--ink);display:inline-block}
 .p5 .programs{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
