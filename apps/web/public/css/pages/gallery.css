@@ -47,7 +47,6 @@
 .ex-note-name{font-size:16px;font-weight:900;line-height:1.3}
 .ex-note-c{font-family:var(--kai);font-size:14px;line-height:1.65;color:var(--paper-2);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ex:hover .frame{transform:translate(-3px,-3px);box-shadow:8px 8px 0 var(--shade)}
-.ex:hover .frame img{filter:grayscale(1) contrast(1.22) brightness(1.1)}
 .ex .frame .cap{font-size:10px}
 
 /* 图下 mono 展签：编号 / 名称 / 分类·年代 */

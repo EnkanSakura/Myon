@@ -1,6 +1,6 @@
 /* ==========================================================================
    Myon · 同人志 — v2 共享设计系统
-   二次元生活志：黑白网点 + 粉红专色；无圆角；粗黑框与硬阴影。
+   二次元生活志：纸墨网点 + 粉红专色；无圆角；粗黑框与硬阴影；照片按原色显示。
    页面特有样式写在各自页面的 <style> 里。
    ========================================================================== */
 
@@ -183,17 +183,11 @@ p{color:var(--ink-80)}
 .tape{position:absolute;background:var(--pink);border:2px solid var(--ink);height:16px;width:78px;transform:rotate(-4deg);opacity:.95;z-index:3}
 .tape::after{content:"";position:absolute;inset:4px 6px;border-top:1px dashed color-mix(in srgb, var(--ink) 50%, transparent)}
 
-/* ---------- 图框 / 双色网点 ---------- */
+/* ---------- 图框：照片按原色显示 ----------
+   只保留硬边框、阴影与说明条；不加黑白滤镜，也不在照片上叠粉色 / 网点纹理。 */
 .frame{border:var(--border) solid var(--ink);background:var(--paper-3);box-shadow:var(--hard);overflow:hidden;position:relative}
-.frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.98)}
-.frame::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:multiply;
-  background:linear-gradient(135deg,color-mix(in srgb, var(--pink) 62%, transparent),color-mix(in srgb, var(--pink) 18%, transparent) 52%,color-mix(in srgb, var(--pink) 42%, transparent));}
-.frame::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
-  background-image:radial-gradient(color-mix(in srgb, var(--ink) 50%, transparent) 1px,transparent 1.2px);background-size:4px 4px;opacity:.22;mix-blend-mode:multiply}
+.frame img{width:100%;height:100%;object-fit:cover}
 .frame .cap{position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--paper);border-top:3px solid var(--ink);padding:7px 10px;font-family:var(--mono);font-size:var(--fs-1);letter-spacing:.08em;color:var(--ink);display:flex;justify-content:space-between;gap:10px}
-.frame--pink::before{background:linear-gradient(135deg,color-mix(in srgb, var(--pink) 80%, transparent),color-mix(in srgb, var(--pink) 32%, transparent))}
-.frame--ink img{filter:grayscale(1) contrast(1.25) brightness(.82)}
-.frame--ink::before{background:linear-gradient(135deg,color-mix(in srgb, var(--ink) 40%, transparent),color-mix(in srgb, var(--pink) 20%, transparent))}
 
 /* ---------- 列表 ---------- */
 .rows{border-top:var(--border) solid var(--ink)}

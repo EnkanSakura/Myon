@@ -34,8 +34,7 @@
 .nr-thumb{width:64px;height:48px;border:2px solid var(--pline);overflow:hidden;position:relative;background:var(--desk)}
 .nr-thumb.is-empty{display:grid;place-items:center;border-color:var(--pline-2);background:transparent}
 .nr-thumb.is-empty .nr-empty{font-size:14px;color:var(--pp-70)}
-.nr-thumb img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.2) brightness(.74)}
-.nr-thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,color-mix(in srgb, var(--pink) 34%, transparent),color-mix(in srgb, var(--pink) 5%, transparent));mix-blend-mode:multiply;pointer-events:none}
+.nr-thumb img{width:100%;height:100%;object-fit:cover}
 .nr-empty{font-family:var(--mono);font-size:12px;color:var(--pp-62)}
 .nr-tag{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
 .nr-tag .tag{font-size:11px;padding:1px 6px 2px;letter-spacing:.08em;background:transparent;border:2px solid color-mix(in srgb, var(--pp) 30%, transparent);color:var(--pp-62);box-shadow:none;line-height:1.5}

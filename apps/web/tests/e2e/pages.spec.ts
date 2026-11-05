@@ -115,6 +115,16 @@ test.describe('图片转换地址', () => {
     for (const src of srcs) expect(expected.has(src)).toBe(true);
     expect(srcs.some((src) => src.endsWith('?size=720&q=80'))).toBe(true);
 
+    // 去滤镜后照片按原色显示：网格图默认与 hover 状态都不叠 grayscale。
+    const gridImg = page.locator('.gal-grid .ex .frame img').first();
+    expect(await gridImg.evaluate((el) => getComputedStyle(el).filter)).toBe(
+      'none',
+    );
+    await gridImg.hover();
+    expect(await gridImg.evaluate((el) => getComputedStyle(el).filter)).toBe(
+      'none',
+    );
+
     // 灯箱不单独拼地址：点开有图的展品后直接沿用卡片 img 的 src。
     const card = page
       .locator('.gal-grid .ex')

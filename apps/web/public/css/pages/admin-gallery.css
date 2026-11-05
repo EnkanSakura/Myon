@@ -16,22 +16,12 @@
 .g-card.is-sel{border-color:var(--ppk);box-shadow:4px 4px 0 var(--ppk-deep)}
 .g-card[hidden]{display:none}
 .g-card.is-off{background:color-mix(in srgb, var(--ink) 45%, transparent)}
-.g-card.is-off .g-thumb img{filter:grayscale(1) contrast(1.05) brightness(.52)}
-.g-card.is-off .g-thumb::before{opacity:.35}
 .g-card.is-off .g-name{color:var(--pp-80)}
 .g-card.is-new{animation:cardIn .45s var(--ease)}
 @keyframes cardIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 
 .g-thumb{position:relative;aspect-ratio:4/3;overflow:hidden;background:var(--desk);border-bottom:2px solid var(--pline)}
-.g-thumb img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.12) brightness(.85)}
-.g-thumb::before{
-  content:"";position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:multiply;
-  background:linear-gradient(135deg,color-mix(in srgb, var(--pink) 42%, transparent),color-mix(in srgb, var(--pink) 8%, transparent) 62%);
-}
-.g-thumb::after{
-  content:"";position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:multiply;opacity:.22;
-  background-image:radial-gradient(color-mix(in srgb, var(--ink) 55%, transparent) 1px,transparent 1.2px);background-size:4px 4px;
-}
+.g-thumb img{width:100%;height:100%;object-fit:cover}
 .g-slot{
   position:absolute;left:0;top:0;z-index:3;background:var(--ppk);color:var(--ink);
   border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);
