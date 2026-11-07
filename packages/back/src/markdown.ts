@@ -116,9 +116,11 @@ const MARK = {
   gridEnd: '\uE019',
   githubStart: '\uE01A',
   githubEnd: '\uE01B',
+  linkStart: '\uE01C',
+  linkEnd: '\uE01D',
 } as const;
 
-const MARKER_RE = /[\uE010-\uE01B]/g;
+const MARKER_RE = /[\uE010-\uE01D]/g;
 
 // GFM 任务列表的 checkbox 用私有区字符打标，白名单过滤后再换成展示方块。
 // 这样 input 不会被放进白名单，也不会给作者开放 span。
@@ -141,10 +143,18 @@ interface MarkdownStore {
   alerts: AlertBlock[];
   grids: string[];
   github: string[];
+  links: string[];
 }
 
 function createStore(): MarkdownStore {
-  return { math: [], spoilers: [], alerts: [], grids: [], github: [] };
+  return {
+    math: [],
+    spoilers: [],
+    alerts: [],
+    grids: [],
+    github: [],
+    links: [],
+  };
 }
 
 function token(start: string, end: string, index: number): string {
@@ -166,6 +176,18 @@ function decodeBasicEntities(value: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, '&');
+}
+
+/** 外部链接卡片只接受 http(s)；不合法返回 null，按普通文本处理。 */
+function normalizeExternalUrl(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function renderMath(tex: string, display: boolean): string {
@@ -417,6 +439,24 @@ function preprocess(markdown: string, store: MarkdownStore): string {
       continue;
     }
 
+    // ::link{url="https://…"}：外部网站卡片（元数据由前端异步补全）
+    const linkMatch = /^ {0,3}::link\{url="([^"]+)"\}[ \t]*$/.exec(line);
+    if (linkMatch) {
+      const href = normalizeExternalUrl(linkMatch[1] ?? '');
+      if (href) {
+        store.links.push(href);
+        out.push(
+          '',
+          token(MARK.linkStart, MARK.linkEnd, store.links.length - 1),
+          '',
+        );
+      } else {
+        out.push(line);
+      }
+      index += 1;
+      continue;
+    }
+
     // $$ … $$ 块级公式：整段单独成块，交给 KaTeX 以 display 模式渲染
     if (/^ {0,3}\$\$/.test(line)) {
       const start = line.indexOf('$$') + 2;
@@ -538,6 +578,29 @@ function renderGithubCard(repo: string): string {
   ].join('');
 }
 
+function renderSiteCard(href: string): string {
+  let host = href;
+  try {
+    host = new URL(href).hostname.replace(/^www\./i, '');
+  } catch {
+    // href 已在上游校验过，这里只做兜底。
+  }
+  return [
+    `<a class="site-card" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-link-preview="${escapeHtml(href)}">`,
+    '<span class="site-card-icon" aria-hidden="true">',
+    '<img class="site-card-img" data-link-icon alt="" loading="lazy" decoding="async" hidden>',
+    '<span class="site-card-globe" data-link-globe>↗</span>',
+    '</span>',
+    '<span class="site-card-main">',
+    `<span class="site-card-top"><span class="site-card-site" data-link-site>${escapeHtml(host)}</span><span class="site-card-go">打开 →</span></span>`,
+    `<b class="site-card-title" data-link-title>${escapeHtml(href)}</b>`,
+    '<span class="site-card-desc" data-link-desc hidden></span>',
+    `<span class="site-card-domain" data-link-domain>${escapeHtml(host)}</span>`,
+    '</span>',
+    '</a>',
+  ].join('');
+}
+
 function replaceBlockTokens(
   html: string,
   start: string,
@@ -565,6 +628,9 @@ function resolveTokens(html: string, store: MarkdownStore): string {
   );
   out = replaceBlockTokens(out, MARK.githubStart, MARK.githubEnd, (index) =>
     renderGithubCard(store.github[index] ?? ''),
+  );
+  out = replaceBlockTokens(out, MARK.linkStart, MARK.linkEnd, (index) =>
+    renderSiteCard(store.links[index] ?? ''),
   );
 
   // spoiler 内部可能还有公式/嵌套 spoiler：循环替换到稳定（最多两层足够）
@@ -638,6 +704,10 @@ function tokensToPlain(html: string, store: MarkdownStore): string {
   );
   out = out.replace(
     new RegExp(`${MARK.githubStart}\\d+${MARK.githubEnd}`, 'g'),
+    '',
+  );
+  out = out.replace(
+    new RegExp(`${MARK.linkStart}\\d+${MARK.linkEnd}`, 'g'),
     '',
   );
   return out;

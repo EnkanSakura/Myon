@@ -10,6 +10,7 @@
  * 之后引入，保证覆盖顺序；页面脚本同理放 `public/js/pages/<name>.js`。
  */
 import {
+  apiBasePath,
   defaultSiteSettings,
   formatPageTitle,
   toPublicSiteSettings,
@@ -28,6 +29,7 @@ interface Props {
 const { title, sticker, active = null } = Astro.props;
 
 const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
+const linkPreviewApi = `${apiBasePath}/link-preview`;
 const pageTitle = formatPageTitle(title, site);
 
 const nav = [
@@ -63,7 +65,7 @@ const nav = [
     <slot name="head" />
     <script is:inline src="/js/combo.js"></script>
   </head>
-  <body>
+  <body data-link-preview-api={linkPreviewApi}>
     <header class="topbar">
       <a class="brand" href="/" aria-label={`${site.name} 首页`}>
         <b>{site.name.toUpperCase()}</b><span>{site.subtitle} / {new Date().getFullYear()}</span>
@@ -89,5 +91,6 @@ const nav = [
     <SiteBar settings={site} />
 
     <script is:inline src="/js/site.js" defer></script>
+    <script is:inline src="/js/link-preview.js" defer></script>
   </body>
 </html>

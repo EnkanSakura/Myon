@@ -278,6 +278,77 @@ test.describe('Markdown 渲染', () => {
     }
   });
 
+  test('文章里的外部网站卡片先渲染基础卡，再由 /link-preview 补全', async ({
+    page,
+    request,
+  }) => {
+    const slug = `e2e-link-card-${Date.now().toString(36)}`;
+    let id: string | undefined;
+
+    await page.route('**/api/v1/link-preview?*', async (route) => {
+      await route.fulfill({
+        json: {
+          ok: true,
+          item: {
+            url: 'https://example.com/post',
+            title: '示例文章',
+            description: '这是卡片描述',
+            siteName: '示例站',
+            icon: null,
+            host: 'example.com',
+          },
+        },
+      });
+    });
+
+    try {
+      const created = await request.post('/api/v1/admin/posts', {
+        headers: ADMIN_HEADERS,
+        data: {
+          slug,
+          title: 'E2E 外链卡片',
+          excerpt: '',
+          bodyMd: '外部网站卡片：\n\n::link{url="https://example.com/post"}\n',
+          status: 'published',
+          category: '随笔',
+          publishedAt: new Date().toISOString(),
+        },
+      });
+      expect(created.status()).toBe(201);
+      id = ((await created.json()) as { item: { id: string } }).item.id;
+
+      await page.goto(`/articles/${slug}`);
+      const card = page.locator('article.body .site-card');
+      await expect(card).toHaveCount(1);
+      await expect(card).toHaveAttribute(
+        'data-link-preview',
+        'https://example.com/post',
+      );
+      await expect(card).toHaveAttribute('href', 'https://example.com/post');
+      await expect(card.locator('[data-link-title]')).toHaveText('示例文章');
+      await expect(card.locator('[data-link-site]')).toHaveText('示例站');
+      await expect(card.locator('[data-link-desc]')).toHaveText('这是卡片描述');
+    } finally {
+      if (id)
+        await request
+          .delete(`/api/v1/admin/posts/${id}`, { headers: ADMIN_HEADERS })
+          .catch(() => undefined);
+    }
+  });
+
+  test('/link-preview 拒绝空参数与私网地址', async ({ request }) => {
+    expect((await request.get('/api/v1/link-preview')).status()).toBe(400);
+
+    const blocked = await request.get(
+      `/api/v1/link-preview?url=${encodeURIComponent('http://127.0.0.1/')}`,
+    );
+    expect(blocked.status()).toBe(200);
+    expect(await blocked.json()).toEqual({
+      ok: false,
+      error: 'invalid_url',
+    });
+  });
+
   test('后台关于页预览支持扩展语法（客户端渲染 + KaTeX 本地加载）', async ({
     page,
   }) => {

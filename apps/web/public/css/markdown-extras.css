@@ -1,6 +1,7 @@
 /* Markdown 扩展组件（服务端渲染与后台预览共用）
    - 提醒框 .alert（GitHub 五种类型）
    - GitHub 仓库卡片 .repo-card
+   - 外部网站卡片 .site-card（基础卡由服务端渲染，link-preview.js 异步补元数据）
    - 图片网格 .image-grid
    - 剧透 .spoiler
    - 公式 .math-block / .math-inline（排版主体来自 KaTeX 自带样式）
@@ -174,6 +175,128 @@
   color: var(--on-pink);
 }
 
+/* ---------- 外部网站卡片 ---------- */
+.site-card,
+.body a.site-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 6px 6px 0 var(--shade);
+  font-weight: 400;
+  text-decoration: none;
+  transition:
+    background 0.15s var(--ease),
+    box-shadow 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.site-card:hover,
+.body a.site-card:hover {
+  background: var(--pink-wash);
+  color: var(--ink);
+  box-shadow: 8px 8px 0 var(--shade);
+  transform: translate(-1px, -1px);
+}
+.site-card:focus-visible {
+  outline: 2px solid var(--pink);
+  outline-offset: 2px;
+}
+.site-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  overflow: hidden;
+}
+.site-card-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.site-card-globe {
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-62);
+}
+.site-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.site-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.site-card-site {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-62);
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-card-go {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-62);
+}
+.site-card:hover .site-card-go {
+  color: var(--pink-deep);
+}
+.site-card-title {
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.site-card-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-62);
+}
+.site-card-domain {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-25);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .site-card {
+    padding: 12px;
+  }
+  .site-card-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .site-card-title {
+    font-size: 15px;
+  }
+}
 /* ---------- 图片网格 ---------- */
 .image-grid {
   display: grid;

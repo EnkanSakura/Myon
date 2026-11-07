@@ -75,6 +75,7 @@ const environment = String(env.ENVIRONMENT ?? 'unknown').toUpperCase();
 // 管理令牌的入口只在这里：所有后台页共用同一个弹窗与连接状态。
 // 状态检测只发一次读请求，页面本身仍然各自处理自己的 401 / 503。
 const tokenCheckUrl = `${apiBasePath}/admin/settings`;
+const linkPreviewApi = `${apiBasePath}/link-preview`;
 const maintenanceEnabled = Boolean(site.maintenanceEnabled);
 
 const groups = [
@@ -161,8 +162,10 @@ const tail = [
     <script is:inline src="/js/combo.js"></script>
     <!-- 媒体图片转换地址（MyonImage），所有后台页共用；必须排在页面脚本之前 -->
     <script is:inline src="/js/image-transform.js"></script>
+    <!-- 文章编辑器预览里的外部网站卡片补全（服务端基础卡 + 异步元数据） -->
+    <script is:inline src="/js/link-preview.js" defer></script>
   </head>
-  <body class="admin" data-token-check={tokenCheckUrl}>
+  <body class="admin" data-token-check={tokenCheckUrl} data-link-preview-api={linkPreviewApi}>
     <aside class="side" aria-label="制作进行侧栏">
       <div class="side-head">
         <div class="s-brand"><b>{site.name.toUpperCase()}</b><span>制作进行</span></div>

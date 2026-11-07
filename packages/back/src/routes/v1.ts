@@ -26,6 +26,7 @@ import {
   MAX_BANGUMI_COVER_BYTES,
   normalizeBangumiCoverUrl,
 } from '../image';
+import { fetchLinkPreview } from '../link-preview';
 import { renderArticle, renderMarkdown } from '../markdown';
 import { readMediaCount } from '../media';
 import { readSiteSettings, sanitizeFooterHtml } from '../site';
@@ -173,6 +174,20 @@ v1.get('/tools', async (c) => {
     .where(eq(tools.enabled, true))
     .orderBy(asc(tools.position), asc(tools.id));
   return c.json({ items });
+});
+
+/**
+ * 外部网站卡片元数据：给文章里的 `::link{url="…"}` 补标题/描述/favicon。
+ * 服务端做 SSRF 限制与 7 天 KV 缓存；失败时返回 ok:false，前端降级成普通链接卡。
+ */
+v1.get('/link-preview', async (c) => {
+  const raw = (c.req.query('url') ?? '').trim();
+  if (!raw) return c.json({ ok: false, error: 'url_required' }, 400);
+
+  const result = await fetchLinkPreview(c.env, raw);
+  c.header('Cache-Control', 'public, max-age=3600');
+  if (!result.ok) return c.json({ ok: false, error: result.reason });
+  return c.json({ ok: true, item: result.item });
 });
 
 /** 后台总览用：最近 30 天访问量（只读、不缓存）。 */

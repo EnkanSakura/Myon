@@ -5,7 +5,7 @@
      Myon · 后台共享 Markdown 编辑器
      - 在 textarea 上方自动插入快捷工具栏（加粗 / 斜体 / 删除线 / 行内代码 /
        标题 / 引用 / 列表 / 任务 / 代码块 / 链接 / 图片 / 分隔线 /
-       行内公式 / 块级公式 / 提醒框 / 剧透 / 图片网格 / GitHub 卡片）
+       行内公式 / 块级公式 / 提醒框 / 剧透 / 图片网格 / 外部网站卡片）
      - 编辑后派发 textarea 的 input 事件（页面已有的字数、脏状态逻辑照常工作）
      - 预览：about 模式用 MyonMarkdown.render()，article 模式用
        MyonMarkdown.renderArticle()（去 h1、h2 编号、代码块卡片，对齐前台正文）
@@ -62,7 +62,7 @@
       { act: "alert", label: "提醒 ▾", title: "插入 GitHub 提醒框（可选类型）" },
       { act: "spoiler", label: "剧透", title: "剧透（:spoiler[文字]）" },
       { act: "grid", label: "网格", title: "图片网格（[grid] … [/grid]）" },
-      { act: "github", label: "GitHub", title: "GitHub 仓库卡片（::github{repo=\"owner/repo\"}）" }
+      { act: "linkcard", label: "外链卡", title: "插入外部网站卡片（::link{url=\"https://...\"}）" }
     ]
   ];
 
@@ -73,6 +73,18 @@
     { type: "IMPORTANT", label: "重要" },
     { type: "WARNING", label: "警告" },
     { type: "CAUTION", label: "谨慎" }
+  ];
+
+  /* 外链卡二级菜单：选站点类型后直接插入预置的 ::link 文本，
+     并把 URL 占位符选中，方便直接粘贴/覆盖，不再弹浏览器对话框。 */
+  var LINK_CARD_PRESETS = [
+    { key: "github", label: "GitHub", short: "github.com", url: "https://github.com/owner/repo" },
+    { key: "bilibili", label: "Bilibili", short: "bilibili.com", url: "https://www.bilibili.com/video/BV..." },
+    { key: "youtube", label: "YouTube", short: "youtube.com", url: "https://www.youtube.com/watch?v=..." },
+    { key: "bangumi", label: "Bangumi", short: "bgm.tv", url: "https://bgm.tv/subject/..." },
+    { key: "wikipedia", label: "Wikipedia", short: "wikipedia.org", url: "https://zh.wikipedia.org/wiki/..." },
+    { key: "x", label: "X / Twitter", short: "x.com", url: "https://x.com/user/status/..." },
+    { key: "custom", label: "普通链接", short: "任意 URL", url: "https://example.com/" }
   ];
 
   function resolve(value) {
@@ -129,6 +141,29 @@
           wrap.appendChild(btn);
           wrap.appendChild(menu);
           bar.appendChild(wrap);
+          return;
+        }
+        if (item.act === "linkcard") {
+          var linkWrap = el("span", "md-tool-wrap");
+          btn.setAttribute("aria-haspopup", "menu");
+          btn.setAttribute("aria-expanded", "false");
+          var linkMenu = el("span", "md-menu");
+          linkMenu.hidden = true;
+          linkMenu.setAttribute("role", "menu");
+          linkMenu.setAttribute("aria-label", "选择外链卡片网站");
+          LINK_CARD_PRESETS.forEach(function (preset) {
+            var presetBtn = el("button", "md-menu-item");
+            presetBtn.type = "button";
+            presetBtn.setAttribute("role", "menuitem");
+            presetBtn.setAttribute("data-link-preset", preset.key);
+            presetBtn.setAttribute("aria-label", "插入" + preset.label + "外链卡片");
+            presetBtn.appendChild(el("span", "md-menu-label", preset.label));
+            presetBtn.appendChild(el("span", "md-menu-type", preset.short));
+            linkMenu.appendChild(presetBtn);
+          });
+          linkWrap.appendChild(btn);
+          linkWrap.appendChild(linkMenu);
+          bar.appendChild(linkWrap);
           return;
         }
         bar.appendChild(btn);
@@ -369,6 +404,18 @@
       picker.open(opts);
     }
 
+    function insertLinkCard(preset) {
+      var target = preset || LINK_CARD_PRESETS[LINK_CARD_PRESETS.length - 1];
+      var text = '::link{url="' + target.url + '"}';
+      // 选中 URL 占位符：插入后直接粘贴目标链接即可整段替换。
+      var urlStart = text.indexOf(target.url);
+      if (urlStart < 0) {
+        insertBlock(text, 0, 0);
+        return;
+      }
+      insertBlock(text, urlStart, urlStart + target.url.length);
+    }
+
     function insertAlert(type) {
       var upper = String(type || "NOTE").toUpperCase();
       var known = false;
@@ -448,11 +495,6 @@
         case "grid":
           insertBlock("[grid]\n\n[/grid]", 7, 7);
           break;
-        case "github":
-          var cardText = '::github{repo="owner/repo"}';
-          var repoStart = cardText.indexOf("owner/repo");
-          insertBlock(cardText, repoStart, repoStart + "owner/repo".length);
-          break;
         case "hr":
           insertBlock("---\n", 0, 0);
           break;
@@ -529,13 +571,27 @@
       var menuItem = event.target.closest(".md-menu-item");
       if (menuItem) {
         var alertType = menuItem.getAttribute("data-alert-type");
+        var presetKey = menuItem.getAttribute("data-link-preset");
         closeAlertMenus();
-        act("alert", alertType);
+        if (alertType) {
+          act("alert", alertType);
+          return;
+        }
+        if (presetKey) {
+          var preset = null;
+          LINK_CARD_PRESETS.forEach(function (candidate) {
+            if (candidate.key === presetKey) preset = candidate;
+          });
+          insertLinkCard(preset);
+          return;
+        }
         return;
       }
-      var alertTrigger = event.target.closest('.md-tool[data-md-act="alert"]');
-      if (alertTrigger) {
-        toggleAlertMenu(alertTrigger);
+      var menuTrigger = event.target.closest(
+        '.md-tool[data-md-act="alert"], .md-tool[data-md-act="linkcard"]'
+      );
+      if (menuTrigger) {
+        toggleAlertMenu(menuTrigger);
         return;
       }
       closeAlertMenus();

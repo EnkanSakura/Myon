@@ -137,13 +137,33 @@ describe('renderMarkdown', () => {
     expect(invalid).not.toContain('class="repo-card"');
   });
 
+  it('renders external site cards with a discoverable preview url', () => {
+    const html = renderMarkdown(
+      '::link{url="https://example.com/post?a=1&b=2"}',
+    );
+    expect(html).toContain('<a class="site-card"');
+    expect(html).toContain('href="https://example.com/post?a=1&amp;b=2"');
+    expect(html).toContain(
+      'data-link-preview="https://example.com/post?a=1&amp;b=2"',
+    );
+    expect(html).toContain('data-link-title');
+    expect(html).toContain('example.com');
+  });
+
+  it('rejects non-http link directives and keeps them literal', () => {
+    const invalid = renderMarkdown('::link{url="javascript:alert(1)"}');
+    expect(invalid).toContain('::link{url="javascript:alert(1)"}');
+    expect(invalid).not.toContain('class="site-card"');
+  });
+
   it('keeps extended syntax inside code fences literal', () => {
     const html = renderMarkdown(
-      '```\n> [!NOTE]\n> :spoiler[x]\n::github{repo="a/b"}\n```',
+      '```\n> [!NOTE]\n> :spoiler[x]\n::github{repo="a/b"}\n::link{url="https://example.com"}\n```',
     );
     expect(html).not.toContain('alert--note');
     expect(html).not.toContain('class="spoiler"');
     expect(html).not.toContain('class="repo-card"');
+    expect(html).not.toContain('class="site-card"');
   });
 });
 

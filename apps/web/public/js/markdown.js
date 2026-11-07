@@ -83,7 +83,7 @@
     });
   }
 
-  /* ---------- 扩展语法：公式 / 剧透 / 提醒框 / 图片网格 / GitHub 卡片 ----------
+  /* ---------- 扩展语法：公式 / 剧透 / 提醒框 / 图片网格 / GitHub 卡片 / 外部网站卡片 ----------
      预览里的公式用页面加载的 KaTeX（window.MyonKatex，见后台两个编辑页的
      模块脚本）；取不到时退回原始 $…$ 文本，不假装渲染成功。
      生成的结构与服务端 packages/back/src/markdown.ts 保持一致。 */
@@ -125,6 +125,27 @@
       '<span class="repo-card-stat"><span aria-hidden="true">★</span><b data-repo-stat="stars">—</b></span>' +
       '<span class="repo-card-stat"><span aria-hidden="true">⑂</span><b data-repo-stat="forks">—</b></span>' +
       '</span><span class="repo-card-go">打开 →</span></a>';
+  }
+
+  /* 外部网站卡片：服务端先输出基础卡，页面里的 link-preview.js 再异步补标题/描述。 */
+  function externalHost(url){
+    try { return new URL(url).hostname.replace(/^www\./i, ''); }
+    catch (e) { return url; }
+  }
+  function siteCardHtml(url){
+    var host = externalHost(url);
+    return '<a class="site-card" href="' + escAttr(url) + '" target="_blank" rel="noopener noreferrer"' +
+      ' data-link-preview="' + escAttr(url) + '">' +
+      '<span class="site-card-icon" aria-hidden="true">' +
+      '<img class="site-card-img" data-link-icon alt="" loading="lazy" decoding="async" hidden>' +
+      '<span class="site-card-globe" data-link-globe>↗</span></span>' +
+      '<span class="site-card-main">' +
+      '<span class="site-card-top"><span class="site-card-site" data-link-site>' + escText(host) + '</span>' +
+      '<span class="site-card-go">打开 →</span></span>' +
+      '<b class="site-card-title" data-link-title>' + escText(url) + '</b>' +
+      '<span class="site-card-desc" data-link-desc hidden></span>' +
+      '<span class="site-card-domain" data-link-domain>' + escText(host) + '</span>' +
+      '</span></a>';
   }
 
   /* [grid] 里的多张图片：最多并排 4 张，alt 当图注 */
@@ -655,6 +676,19 @@
       var repoMatch = /^ {0,3}::github\{repo="([\w.-]+\/[\w.-]+)"\}[ \t]*$/.exec(ln);
       if (repoMatch) {
         out.push(repoCardHtml(repoMatch[1]));
+        i += 1;
+        continue;
+      }
+
+      // ::link{url="https://…"}：外部网站卡片；只接受 http(s)
+      var linkMatch = /^ {0,3}::link\{url="([^"]+)"\}[ \t]*$/.exec(ln);
+      if (linkMatch) {
+        var external = String(linkMatch[1] || '').replace(/^\s+|\s+$/g, '');
+        if (/^https?:\/\/[^\s]+$/i.test(external)) {
+          out.push(siteCardHtml(external));
+        } else {
+          out.push('<p>' + escText(ln) + '</p>');
+        }
         i += 1;
         continue;
       }

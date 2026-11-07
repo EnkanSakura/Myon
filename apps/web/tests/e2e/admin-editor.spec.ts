@@ -495,7 +495,9 @@ test.describe('后台关于页 · 共享编辑器', () => {
     });
     await page.locator('.md-tool[data-md-act="alert"]').click();
     await expect(page.locator('.md-tool-wrap.is-open .md-menu')).toBeVisible();
-    await expect(page.locator('.md-menu-item')).toHaveCount(5);
+    await expect(
+      page.locator('.md-tool-wrap.is-open .md-menu-item'),
+    ).toHaveCount(5);
     await page.locator('.md-menu-item[data-alert-type="WARNING"]').click();
     await expect(input).toHaveValue('> [!WARNING]\n> 提醒内容\n');
 
@@ -503,8 +505,21 @@ test.describe('后台关于页 · 共享编辑器', () => {
     await expect(input).toHaveValue(':spoiler[剧透内容]');
     await insertWith('grid');
     await expect(input).toHaveValue('[grid]\n\n[/grid]\n');
-    await insertWith('github');
-    await expect(input).toHaveValue('::github{repo="owner/repo"}\n');
+
+    // 外链卡片：二级菜单提供网站预设，选择后直接插入预置 ::link 文本（不弹对话框）
+    await input.fill('');
+    await input.evaluate((el: HTMLTextAreaElement) => {
+      el.focus();
+      el.setSelectionRange(0, 0);
+    });
+    await page.locator('.md-tool[data-md-act="linkcard"]').click();
+    await expect(page.locator('.md-tool-wrap.is-open .md-menu')).toBeVisible();
+    await expect(
+      page.locator('.md-tool-wrap.is-open .md-menu-item'),
+    ).toHaveCount(7);
+    await page.locator('.md-menu-item[data-link-preset="custom"]').click();
+    await expect(input).toHaveValue('::link{url="https://example.com/"}\n');
+    await expect(page.locator('#mdPreview .site-card')).toHaveCount(1);
 
     // 编辑区 + 预览区并排全屏 → Esc 退出
     const split = page.locator('.md-split');
