@@ -641,9 +641,6 @@
       handleFiles(refs.file.files);
       refs.file.value = "";
     });
-    dlg.addEventListener("click", function (event) {
-      if (event.target === dlg) closeDialog();
-    });
     dlg.addEventListener("close", function () {
       state = null;
     });

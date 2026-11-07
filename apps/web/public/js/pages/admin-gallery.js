@@ -941,9 +941,6 @@
   editCancel.addEventListener("click", closeEditor);
   $("fMedia").addEventListener("input", updatePreview);
   $("fMediaPick").addEventListener("click", openMediaPicker);
-  editDlg.addEventListener("click", function (event) {
-    if (event.target === editDlg) closeEditor();
-  });
   editDlg.addEventListener("close", function () { state.editing = null; });
 
   delCancel.addEventListener("click", function () {
@@ -951,12 +948,6 @@
     if (typeof delDlg.close === "function") delDlg.close();
   });
   delOk.addEventListener("click", confirmDelete);
-  delDlg.addEventListener("click", function (event) {
-    if (event.target === delDlg) {
-      state.pendingDelete = null;
-      if (typeof delDlg.close === "function") delDlg.close();
-    }
-  });
 
   /* ---------------- 初始化 ---------------- */
   sortSelect.value = state.sort;

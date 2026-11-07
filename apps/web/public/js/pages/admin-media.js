@@ -1271,9 +1271,6 @@
   /* ---------------- 事件绑定 ---------------- */
   btnCats.addEventListener("click", openCatDlg);
   catClose.addEventListener("click", closeCatDlg);
-  catDlg.addEventListener("click", function (event) {
-    if (event.target === catDlg) closeCatDlg();
-  });
   catAdd.addEventListener("click", addCategory);
   catName.addEventListener("keydown", function (event) {
     if (event.key === "Enter") {
@@ -1304,18 +1301,9 @@
     if (typeof catDelDlg.close === "function") catDelDlg.close();
   });
   catDelOk.addEventListener("click", confirmDeleteCategory);
-  catDelDlg.addEventListener("click", function (event) {
-    if (event.target === catDelDlg) {
-      state.pendingCatDelete = null;
-      if (typeof catDelDlg.close === "function") catDelDlg.close();
-    }
-  });
 
   metaForm.addEventListener("submit", submitMeta);
   metaCancel.addEventListener("click", closeMeta);
-  metaDlg.addEventListener("click", function (event) {
-    if (event.target === metaDlg) closeMeta();
-  });
   metaDlg.addEventListener("close", function () {
     state.pendingMeta = null;
   });
@@ -1420,12 +1408,6 @@
     if (typeof delDlg.close === "function") delDlg.close();
   });
   delOk.addEventListener("click", confirmDelete);
-  delDlg.addEventListener("click", function (event) {
-    if (event.target === delDlg) {
-      state.pendingDelete = [];
-      if (typeof delDlg.close === "function") delDlg.close();
-    }
-  });
 
   /* ---------------- 初始化 ---------------- */
   sortSel.value = state.sort;

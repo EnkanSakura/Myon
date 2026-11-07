@@ -1159,18 +1159,12 @@
 
   postForm.addEventListener("submit", submitForm);
   formCancel.addEventListener("click", closeForm);
-  postDlg.addEventListener("click", function (e) {
-    if (e.target === postDlg) closeForm();
-  });
   postDlg.addEventListener("close", function () {
     if (!state.saving) state.editing = null;
   });
 
   delCancel.addEventListener("click", closeDelete);
   delOk.addEventListener("click", confirmDelete);
-  delDlg.addEventListener("click", function (e) {
-    if (e.target === delDlg) closeDelete();
-  });
 
   pgPrev.addEventListener("click", function () {
     if (state.page > 1) loadPage(state.page - 1);

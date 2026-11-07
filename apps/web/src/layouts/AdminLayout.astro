@@ -162,6 +162,8 @@ const tail = [
     <script is:inline src="/js/combo.js"></script>
     <!-- 媒体图片转换地址（MyonImage），所有后台页共用；必须排在页面脚本之前 -->
     <script is:inline src="/js/image-transform.js"></script>
+    <!-- 后台弹窗统一关闭守卫：点空白/Esc 时未修改可关，修改后先确认 -->
+    <script is:inline src="/js/admin-dialog.js" defer></script>
     <!-- 文章编辑器预览里的外部网站卡片补全（服务端基础卡 + 异步元数据） -->
     <script is:inline src="/js/link-preview.js" defer></script>
   </head>

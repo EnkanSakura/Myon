@@ -940,9 +940,6 @@
   formCancel.addEventListener("click", function () {
     closeForm(false);
   });
-  toolDlg.addEventListener("click", function (e) {
-    if (e.target === toolDlg) closeForm(false);
-  });
   toolDlg.addEventListener("close", function () {
     if (!state.saving) state.editing = null;
   });
@@ -959,9 +956,6 @@
 
   delCancel.addEventListener("click", closeDelete);
   delOk.addEventListener("click", confirmDelete);
-  delDlg.addEventListener("click", function (e) {
-    if (e.target === delDlg) closeDelete();
-  });
   delDlg.addEventListener("close", function () {
     state.deleting = null;
   });

@@ -146,10 +146,6 @@
     location.reload();
   });
 
-  dlg.addEventListener("click", function (event) {
-    if (event.target === dlg) closeDialog();
-  });
-
   // 页面里的错误提示只需要带 data-token-open，就能打开这个弹窗。
   document.addEventListener("click", function (event) {
     var trigger = event.target.closest("[data-token-open]");

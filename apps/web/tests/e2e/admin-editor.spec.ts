@@ -421,6 +421,60 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
   });
 });
 
+test.describe('后台弹窗关闭守卫', () => {
+  test('点空白 / Esc：未修改可关，修改后先确认再关', async ({ page }) => {
+    await initToken(page);
+    await mockAdminChrome(page);
+    await page.route('**/api/v1/admin/posts**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          json: { items: [], total: 0, limit: 20, offset: 0 },
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.goto('/admin/articles');
+    await page.locator('#btnNew').click();
+    const dialog = page.locator('#postDlg');
+    const discard = page.locator('#adminDiscardDlg');
+    await expect(dialog).toHaveAttribute('open', '');
+
+    // 未修改：点对话框外的空白直接关
+    await page.mouse.click(4, 4);
+    await expect(dialog).not.toHaveAttribute('open', '');
+
+    // 修改后点空白：弹页面内确认框，原弹窗保持打开
+    await page.locator('#btnNew').click();
+    await page.locator('#fTitle').fill('未保存的标题');
+    await page.mouse.click(4, 4);
+    await expect(dialog).toHaveAttribute('open', '');
+    await expect(discard).toHaveAttribute('open', '');
+    await page.locator('#adminDiscardStay').click();
+    await expect(dialog).toHaveAttribute('open', '');
+
+    // 选「放弃修改」才关闭原弹窗
+    await page.mouse.click(4, 4);
+    await expect(discard).toHaveAttribute('open', '');
+    await page.locator('#adminDiscardLeave').click();
+    await expect(dialog).not.toHaveAttribute('open', '');
+
+    // Esc 走同一套规则：未修改直接关
+    await page.locator('#btnNew').click();
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toHaveAttribute('open', '');
+
+    // 修改后 Esc：先确认，不直接丢内容
+    await page.locator('#btnNew').click();
+    await page.locator('#fTitle').fill('Esc 未保存');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveAttribute('open', '');
+    await expect(discard).toHaveAttribute('open', '');
+    await page.locator('#adminDiscardLeave').click();
+    await expect(dialog).not.toHaveAttribute('open', '');
+  });
+});
+
 test.describe('后台关于页 · 共享编辑器', () => {
   test('工具栏插入语法，图片选择器写入 Markdown 图片', async ({ page }) => {
     await initToken(page);

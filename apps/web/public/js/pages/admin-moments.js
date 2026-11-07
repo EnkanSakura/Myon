@@ -868,9 +868,6 @@
   if (momentForm) momentForm.addEventListener("submit", submitDialog);
   if (momentDlg) {
     if (btnCancelMoment) btnCancelMoment.addEventListener("click", closeDialog);
-    momentDlg.addEventListener("click", function (e) {
-      if (e.target === momentDlg) closeDialog();
-    });
     momentDlg.addEventListener("cancel", function (e) {
       // 请求还没回来时不接受 Esc 关闭，避免状态卡在提交中。
       if (state.busy) e.preventDefault();
@@ -969,12 +966,6 @@
     confirmCancel.addEventListener("click", function () {
       state.pendingDelete = null;
       confirmDlg.close();
-    });
-    confirmDlg.addEventListener("click", function (e) {
-      if (e.target === confirmDlg) {
-        state.pendingDelete = null;
-        confirmDlg.close();
-      }
     });
   }
 

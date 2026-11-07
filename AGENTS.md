@@ -98,6 +98,7 @@
 - 工具页一律放 `src/pages/tools/`：索引用 `index.astro`，单工具用 `[slug].astro`；新增内置工具时同步 `@myon/shared` 的 `builtinToolKeys`、后台表单与页面，不要在 `/tools` 单页里堆工作台。
 - 列表页分页用 `Astro.url.searchParams.get('page')` 算 `offset`，把 `total` 写进“共 N 条”，用 `?page=N` 链接翻页；筛选只在当页数据上做，计数用 `total`。
 - 新增前台路由必须同时在 `apps/web/tests/e2e/pages.spec.ts` 里加一条覆盖；每个工具页（`/tools/<slug>`）由工具索引与 `tools.spec.ts` 覆盖；底栏、主题色、RSS 这类全站行为写到 `tests/e2e/site.spec.ts`。
+- 后台弹窗统一由 `public/js/admin-dialog.js` 接管关闭：点击空白 / 按 Esc 时，表单没改过直接关，改过则弹页面内「放弃修改？」确认框；页面脚本不要再写 backdrop click 关闭逻辑，也不要加第二套未保存确认。动态创建的 dialog（如媒体选择器）会被 MutationObserver 自动接管；确实不需要守卫的 dialog 加 `data-dismiss-guard="off"`。
 
 ### 4.3 样式
 
