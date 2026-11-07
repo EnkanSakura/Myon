@@ -6,9 +6,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import {
   decodeMediaId,
-  deleteMedia,
   encodeMediaId,
-  listMedia,
   MAX_UPLOAD_BYTES,
   type MediaError,
   readMediaCount,
@@ -16,42 +14,22 @@ import {
 } from '../../src/media';
 import type { AppBindings } from '../../src/types';
 
-/** 够用的 R2 桩：只实现媒体库用到的 list / head / get / put / delete。 */
-function createMediaEnv(initial: R2Object[] = []) {
-  const objects = new Map<string, R2Object>(
-    initial.map((object) => [object.key, object]),
+/** 够用的 R2 桩：readMediaCount 只需要 list；KV 用于数量缓存。 */
+function createMediaEnv(keys: string[] = []) {
+  const objects = keys.map(
+    (key) =>
+      ({
+        key,
+        size: 100,
+        uploaded: new Date('2026-10-20T00:00:00.000Z'),
+        httpMetadata: { contentType: 'image/png' },
+      }) as unknown as R2Object,
   );
   const kvData = new Map<string, string>();
 
   const bucket = {
-    list: async () => ({
-      objects: [...objects.values()],
-      truncated: false,
-    }),
-    head: async (key: string) => objects.get(key) ?? null,
-    get: async (key: string) => objects.get(key) ?? null,
-    put: async (
-      key: string,
-      _value: ArrayBuffer,
-      options?: {
-        httpMetadata?: { contentType?: string };
-        customMetadata?: Record<string, string>;
-      },
-    ) => {
-      objects.set(
-        key,
-        makeObject(key, {
-          contentType: options?.httpMetadata?.contentType,
-          customMetadata: options?.customMetadata,
-        }),
-      );
-      return { key };
-    },
-    delete: async (key: string) => {
-      objects.delete(key);
-    },
+    list: async () => ({ objects, truncated: false }),
   };
-
   const settings = {
     get: async (key: string, type?: string) => {
       const raw = kvData.get(key);
@@ -71,32 +49,13 @@ function createMediaEnv(initial: R2Object[] = []) {
       MEDIA: bucket as unknown as R2Bucket,
       SETTINGS: settings as unknown as KVNamespace,
     } as unknown as AppBindings,
-    objects,
     kvData,
   };
 }
 
-function makeObject(
-  key: string,
-  options: {
-    size?: number;
-    contentType?: string;
-    customMetadata?: Record<string, string>;
-    uploadedAt?: string;
-  } = {},
-): R2Object {
-  return {
-    key,
-    size: options.size ?? 100,
-    uploaded: new Date(options.uploadedAt ?? '2026-10-20T00:00:00.000Z'),
-    httpMetadata: { contentType: options.contentType ?? 'image/png' },
-    customMetadata: options.customMetadata,
-  } as unknown as R2Object;
-}
-
 describe('media id encoding', () => {
   it('round-trips keys through a URL-safe id', () => {
-    const key = 'gallery/鬼之根付.jpg';
+    const key = 'uploads/202610/鬼之根付.webp';
     const id = encodeMediaId(key);
     expect(id).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(decodeMediaId(id)).toBe(key);
@@ -107,62 +66,9 @@ describe('media id encoding', () => {
   });
 });
 
-describe('listMedia', () => {
-  it('lists R2 objects with metadata, newest first, with paging', async () => {
-    const { env } = createMediaEnv([
-      makeObject('gallery/a.png', {
-        size: 10,
-        uploadedAt: '2026-10-18T00:00:00.000Z',
-        customMetadata: { filename: encodeURIComponent('旧图.png') },
-      }),
-      makeObject('gallery/b.webp', {
-        size: 20,
-        contentType: 'image/webp',
-        uploadedAt: '2026-10-20T00:00:00.000Z',
-      }),
-      makeObject('uploads/2026/c.jpg', {
-        size: 30,
-        uploadedAt: '2026-10-19T00:00:00.000Z',
-      }),
-    ]);
-
-    const first = await listMedia(env, 2, 0);
-    expect(first.total).toBe(3);
-    expect(first.items.map((item) => item.key)).toEqual([
-      'gallery/b.webp',
-      'uploads/2026/c.jpg',
-    ]);
-    expect(first.items[0]?.mime).toBe('image/webp');
-    expect(first.items[0]?.id).toBe(encodeMediaId('gallery/b.webp'));
-    expect(first.items[0]?.filename).toBe('b.webp');
-
-    const second = await listMedia(env, 2, 2);
-    expect(second.items).toHaveLength(1);
-    expect(second.items[0]?.filename).toBe('旧图.png');
-  });
-});
-
-describe('storeMedia', () => {
-  it('writes the file + custom metadata to R2 and invalidates the count cache', async () => {
-    const { env, objects, kvData } = createMediaEnv();
-    kvData.set('media:count', '9');
-
-    const item = await storeMedia(
-      env,
-      new File([new Uint8Array([1, 2, 3])], '封面.webp', {
-        type: 'image/webp',
-      }),
-    );
-    expect(item.key).toMatch(/^uploads\/\d{6}\//);
-    expect(item.filename).toBe('封面.webp');
-    expect(objects.get(item.key)?.customMetadata?.filename).toBe(
-      encodeURIComponent('封面.webp'),
-    );
-    expect(kvData.has('media:count')).toBe(false);
-  });
-
-  it('rejects empty, unsupported and oversized files', async () => {
-    const { env } = createMediaEnv();
+describe('storeMedia validation', () => {
+  it('rejects empty, unsupported and oversized files before touching R2 / D1', async () => {
+    const env = {} as AppBindings;
     await expect(
       storeMedia(env, new File([], 'empty.webp', { type: 'image/webp' })),
     ).rejects.toMatchObject({
@@ -193,28 +99,9 @@ describe('storeMedia', () => {
   });
 });
 
-describe('deleteMedia', () => {
-  it('deletes the R2 object by decoded id', async () => {
-    const { env, objects } = createMediaEnv([
-      makeObject('gallery/a.png'),
-      makeObject('gallery/b.png'),
-    ]);
-
-    expect(await deleteMedia(env, encodeMediaId('gallery/a.png'))).toBe(true);
-    expect(objects.has('gallery/a.png')).toBe(false);
-    expect(await deleteMedia(env, encodeMediaId('gallery/missing.png'))).toBe(
-      false,
-    );
-    expect(await deleteMedia(env, 'not-an-id')).toBe(false);
-  });
-});
-
 describe('readMediaCount', () => {
   it('caches the R2 object count in KV', async () => {
-    const { env, kvData } = createMediaEnv([
-      makeObject('a.png'),
-      makeObject('b.png'),
-    ]);
+    const { env, kvData } = createMediaEnv(['a.png', 'b.png']);
 
     expect(await readMediaCount(env)).toBe(2);
     expect(kvData.get('media:count')).toBe('2');

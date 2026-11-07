@@ -1,10 +1,12 @@
 ---
-// 后台媒体库：R2 真实上传与删除（/api/v1/admin/media），令牌只存在浏览器 localStorage。
+// 后台媒体库：图片文件在 R2，分类/别名等元数据在 D1（/api/v1/admin/media*），
+// 令牌只存在浏览器 localStorage。改分类/别名不会改变图片 URL（R2 key 不含分类）。
 // 样式：public/css/pages/admin-media.css；脚本：public/js/pages/admin-media.js
 import { apiBasePath } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 
 const mediaApi = `${apiBasePath}/admin/media`;
+const categoriesApi = `${mediaApi}/categories`;
 const gifWebpApi = `${mediaApi}/gif-webp`;
 const statsApi = `${apiBasePath}/stats`;
 const mediaBase = '/media/';
@@ -19,7 +21,7 @@ const mediaBase = '/media/';
     <link rel="stylesheet" href="/css/pages/admin-media.css" />
   </Fragment>
 
-<div class="page" data-api={mediaApi} data-gif-api={gifWebpApi} data-stats-api={statsApi} data-media-base={mediaBase}>
+<div class="page" data-api={mediaApi} data-categories-api={categoriesApi} data-gif-api={gifWebpApi} data-stats-api={statsApi} data-media-base={mediaBase}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -31,11 +33,17 @@ const mediaBase = '/media/';
           <span class="sticker sticker--paper">资源 / MEDIA</span>
         </div>
         <h1>媒体库<span class="dot">。</span></h1>
-        <p class="pdate">共 <b id="sumFiles">—</b> 个文件 <span class="sep">·</span> 单张上限 8MB</p>
+        <p class="pdate">共 <b id="sumFiles">—</b> 个文件 <span class="sep">·</span> 分类 / 别名存 D1 <span class="sep">·</span> 单张上限 8MB</p>
       </div>
 
       <div class="ph-r">
-        <div class="acts">
+        <div class="acts up-acts">
+          <button class="btn" id="btnCats" type="button">管理分类</button>
+          <label class="fb-sort">上传到
+            <select id="uploadCategory" aria-label="上传到哪个分类">
+              <option value="">未分类</option>
+            </select>
+          </label>
           <button class="btn btn--pink" id="btnUpload" type="button">上传 <span class="ar" aria-hidden="true">＋</span></button>
           <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml" multiple hidden>
         </div>
@@ -76,15 +84,11 @@ const mediaBase = '/media/';
 
     <!-- ---------- 筛选栏 ---------- -->
     <div class="filterbar" aria-label="筛选媒体">
-      <div class="fb-chips" role="group" aria-label="按类型筛选">
-        <button class="chip is-on" type="button" data-type="all" aria-pressed="true">全部</button>
-        <button class="chip" type="button" data-type="img" aria-pressed="false">图片</button>
-        <button class="chip" type="button" data-type="att" aria-pressed="false">其它</button>
-      </div>
+      <div class="fb-chips" id="catChips" role="group" aria-label="按分类筛选"></div>
 
       <label class="fb-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M15.6 15.6 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <span class="sr-only">搜索文件名</span>
+        <span class="sr-only">全库搜索文件名或别名</span>
         <input id="q" type="search" autocomplete="off" spellcheck="false">
       </label>
 
@@ -96,7 +100,7 @@ const mediaBase = '/media/';
         </select>
       </label>
 
-      <span class="fb-count" id="fbCount" aria-live="polite">显示 —</span>
+      <span class="fb-count" id="fbCount" aria-live="polite">全库筛选：—</span>
       <button class="fb-clear" id="clearFilters" type="button">清除</button>
     </div>
 
@@ -112,7 +116,7 @@ const mediaBase = '/media/';
     <div class="media-grid" id="mediaGrid" aria-busy="true"></div>
 
     <div class="empty" id="empty" hidden>
-      <div class="empty-c"><p class="empty-d" id="emptyText">没有符合条件的文件。换个类型或关键词试试。</p></div>
+      <div class="empty-c"><p class="empty-d" id="emptyText">没有符合条件的文件。换个分类或关键词试试。</p></div>
       <div class="empty-actions"><button class="btn" id="emptyReset" type="button">清除筛选</button></div>
     </div>
 
@@ -136,10 +140,71 @@ const mediaBase = '/media/';
 
     <div class="page-mark">
       <span>P.08 / MEDIA — 媒体文件</span>
-      <span>JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 上限 8MB</span>
+      <span>分类与别名只存 D1 · 改名/移动不改图片 URL · 别名最多 8 个（每个 ≤30 字）</span>
     </div>
 
   </div>
+
+<!-- ---------- 分类管理 ---------- -->
+<dialog class="dlg cat-dlg" id="catDlg" aria-labelledby="catDlgTitle">
+  <div class="dlg-box">
+    <span class="dlg-tab">MEDIA / 分类</span>
+    <div class="dlg-h"><span id="catDlgTitle">管理分类</span><span>D1 · 图片 URL 不变</span></div>
+    <p class="dlg-c cat-note">分类只存在 D1；改名、调整顺序不会改变图片地址。删除分类后，该分类下的图片会移到「未分类」。</p>
+    <div class="cat-list" id="catList"></div>
+    <p class="empty empty--inline" id="catEmpty" hidden>还没有分类，先新建一个。</p>
+    <div class="cat-add">
+      <label class="sr-only" for="catName">新分类名称</label>
+      <input class="token-input cat-name-input" id="catName" type="text" maxlength="24" spellcheck="false" autocomplete="off">
+      <button class="p-btn p-btn--pub" id="catAdd" type="button">添加分类</button>
+    </div>
+    <p class="fld-err" id="catErr" hidden></p>
+    <div class="dlg-f">
+      <span class="dlg-c" id="catState">—</span>
+      <div class="dlg-a"><button class="p-btn" id="catClose" type="button">关闭</button></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- ---------- 删除分类确认 ---------- -->
+<dialog class="dlg" id="catDelDlg" aria-labelledby="catDelTitle">
+  <div class="dlg-box">
+    <span class="dlg-tab">DANGER</span>
+    <div class="dlg-h"><span id="catDelTitle">确认删除分类</span><span>DELETE</span></div>
+    <p class="cfm-p" id="catDelText">删除后，该分类下的图片会移到「未分类」。</p>
+    <div class="dlg-f">
+      <span class="dlg-c">图片文件不会被删除</span>
+      <div class="dlg-a">
+        <button class="p-btn" id="catDelCancel" type="button">取消</button>
+        <button class="p-btn p-btn--pub del-ok" id="catDelOk" type="button">删除分类</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- ---------- 分类 / 别名（单张图片） ---------- -->
+<dialog class="dlg meta-dlg" id="metaDlg" aria-labelledby="metaDlgTitle">
+  <form class="dlg-box" id="metaForm" novalidate>
+    <span class="dlg-tab">MEDIA / 归类</span>
+    <div class="dlg-h"><span id="metaDlgTitle">分类与别名</span><span>PATCH / 媒体</span></div>
+    <p class="dlg-c meta-target" id="metaTarget">—</p>
+    <label class="token-label" for="metaCategory">分类 / CATEGORY</label>
+    <select id="metaCategory" class="meta-select" aria-label="图片分类">
+      <option value="">未分类</option>
+    </select>
+    <label class="token-label meta-alias-label" for="metaAliases">别名 / ALIASES</label>
+    <input class="token-input meta-input" id="metaAliases" type="text" maxlength="250" spellcheck="false" autocomplete="off">
+    <p class="hint">逗号或顿号分隔，最多 8 个、每个 30 字以内；保存后可按别名全库搜索。分类与别名只存 D1，不改图片 URL。</p>
+    <p class="fld-err" id="metaErr" hidden></p>
+    <div class="dlg-f">
+      <span class="dlg-c" id="metaState">—</span>
+      <div class="dlg-a">
+        <button class="p-btn" id="metaCancel" type="button">取消</button>
+        <button class="p-btn p-btn--pub" id="metaSave" type="submit">保存</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <!-- ---------- 删除确认 ---------- -->
 <dialog class="dlg" id="delDlg" aria-labelledby="delDlgTitle">

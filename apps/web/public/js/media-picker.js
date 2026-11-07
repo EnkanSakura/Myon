@@ -11,12 +11,16 @@
          gifApi: ".../media/gif-webp",// GIF 转码代理（可空）
          base: "/media/",             // 图片地址前缀，来自 mediaUrl()
          selectedKey: "uploads/xx",   // pick 模式下的已选图
+         categoryId: "cat_posts",     // 可选；入口默认分类（上传归类用，可为空=未分类）
          sizes: ["480", "720", "1080", "1440", "orig"], // 可选；传了才显示尺寸栏
          defaultSize: "720",          // 尺寸栏默认高亮档位
          size: "720",                 // 初始选中档位（优先于 defaultSize）
          onPick: function (item, size) {} // item = MediaItem；size = 当前尺寸档位
        })
 
+     分类筛选：现有图片顶部有「全部 + 动态分类 + 未分类」chips，列表与搜索都由服务端
+     （文件名 / R2 key / 别名）完成。上传时归入「当前选中的具体分类 > 调用方 categoryId > 未分类」。
+     分类/别名只存 D1，不改图片 URL。
      尺寸档位来自页面 data-image-sizes（@myon/shared 的 mediaImageSizes），
      不传 sizes 时整条尺寸栏隐藏，行为与旧版一致（设置页 / 关于页）。
      图片处理复用 /js/image-upload.js（MyonImageUpload.prepareImage），
@@ -27,6 +31,7 @@
   var PAGE_SIZE = 100;
   var MAX_SOURCE_BYTES = 20 * 1024 * 1024;
   var MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+  var UNCATEGORIZED = "uncategorized";
   var UPLOAD_ERRORS = {
     unsupported_type: "仅支持 WebP / AVIF / SVG 最终文件",
     too_large: "转换后超过 8MB",
@@ -80,7 +85,9 @@
       '<button class="mp-tab" id="mpTabUpload" type="button" role="tab" aria-selected="false">上传新图</button>' +
       "</div>" +
       '<div class="mp-pane" id="mpExistingPane" role="tabpanel" aria-label="现有图片">' +
-      '<label class="mp-search"><span class="sr-only">搜索图片文件名</span>' +
+      // 分类 chips：全部 + 动态分类 + 未分类（浅色弹窗里用 .mp-cats 配色）
+      '<div class="mp-cats" id="mpCats" role="group" aria-label="按分类筛选"></div>' +
+      '<label class="mp-search"><span class="sr-only">搜索文件名或别名</span>' +
       '<input id="mpSearch" type="search" autocomplete="off" spellcheck="false"></label>' +
       '<div class="mp-grid" id="mpGrid" aria-busy="true"></div>' +
       '<p class="mp-empty" id="mpEmpty" hidden>媒体库还是空的，切到「上传新图」传一张。</p>' +
@@ -90,7 +97,7 @@
       '<div class="mp-pane" id="mpUploadPane" role="tabpanel" aria-label="上传新图" hidden>' +
       '<input type="file" id="mpFile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml" multiple hidden>' +
       '<button class="p-btn" id="mpPickFile" type="button">选择文件上传 ＋</button>' +
-      '<p class="mp-hint">JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 单张上限 8MB</p>' +
+      '<p class="mp-hint" id="mpUploadHint">JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 单张上限 8MB</p>' +
       '<div class="mp-up-list" id="mpUpList" aria-live="polite"></div>' +
       "</div>" +
       '<div class="notice notice--warn mp-notice" id="mpNotice" hidden>' +
@@ -116,12 +123,14 @@
       existingPane: document.getElementById("mpExistingPane"),
       uploadPane: document.getElementById("mpUploadPane"),
       search: document.getElementById("mpSearch"),
+      cats: document.getElementById("mpCats"),
       grid: document.getElementById("mpGrid"),
       empty: document.getElementById("mpEmpty"),
       count: document.getElementById("mpCount"),
       more: document.getElementById("mpMore"),
       file: document.getElementById("mpFile"),
       pickFile: document.getElementById("mpPickFile"),
+      uploadHint: document.getElementById("mpUploadHint"),
       upList: document.getElementById("mpUpList"),
       notice: document.getElementById("mpNotice"),
       sizeBar: document.getElementById("mpSize"),
@@ -187,6 +196,68 @@
     return state && state.sizes && state.sizes.length ? state.size : "";
   }
 
+  function categoryNameById(id) {
+    if (!id) return "未分类";
+    for (var i = 0; i < state.categories.length; i += 1) {
+      if (state.categories[i].id === id) return state.categories[i].name;
+    }
+    return "未分类";
+  }
+
+  /** 分类 chips：全部 + 动态分类（含计数）+ 未分类；浅色弹窗专用样式 .mp-cat。 */
+  function paintCats() {
+    if (!refs || !refs.cats) return;
+    refs.cats.innerHTML = "";
+    var entries = [{ id: "all", name: "全部", count: state.allCount }];
+    for (var i = 0; i < state.categories.length; i += 1) {
+      entries.push({
+        id: state.categories[i].id,
+        name: state.categories[i].name,
+        count: state.categories[i].count || 0
+      });
+    }
+    entries.push({ id: UNCATEGORIZED, name: "未分类", count: state.uncategorizedCount });
+    var frag = document.createDocumentFragment();
+    for (var j = 0; j < entries.length; j += 1) {
+      var entry = entries[j];
+      var btn = el("button", "mp-cat" + (state.category === entry.id ? " is-on" : ""));
+      btn.type = "button";
+      btn.setAttribute("data-category", entry.id);
+      btn.setAttribute("aria-pressed", state.category === entry.id ? "true" : "false");
+      btn.appendChild(document.createTextNode(entry.name));
+      if (state.catCountsReady) {
+        var count = el("b", "");
+        count.textContent = String(entry.count);
+        btn.appendChild(count);
+      }
+      btn.addEventListener("click", (function (target) {
+        return function () {
+          if (state.category === target.id) return;
+          state.category = target.id;
+          paintCats();
+          updateUploadHint();
+          loadMedia(true);
+        };
+      })(entry));
+      frag.appendChild(btn);
+    }
+    refs.cats.appendChild(frag);
+  }
+
+  /** 上传归类：优先当前选中的具体分类，其次 opts.categoryId，最后未分类。 */
+  function uploadCategoryId() {
+    if (state.category !== "all" && state.category !== UNCATEGORIZED) return state.category;
+    return state.entryCategoryId || "";
+  }
+
+  function updateUploadHint() {
+    if (!refs || !refs.uploadHint) return;
+    var id = uploadCategoryId();
+    var name = id ? categoryNameById(id) : "未分类";
+    refs.uploadHint.textContent =
+      "上传后归入「" + name + "」分类 · JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 单张上限 8MB";
+  }
+
   function paintSizes() {
     if (!refs || !refs.sizeBar || !refs.sizeOpts) return;
     if (!state.sizes || !state.sizes.length) {
@@ -231,20 +302,19 @@
   }
 
   function renderGrid() {
-    var q = state.q.trim().toLowerCase();
-    var items = state.items.filter(function (item) {
-      if (!q) return true;
-      return imageName(item).toLowerCase().indexOf(q) >= 0;
-    });
-
     refs.grid.innerHTML = "";
     var frag = document.createDocumentFragment();
-    items.forEach(function (item) {
+    state.items.forEach(function (item) {
       var btn = el("button", "mp-item");
       btn.type = "button";
       btn.setAttribute("data-key", item.key);
       btn.setAttribute("data-name", imageName(item));
-      btn.title = imageName(item) + " · " + formatSize(item.size);
+      btn.setAttribute("data-category-id", item.categoryId || "");
+      var aliases = Array.isArray(item.aliases) ? item.aliases : [];
+      var catName = item.categoryName || "未分类";
+      var title = imageName(item) + " · " + catName + " · " + formatSize(item.size);
+      if (aliases.length) title += " · 别名：" + aliases.join("、");
+      btn.title = title;
       if (state.selectedKey && item.key === state.selectedKey) btn.classList.add("is-on");
       var img = document.createElement("img");
       img.src = previewSrc(item);
@@ -253,6 +323,10 @@
       img.decoding = "async";
       btn.appendChild(img);
       btn.appendChild(el("span", "mp-item-name", imageName(item)));
+      if (aliases.length) {
+        // 副行展示别名，方便按记忆里的短名找图
+        btn.appendChild(el("span", "mp-item-name", aliases.join(" · ")));
+      }
       btn.addEventListener("click", function () {
         pick(item);
       });
@@ -260,10 +334,10 @@
     });
     refs.grid.appendChild(frag);
 
-    if (items.length === 0) {
+    if (state.items.length === 0) {
       refs.empty.hidden = false;
-      refs.empty.textContent = state.items.length
-        ? "没有匹配「" + state.q.trim() + "」的图片。"
+      refs.empty.textContent = state.q || state.category !== "all"
+        ? "没有匹配的图片。换个关键词或分类试试。"
         : "媒体库还是空的，切到「上传新图」传一张。";
     } else {
       refs.empty.hidden = true;
@@ -285,6 +359,7 @@
 
   /* ---------------- 读取现有图片 ---------------- */
   function loadMedia(reset) {
+    if (!state) return;
     if (state.loading) return;
     if (!state.token) {
       state.items = [];
@@ -301,7 +376,12 @@
     state.loading = true;
     refs.grid.setAttribute("aria-busy", "true");
     refs.state.textContent = "读取中…";
-    fetch(state.api + "?limit=" + PAGE_SIZE + "&offset=" + state.offset, {
+    var url = state.api + "?limit=" + PAGE_SIZE + "&offset=" + state.offset;
+    if (state.category && state.category !== "all") {
+      url += "&category=" + encodeURIComponent(state.category);
+    }
+    if (state.q) url += "&q=" + encodeURIComponent(state.q);
+    fetch(url, {
       headers: { accept: "application/json", "x-admin-token": state.token },
       cache: "no-store"
     })
@@ -320,6 +400,24 @@
           throw new Error(describeError(result.response.status, result.body));
         }
         var items = Array.isArray(result.body.items) ? result.body.items : [];
+        // 分类列表随列表接口一起返回（含计数），首屏用它渲染 chips
+        if (Array.isArray(result.body.categories)) {
+          state.categories = result.body.categories.slice().sort(function (a, b) {
+            return (a.position || 0) - (b.position || 0);
+          });
+          state.uncategorizedCount =
+            typeof result.body.uncategorizedCount === "number"
+              ? result.body.uncategorizedCount
+              : 0;
+          var allCount = state.uncategorizedCount;
+          state.categories.forEach(function (cat) {
+            allCount += typeof cat.count === "number" ? cat.count : 0;
+          });
+          state.allCount = allCount;
+          state.catCountsReady = true;
+          paintCats();
+          updateUploadHint();
+        }
         state.items = state.items.concat(items);
         state.total = Number(result.body.total) || state.items.length;
         state.offset += items.length;
@@ -366,7 +464,7 @@
     row.classList.toggle("is-ok", !isError && text === "完成");
   }
 
-  function uploadXhr(file, row) {
+  function uploadXhr(file, categoryId, row) {
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open("POST", state.api, true);
@@ -393,6 +491,7 @@
       };
       var form = new FormData();
       form.append("file", file, file.name);
+      if (categoryId) form.append("categoryId", categoryId);
       xhr.send(form);
     });
   }
@@ -411,6 +510,8 @@
     }
     state.busy = true;
     refs.pickFile.disabled = true;
+    // 上传归类：当前选中具体分类 > 调用方 categoryId > 未分类
+    var categoryId = uploadCategoryId();
     var queue = Array.prototype.slice.call(files);
     var uploaded = [];
 
@@ -445,7 +546,7 @@
         .prepareImage(file, { gifApi: state.gifApi })
         .then(function (prepared) {
           if (prepared.size > MAX_UPLOAD_BYTES) throw new Error("转换后超过 8MB");
-          return uploadXhr(prepared, row);
+          return uploadXhr(prepared, categoryId, row);
         })
         .then(function (item) {
           uploaded.push(item);
@@ -481,6 +582,12 @@
       gifApi: opts.gifApi || "",
       base: opts.base || "/media/",
       selectedKey: opts.selectedKey || null,
+      entryCategoryId: typeof opts.categoryId === "string" ? opts.categoryId : "",
+      category: "all",
+      categories: [],
+      uncategorizedCount: 0,
+      allCount: 0,
+      catCountsReady: false,
       sizes: sizes.length ? sizes : null,
       size: sizes.length ? wanted : "",
       onPick: typeof opts.onPick === "function" ? opts.onPick : null,
@@ -498,6 +605,8 @@
     refs.state.textContent = "—";
     refs.grid.innerHTML = "";
     paintSizes();
+    paintCats();
+    updateUploadHint();
     paintNotice();
     paintSelected();
     setTab("existing");
@@ -513,9 +622,17 @@
   function bindEvents() {
     refs.tabExisting.addEventListener("click", function () { setTab("existing"); });
     refs.tabUpload.addEventListener("click", function () { setTab("upload"); });
+    // 搜索走服务端（文件名 / R2 key / 别名），输入 300ms 防抖
+    var searchTimer = null;
     refs.search.addEventListener("input", function () {
-      state.q = refs.search.value;
-      renderGrid();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        if (!state) return;
+        var next = refs.search.value.trim();
+        if (next === state.q) return;
+        state.q = next;
+        loadMedia(true);
+      }, 300);
     });
     refs.more.addEventListener("click", function () { loadMedia(false); });
     refs.cancel.addEventListener("click", closeDialog);

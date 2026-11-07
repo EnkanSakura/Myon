@@ -1,9 +1,21 @@
 (function () {
   "use strict";
 
+  /* ==========================================================================
+     Myon · 后台媒体库
+     - 图片文件只存 R2；分类 / 别名等元数据在 D1（/api/v1/admin/media*）。
+     - 分类可自定义（分类管理弹窗），单归属；未分类用 categoryId=null。
+     - 别名每张图最多 8 个、每个 30 字，搜索匹配文件名 / R2 key / 别名。
+     - 列表的筛选 / 排序 / 分页全部由服务端完成（全库筛选）。
+     ========================================================================== */
+
   /* ---------------- 常量与工具 ---------------- */
   var TOKEN_KEY = "myon-admin-token";
   var MAX_BYTES = 8 * 1024 * 1024;
+  var ALIAS_MAX_COUNT = 8;
+  var ALIAS_MAX_LENGTH = 30;
+  var CATEGORY_NAME_MAX = 24;
+  var UNCATEGORIZED = "uncategorized";
   var UPLOAD_ERRORS = {
     unsupported_type: "仅支持 JPEG / PNG / GIF / WebP / AVIF / SVG",
     too_large: "转换后超过 8MB 上限",
@@ -17,6 +29,9 @@
 
   var pageEl = document.querySelector(".page[data-api]");
   var API = pageEl ? pageEl.getAttribute("data-api") : "";
+  var CATEGORIES_API = pageEl
+    ? pageEl.getAttribute("data-categories-api") || (API ? API + "/categories" : "")
+    : "";
   var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") : "";
   var STATS_API = pageEl ? pageEl.getAttribute("data-stats-api") : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/";
@@ -41,8 +56,11 @@
   var authText = $("authText");
   var authToken = $("authToken");
   var NOTICE_TONES = ["notice--info", "notice--warn", "notice--ok", "notice--error"];
+  var btnCats = $("btnCats");
   var btnUpload = $("btnUpload");
   var fileInput = $("fileInput");
+  var uploadCategory = $("uploadCategory");
+  var catChips = $("catChips");
   var upList = $("upList");
   var loadingEl = $("mLoading");
   var grid = $("mediaGrid");
@@ -54,7 +72,6 @@
   var batchClear = $("batchClear");
   var qInput = $("q");
   var sortSel = $("sortSel");
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".filterbar .chip"));
   var sumFiles = $("sumFiles");
   var stLine = $("stLine");
   var stCount = $("stCount");
@@ -76,6 +93,29 @@
   var delDlgText = $("delDlgText");
   var delCancel = $("delCancel");
   var delOk = $("delOk");
+  // 分类管理
+  var catDlg = $("catDlg");
+  var catList = $("catList");
+  var catEmpty = $("catEmpty");
+  var catName = $("catName");
+  var catAdd = $("catAdd");
+  var catErr = $("catErr");
+  var catState = $("catState");
+  var catClose = $("catClose");
+  var catDelDlg = $("catDelDlg");
+  var catDelText = $("catDelText");
+  var catDelCancel = $("catDelCancel");
+  var catDelOk = $("catDelOk");
+  // 单图分类 / 别名
+  var metaDlg = $("metaDlg");
+  var metaForm = $("metaForm");
+  var metaCategory = $("metaCategory");
+  var metaAliases = $("metaAliases");
+  var metaTarget = $("metaTarget");
+  var metaErr = $("metaErr");
+  var metaState = $("metaState");
+  var metaSave = $("metaSave");
+  var metaCancel = $("metaCancel");
 
   /* ---------------- 页面状态 ---------------- */
   var state = {
@@ -84,14 +124,21 @@
     limit: 30,
     page: 1,
     pages: 1,
-    type: "all",
+    // 分类筛选："all" | 分类 id | "uncategorized"
+    category: "all",
     q: "",
     sort: "added",
+    // 分类列表：来自列表接口的 categories（含 count）；CRUD 后本地更新再重拉
+    categories: [],
+    uncategorizedCount: 0,
+    catReady: false,
     selected: {},
     stats: null,
     loading: false,
     busy: false,
-    pendingDelete: []
+    pendingDelete: [],
+    pendingMeta: null,
+    pendingCatDelete: null
   };
 
   var toastTimer = null;
@@ -145,6 +192,20 @@
     emptyReset.hidden = true;
     emptyText.textContent = "接口未开放：服务端没有配置管理令牌。";
     toast(AUTH_503);
+  }
+
+  /** 接口错误 → 可读中文：优先服务端 message / zod issues，其次回退。 */
+  function serverMessage(body, fallback) {
+    if (!body) return fallback || "请求失败";
+    if (typeof body.message === "string" && body.message) return body.message;
+    if (body.issues && body.issues.length) {
+      return body.issues.map(function (issue) {
+        return (issue.path || "字段") + "：" + issue.message;
+      }).join("；");
+    }
+    if (body.error === "name_taken") return "已有同名分类";
+    if (body.error === "not_found") return "资源不存在，可能已被删除";
+    return fallback || "请求失败";
   }
 
   /* ---------------- 展示工具 ---------------- */
@@ -201,6 +262,103 @@
     return { img: img, att: att, size: size, all: state.items.length };
   }
 
+  /* ---------------- 分类工具 ---------------- */
+  function normalizeCategoryList(list) {
+    var out = [];
+    each(list || [], function (entry) {
+      if (!entry || typeof entry.id !== "string") return;
+      out.push({
+        id: entry.id,
+        name: typeof entry.name === "string" ? entry.name : entry.id,
+        position: typeof entry.position === "number" ? entry.position : 0,
+        count: typeof entry.count === "number" ? entry.count : 0
+      });
+    });
+    out.sort(function (a, b) {
+      if (a.position !== b.position) return a.position - b.position;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    return out;
+  }
+
+  function categoryById(id) {
+    for (var i = 0; i < state.categories.length; i++) {
+      if (state.categories[i].id === id) return state.categories[i];
+    }
+    return null;
+  }
+
+  /** 填充分类下拉：includeEmpty 时第一项是「未分类」。 */
+  function fillCategorySelect(select, selectedId, includeEmpty) {
+    if (!select) return;
+    var previous = selectedId === undefined ? select.value : selectedId;
+    var frag = document.createDocumentFragment();
+    if (includeEmpty) {
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "未分类";
+      frag.appendChild(opt);
+    }
+    each(state.categories, function (cat) {
+      var option = document.createElement("option");
+      option.value = cat.id;
+      option.textContent = cat.name;
+      frag.appendChild(option);
+    });
+    select.innerHTML = "";
+    select.appendChild(frag);
+    var found = false;
+    for (var i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === previous) found = true;
+    }
+    select.value = found ? previous : "";
+  }
+
+  function renderCatSelects() {
+    if (uploadCategory) fillCategorySelect(uploadCategory, uploadCategory.value, true);
+    if (metaDlg && metaDlg.open) {
+      var selected = state.pendingMeta ? state.pendingMeta.categoryId || "" : "";
+      fillCategorySelect(metaCategory, selected, true);
+    }
+  }
+
+  /** 筛选 chips：全部 + 动态分类（含计数）+ 未分类。 */
+  function renderCatChips() {
+    if (!catChips) return;
+    var entries = [];
+    var allCount = 0;
+    each(state.categories, function (cat) {
+      var count = typeof cat.count === "number" ? cat.count : 0;
+      allCount += count;
+      entries.push({ id: cat.id, name: cat.name, count: count });
+    });
+    var unc = typeof state.uncategorizedCount === "number" ? state.uncategorizedCount : 0;
+    allCount += unc;
+    entries.push({ id: UNCATEGORIZED, name: "未分类", count: unc });
+    entries.unshift({ id: "all", name: "全部", count: allCount });
+
+    catChips.innerHTML = "";
+    var frag = document.createDocumentFragment();
+    each(entries, function (entry) {
+      var on = state.category === entry.id;
+      var btn = el("button", "chip" + (on ? " is-on" : ""));
+      btn.type = "button";
+      btn.setAttribute("data-category", entry.id);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.appendChild(document.createTextNode(entry.name + " "));
+      btn.appendChild(el("b", "", String(entry.count)));
+      btn.addEventListener("click", function () {
+        if (state.category === entry.id) return;
+        state.category = entry.id;
+        state.page = 1;
+        renderCatChips();
+        loadData();
+      });
+      frag.appendChild(btn);
+    });
+    catChips.appendChild(frag);
+  }
+
   /* ---------------- 汇总 / 分页 ---------------- */
   function paintSummary() {
     var counts = pageCounts();
@@ -221,11 +379,10 @@
     paintPager();
   }
 
-  /** 筛选栏只保留一个计数：本页通过了类型与关键词筛选的数量。 */
+  /** 筛选栏计数：服务端过滤后的全库命中数（不是本页数量）。 */
   function paintFilterCount() {
     if (!fbCount) return;
-    var shown = visibleItems().length;
-    fbCount.textContent = "显示 " + shown + " 个 · 筛选只作用于本页";
+    fbCount.textContent = "全库筛选：" + state.total + " 个";
   }
 
   function paintPager() {
@@ -262,38 +419,20 @@
       empty.hidden = true;
       return;
     }
-    var list = visibleItems();
     if (state.total === 0) {
       empty.hidden = false;
       emptyReset.hidden = false;
-      emptyText.textContent = "媒体库还是空的，先上传一张图片。";
-      emptyReset.textContent = "选择文件上传";
-    } else if (list.length === 0) {
-      empty.hidden = false;
-      emptyReset.hidden = false;
-      emptyText.textContent = "没有符合条件的文件。换个类型或关键词试试。";
-      emptyReset.textContent = "清除筛选";
+      var filtered = state.category !== "all" || !!state.q;
+      if (filtered) {
+        emptyText.textContent = "没有符合条件的文件。换个分类或关键词试试。";
+        emptyReset.textContent = "清除筛选";
+      } else {
+        emptyText.textContent = "媒体库还是空的，先上传一张图片。";
+        emptyReset.textContent = "选择文件上传";
+      }
     } else {
       empty.hidden = true;
     }
-  }
-
-  /* ---------------- 过滤 / 排序 ---------------- */
-  function visibleItems() {
-    var list = state.items.filter(function (item) {
-      var typeOk = state.type === "all" || (state.type === "img" ? isImage(item) : !isImage(item));
-      var name = String(item.filename || "").toLowerCase();
-      var qOk = !state.q || name.indexOf(state.q) >= 0;
-      return typeOk && qOk;
-    });
-    if (state.sort === "size") {
-      list.sort(function (a, b) { return (b.size || 0) - (a.size || 0); });
-    } else if (state.sort === "name") {
-      list.sort(function (a, b) { return String(a.filename).localeCompare(String(b.filename)); });
-    } else {
-      list.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
-    }
-    return list;
   }
 
   /* ---------------- 卡片 ---------------- */
@@ -311,6 +450,8 @@
     card.setAttribute("data-type", isImage(item) ? "img" : "att");
     card.setAttribute("data-name", item.filename || item.key || "");
     card.setAttribute("data-key", item.key || "");
+    card.setAttribute("data-category-id", item.categoryId || "");
+    card.setAttribute("data-aliases", (item.aliases || []).join("、"));
 
     var thumb = el("div", "mthumb");
     var box = document.createElement("input");
@@ -339,20 +480,40 @@
     } else {
       thumb.appendChild(attBox(item));
     }
+    // 分类 badge：未分类用中性样式
+    var catBadge = el(
+      "span",
+      "mcat" + (item.categoryId ? "" : " is-empty"),
+      item.categoryName || "未分类"
+    );
+    catBadge.title = item.categoryId ? "分类：" + item.categoryName : "未分类";
+    thumb.appendChild(catBadge);
 
     var mover = el("div", "mover");
     var copyBtn = el("button", "mo", "复制链接");
     copyBtn.type = "button";
     copyBtn.setAttribute("data-act", "copy");
+    var metaBtn = el("button", "mo", "分类/别名");
+    metaBtn.type = "button";
+    metaBtn.setAttribute("data-act", "meta");
     var delBtn = el("button", "mo mo--del", "删除");
     delBtn.type = "button";
     delBtn.setAttribute("data-act", "del");
     mover.appendChild(copyBtn);
+    mover.appendChild(metaBtn);
     mover.appendChild(delBtn);
     thumb.appendChild(mover);
 
     var meta = el("div", "mmeta");
     meta.appendChild(el("span", "mname", item.filename || item.key || "未命名"));
+    var aliases = item.aliases || [];
+    if (aliases.length) {
+      var aliasWrap = el("div", "mtags");
+      each(aliases, function (alias) {
+        aliasWrap.appendChild(el("span", "malias", alias));
+      });
+      meta.appendChild(aliasWrap);
+    }
     var sub = el("span", "msub");
     sub.appendChild(el("span", "", sizeLabel(item.size) + " · " + dateTimeLabel(item.createdAt)));
     sub.appendChild(el("span", "mref", item.mime || "文件"));
@@ -365,7 +526,7 @@
 
   function renderGrid() {
     grid.innerHTML = "";
-    visibleItems().forEach(function (item) { grid.appendChild(cardFor(item)); });
+    each(state.items, function (item) { grid.appendChild(cardFor(item)); });
     grid.setAttribute("aria-busy", state.loading ? "true" : "false");
     syncBatch();
     paintEmpty();
@@ -396,11 +557,16 @@
     state.items = [];
     state.total = 0;
     state.pages = 1;
+    state.categories = [];
+    state.uncategorizedCount = 0;
+    state.catReady = true;
     state.selected = {};
     state.loading = false;
     loadingEl.hidden = true;
     grid.innerHTML = "";
     grid.setAttribute("aria-busy", "false");
+    renderCatChips();
+    renderCatSelects();
     paintSummary();
     empty.hidden = false;
     emptyReset.hidden = true;
@@ -419,6 +585,20 @@
       .catch(function () {});
   }
 
+  /** 列表请求：分类 / 关键词 / 排序 / 分页都交给服务端（全库筛选）。 */
+  function buildListUrl() {
+    var params = [
+      "limit=" + state.limit,
+      "offset=" + (state.page - 1) * state.limit,
+      "sort=" + encodeURIComponent(state.sort)
+    ];
+    if (state.category && state.category !== "all") {
+      params.push("category=" + encodeURIComponent(state.category));
+    }
+    if (state.q) params.push("q=" + encodeURIComponent(state.q));
+    return API + "?" + params.join("&");
+  }
+
   function loadData() {
     if (!tokenValue()) {
       setLoading(false);
@@ -431,7 +611,7 @@
 
     setLoading(true);
     hideAuth();
-    var url = API + "?limit=" + state.limit + "&offset=" + (state.page - 1) * state.limit;
+    var url = buildListUrl();
 
     request("GET", url)
       .then(function (res) {
@@ -448,6 +628,10 @@
         state.total = typeof body.total === "number" ? body.total : body.items.length;
         state.limit = typeof body.limit === "number" ? body.limit : state.limit;
         state.pages = Math.max(1, Math.ceil(state.total / state.limit));
+        state.categories = normalizeCategoryList(body.categories);
+        state.uncategorizedCount =
+          typeof body.uncategorizedCount === "number" ? body.uncategorizedCount : 0;
+        state.catReady = true;
         state.selected = {};
         if (state.page > state.pages) {
           state.page = state.pages;
@@ -455,6 +639,9 @@
           return;
         }
         setLoading(false);
+        renderCatChips();
+        renderCatSelects();
+        if (catDlg && catDlg.open) renderCatList();
         renderGrid();
         loadStats();
       })
@@ -470,7 +657,381 @@
       });
   }
 
-  /* ---------------- 删除 ---------------- */
+  /* ---------------- 分类管理 ---------------- */
+  function catActBtn(act, label) {
+    var cls = "cat-act";
+    if (act === "del") cls += " cat-del";
+    var btn = el("button", cls, label);
+    btn.type = "button";
+    btn.setAttribute("data-act", act);
+    return btn;
+  }
+
+  function renderCatList() {
+    if (!catList) return;
+    var cats = state.categories || [];
+    catList.innerHTML = "";
+    if (catEmpty) catEmpty.hidden = !state.catReady || cats.length > 0;
+    var frag = document.createDocumentFragment();
+    each(cats, function (cat, index) {
+      var row = el("div", "cat-row");
+      row.setAttribute("data-id", cat.id);
+      row.appendChild(el("span", "cat-pos", String(index + 1)));
+      var input = document.createElement("input");
+      input.type = "text";
+      input.className = "cat-name";
+      input.value = cat.name;
+      input.maxLength = CATEGORY_NAME_MAX;
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      input.setAttribute("aria-label", "分类名称");
+      input.addEventListener("input", function () {
+        catErr.hidden = true;
+      });
+      row.appendChild(input);
+      row.appendChild(catActBtn("rename", "保存"));
+      var up = catActBtn("up", "↑");
+      if (index === 0) up.disabled = true;
+      row.appendChild(up);
+      var down = catActBtn("down", "↓");
+      if (index === cats.length - 1) down.disabled = true;
+      row.appendChild(down);
+      row.appendChild(catActBtn("del", "删除"));
+      frag.appendChild(row);
+    });
+    catList.appendChild(frag);
+  }
+
+  function showCatError(text) {
+    if (!catErr) return;
+    catErr.textContent = text;
+    catErr.hidden = false;
+    catState.textContent = "操作失败";
+  }
+
+  function openCatDlg() {
+    if (!tokenValue()) {
+      toast("需要管理令牌才能管理分类");
+      return;
+    }
+    catErr.hidden = true;
+    catErr.textContent = "";
+    catState.textContent = "分类只存在 D1 · 图片 URL 不变";
+    renderCatList();
+    if (typeof catDlg.showModal === "function") {
+      if (!catDlg.open) catDlg.showModal();
+    } else {
+      catDlg.setAttribute("open", "");
+    }
+    if (!state.catReady) loadData();
+  }
+
+  function closeCatDlg() {
+    if (!catDlg) return;
+    if (typeof catDlg.close === "function") {
+      if (catDlg.open) catDlg.close();
+    } else {
+      catDlg.removeAttribute("open");
+    }
+  }
+
+  function patchCategory(id, body) {
+    return request("PATCH", CATEGORIES_API + "/" + encodeURIComponent(id), body)
+      .then(function (res) {
+        return readJson(res).then(function (payload) {
+          return { res: res, body: payload };
+        });
+      })
+      .then(function (result) {
+        if (result.res.status === 401) { closeCatDlg(); authFailed(); return null; }
+        if (result.res.status === 503) { closeCatDlg(); adminMissing(); return null; }
+        return result;
+      });
+  }
+
+  function addCategory() {
+    if (!catName) return;
+    var name = catName.value.trim();
+    if (!name) {
+      showCatError("分类名不能为空");
+      catName.focus();
+      return;
+    }
+    if (name.length > CATEGORY_NAME_MAX) {
+      showCatError("分类名最多 " + CATEGORY_NAME_MAX + " 字");
+      catName.focus();
+      return;
+    }
+    catAdd.disabled = true;
+    catState.textContent = "添加中…";
+    request("POST", CATEGORIES_API, { name: name })
+      .then(function (res) {
+        return readJson(res).then(function (payload) { return { res: res, body: payload }; });
+      })
+      .then(function (result) {
+        if (result.res.status === 401) { closeCatDlg(); authFailed(); return; }
+        if (result.res.status === 503) { closeCatDlg(); adminMissing(); return; }
+        if (!result.res.ok) {
+          showCatError(serverMessage(result.body, "添加分类失败"));
+          return;
+        }
+        var item = result.body && result.body.item;
+        if (!item) throw new Error("接口响应缺少 item");
+        catName.value = "";
+        catErr.hidden = true;
+        catState.textContent = "已添加「" + item.name + "」";
+        toast("已添加分类 · " + item.name);
+        loadData();
+      })
+      .catch(function (err) {
+        showCatError((err && err.message) || "添加失败");
+      })
+      .then(function () {
+        catAdd.disabled = false;
+      });
+  }
+
+  function renameCategory(row) {
+    var id = row.getAttribute("data-id");
+    var input = row.querySelector(".cat-name");
+    var name = input ? input.value.trim() : "";
+    if (!name) {
+      showCatError("分类名不能为空");
+      if (input) input.focus();
+      return;
+    }
+    if (name.length > CATEGORY_NAME_MAX) {
+      showCatError("分类名最多 " + CATEGORY_NAME_MAX + " 字");
+      if (input) input.focus();
+      return;
+    }
+    catState.textContent = "保存分类名…";
+    patchCategory(id, { name: name })
+      .then(function (result) {
+        if (!result) return;
+        if (!result.res.ok) {
+          showCatError(serverMessage(result.body, "改名失败"));
+          return;
+        }
+        catErr.hidden = true;
+        catState.textContent = "已改名为「" + name + "」";
+        toast("分类已改名 · " + name);
+        loadData();
+      })
+      .catch(function () {
+        showCatError("改名失败 · 请重试");
+      });
+  }
+
+  /** ↑ / ↓：把相邻两行的 position 重新编号后串行保存。 */
+  function moveCategory(row, direction) {
+    var id = row.getAttribute("data-id");
+    var index = -1;
+    each(state.categories, function (cat, i) {
+      if (cat.id === id) index = i;
+    });
+    var target = index + direction;
+    if (index < 0 || target < 0 || target >= state.categories.length) return;
+
+    var list = state.categories.slice();
+    var moved = list.splice(index, 1)[0];
+    list.splice(target, 0, moved);
+    var patches = [];
+    each(list, function (cat, i) {
+      if (cat.position !== i) patches.push({ id: cat.id, position: i });
+      cat.position = i;
+    });
+    state.categories = list;
+    renderCatList();
+    catState.textContent = "保存顺序…";
+
+    var chain = Promise.resolve();
+    var failed = false;
+    each(patches, function (patch) {
+      chain = chain.then(function () {
+        if (failed) return null;
+        return patchCategory(patch.id, { position: patch.position }).then(function (result) {
+          if (!result) { failed = true; return null; }
+          if (!result.res.ok) {
+            failed = true;
+            showCatError(serverMessage(result.body, "排序保存失败"));
+          }
+          return null;
+        });
+      });
+    });
+    chain
+      .then(function () {
+        if (failed) return;
+        catErr.hidden = true;
+        catState.textContent = "顺序已保存";
+        loadData();
+      })
+      .catch(function () {
+        showCatError("排序保存失败 · 请重试");
+      });
+  }
+
+  function askDeleteCategory(row) {
+    var cat = categoryById(row.getAttribute("data-id"));
+    if (!cat) return;
+    state.pendingCatDelete = cat;
+    catDelText.textContent =
+      "删除分类「" + cat.name + "」？该分类下的图片会移到「未分类」，图片文件不会被删除。";
+    if (typeof catDelDlg.showModal === "function") {
+      if (!catDelDlg.open) catDelDlg.showModal();
+    } else if (window.confirm(catDelText.textContent)) {
+      confirmDeleteCategory();
+    }
+  }
+
+  function confirmDeleteCategory() {
+    var cat = state.pendingCatDelete;
+    state.pendingCatDelete = null;
+    if (typeof catDelDlg.close === "function") {
+      if (catDelDlg.open) catDelDlg.close();
+    }
+    if (!cat) return;
+    catDelOk.disabled = true;
+    catState.textContent = "删除分类…";
+    request("DELETE", CATEGORIES_API + "/" + encodeURIComponent(cat.id))
+      .then(function (res) {
+        return readJson(res).then(function (payload) { return { res: res, body: payload }; });
+      })
+      .then(function (result) {
+        if (result.res.status === 401) { closeCatDlg(); authFailed(); return; }
+        if (result.res.status === 503) { closeCatDlg(); adminMissing(); return; }
+        if (!result.res.ok && result.res.status !== 404) {
+          showCatError(serverMessage(result.body, "删除分类失败"));
+          return;
+        }
+        var kept = [];
+        each(state.categories, function (entry) {
+          if (entry.id !== cat.id) kept.push(entry);
+        });
+        state.categories = kept;
+        if (state.category === cat.id) state.category = "all";
+        renderCatList();
+        renderCatChips();
+        renderCatSelects();
+        catErr.hidden = true;
+        catState.textContent = "已删除分类「" + cat.name + "」";
+        toast("已删除分类 · 图片移到未分类");
+        loadData();
+      })
+      .catch(function () {
+        showCatError("删除分类失败 · 请重试");
+      })
+      .then(function () {
+        catDelOk.disabled = false;
+      });
+  }
+
+  /* ---------------- 单图分类 / 别名 ---------------- */
+  function showMetaError(text) {
+    metaErr.textContent = text;
+    metaErr.hidden = false;
+    metaState.textContent = "保存失败";
+  }
+
+  function openMeta(item) {
+    if (!item) return;
+    state.pendingMeta = item;
+    metaTarget.textContent = (item.filename || item.key) + " · " + (item.categoryName || "未分类");
+    fillCategorySelect(metaCategory, item.categoryId || "", true);
+    metaAliases.value = (item.aliases || []).join("、");
+    metaErr.textContent = "";
+    metaErr.hidden = true;
+    metaState.textContent = "只改 D1 元数据 · 图片 URL 不变";
+    metaSave.disabled = false;
+    metaSave.textContent = "保存";
+    if (typeof metaDlg.showModal === "function") {
+      if (!metaDlg.open) metaDlg.showModal();
+    } else {
+      metaDlg.setAttribute("open", "");
+    }
+  }
+
+  function closeMeta() {
+    state.pendingMeta = null;
+    if (!metaDlg) return;
+    if (typeof metaDlg.close === "function") {
+      if (metaDlg.open) metaDlg.close();
+    } else {
+      metaDlg.removeAttribute("open");
+    }
+  }
+
+  /** 别名输入：逗号 / 顿号 / 分号 / 换行分隔，去空白、去重（保留原顺序）。 */
+  function parseAliasesInput(raw) {
+    var out = [];
+    each(String(raw || "").split(/[,，、;；\n]+/), function (piece) {
+      var alias = piece.trim();
+      if (alias && out.indexOf(alias) < 0) out.push(alias);
+    });
+    return out;
+  }
+
+  function submitMeta(event) {
+    if (event) event.preventDefault();
+    var item = state.pendingMeta;
+    if (!item) return;
+    var aliases = parseAliasesInput(metaAliases.value);
+    if (aliases.length > ALIAS_MAX_COUNT) {
+      showMetaError("别名最多 " + ALIAS_MAX_COUNT + " 个，现在 " + aliases.length + " 个");
+      return;
+    }
+    var tooLong = null;
+    each(aliases, function (alias) {
+      if (!tooLong && alias.length > ALIAS_MAX_LENGTH) tooLong = alias;
+    });
+    if (tooLong) {
+      showMetaError("单个别名最多 " + ALIAS_MAX_LENGTH + " 字：" + tooLong);
+      return;
+    }
+
+    var categoryId = metaCategory.value || null;
+    metaSave.disabled = true;
+    metaSave.textContent = "保存中…";
+    metaState.textContent = "正在写入 D1 元数据…";
+
+    request("PATCH", API + "/" + encodeURIComponent(item.id), {
+      categoryId: categoryId,
+      aliases: aliases
+    })
+      .then(function (res) {
+        return readJson(res).then(function (body) { return { res: res, body: body }; });
+      })
+      .then(function (result) {
+        if (result.res.status === 401) { closeMeta(); authFailed(); return; }
+        if (result.res.status === 503) { closeMeta(); adminMissing(); return; }
+        if (!result.res.ok) {
+          showMetaError(serverMessage(result.body, "保存失败（HTTP " + result.res.status + "）"));
+          return;
+        }
+        var next = result.body && result.body.item;
+        if (!next) throw new Error("接口响应缺少 item");
+        for (var i = 0; i < state.items.length; i++) {
+          if (state.items[i].id === next.id) {
+            state.items[i] = next;
+            break;
+          }
+        }
+        closeMeta();
+        renderGrid();
+        toast("已保存 · " + (next.categoryName || "未分类"));
+        loadData();
+      })
+      .catch(function (err) {
+        showMetaError((err && err.message) || "网络异常");
+      })
+      .then(function () {
+        metaSave.disabled = false;
+        metaSave.textContent = "保存";
+      });
+  }
+
+  /* ---------------- 删除媒体 ---------------- */
   function askDelete(items) {
     if (!items.length) return;
     state.pendingDelete = items.slice();
@@ -546,6 +1107,8 @@
       ? "上传中…"
       : '上传 <span class="ar" aria-hidden="true">＋</span>';
     fileInput.disabled = on;
+    if (uploadCategory) uploadCategory.disabled = on;
+    if (btnCats) btnCats.disabled = on;
   }
 
   function addUploadRow(file) {
@@ -570,7 +1133,7 @@
     if (stateName) row.classList.add(stateName);
   }
 
-  function xhrUpload(file, onProgress, done) {
+  function xhrUpload(file, categoryId, onProgress, done) {
     var xhr = new XMLHttpRequest();
     xhr.open("POST", API, true);
     var token = tokenValue();
@@ -592,6 +1155,7 @@
     };
     var form = new FormData();
     form.append("file", file, file.name);
+    if (categoryId) form.append("categoryId", categoryId);
     xhr.send(form);
   }
 
@@ -604,6 +1168,8 @@
     setUploading(true);
     upList.hidden = false;
     upList.innerHTML = "";
+    // 上传分类：下拉框选择；空值 = 未分类
+    var categoryId = uploadCategory && uploadCategory.value ? uploadCategory.value : "";
     var queue = files.slice();
     var ok = 0;
     var failed = 0;
@@ -660,7 +1226,7 @@
           }
           setRow(row, "上传中 0%", null, 0);
           return new Promise(function (resolve) {
-            xhrUpload(prepared, function (pct) {
+            xhrUpload(prepared, categoryId, function (pct) {
               setRow(row, "上传中 " + pct + "%", null, pct);
             }, function (error) {
               if (error) {
@@ -691,20 +1257,69 @@
 
   /* ---------------- 筛选重置 ---------------- */
   function resetFilters() {
-    state.type = "all";
+    state.category = "all";
     state.q = "";
     state.sort = "added";
+    state.page = 1;
     qInput.value = "";
     sortSel.value = "added";
-    each(tabs, function (tab) {
-      var on = tab.getAttribute("data-type") === "all";
-      tab.classList.toggle("is-on", on);
-      tab.setAttribute("aria-pressed", on ? "true" : "false");
-    });
-    renderGrid();
+    if (uploadCategory) uploadCategory.value = "";
+    renderCatChips();
+    loadData();
   }
 
   /* ---------------- 事件绑定 ---------------- */
+  btnCats.addEventListener("click", openCatDlg);
+  catClose.addEventListener("click", closeCatDlg);
+  catDlg.addEventListener("click", function (event) {
+    if (event.target === catDlg) closeCatDlg();
+  });
+  catAdd.addEventListener("click", addCategory);
+  catName.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addCategory();
+    }
+  });
+  catList.addEventListener("click", function (event) {
+    var btn = event.target.closest(".cat-act");
+    if (!btn) return;
+    var row = btn.closest(".cat-row");
+    if (!row) return;
+    var act = btn.getAttribute("data-act");
+    if (act === "rename") renameCategory(row);
+    else if (act === "up") moveCategory(row, -1);
+    else if (act === "down") moveCategory(row, 1);
+    else if (act === "del") askDeleteCategory(row);
+  });
+  catList.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    var row = event.target.closest(".cat-row");
+    if (!row || !event.target.classList.contains("cat-name")) return;
+    event.preventDefault();
+    renameCategory(row);
+  });
+  catDelCancel.addEventListener("click", function () {
+    state.pendingCatDelete = null;
+    if (typeof catDelDlg.close === "function") catDelDlg.close();
+  });
+  catDelOk.addEventListener("click", confirmDeleteCategory);
+  catDelDlg.addEventListener("click", function (event) {
+    if (event.target === catDelDlg) {
+      state.pendingCatDelete = null;
+      if (typeof catDelDlg.close === "function") catDelDlg.close();
+    }
+  });
+
+  metaForm.addEventListener("submit", submitMeta);
+  metaCancel.addEventListener("click", closeMeta);
+  metaDlg.addEventListener("click", function (event) {
+    if (event.target === metaDlg) closeMeta();
+  });
+  metaDlg.addEventListener("close", function () {
+    state.pendingMeta = null;
+  });
+
   btnUpload.addEventListener("click", function () { fileInput.click(); });
   fileInput.addEventListener("change", function () {
     var files = Array.prototype.slice.call(fileInput.files || []);
@@ -718,7 +1333,9 @@
       var actionCard = action.closest(".mcard");
       var actionItem = actionCard ? findItem(actionCard.getAttribute("data-id")) : null;
       if (!actionItem) return;
-      if (action.getAttribute("data-act") === "copy") copyText(absoluteUrl(actionItem.key));
+      var act = action.getAttribute("data-act");
+      if (act === "copy") copyText(absoluteUrl(actionItem.key));
+      else if (act === "meta") openMeta(actionItem);
       else askDelete([actionItem]);
       return;
     }
@@ -736,29 +1353,30 @@
     paintPager();
   });
 
-  each(tabs, function (tab) {
-    tab.addEventListener("click", function () {
-      state.type = tab.getAttribute("data-type");
-      each(tabs, function (other) {
-        var on = other === tab;
-        other.classList.toggle("is-on", on);
-        other.setAttribute("aria-pressed", on ? "true" : "false");
-      });
-      renderGrid();
-    });
-  });
+  // 搜索交给服务端（文件名 / R2 key / 别名），输入 300ms 防抖
+  var searchTimer = null;
   qInput.addEventListener("input", function () {
-    state.q = qInput.value.trim().toLowerCase();
-    renderGrid();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      var next = qInput.value.trim();
+      if (next === state.q) return;
+      state.q = next;
+      state.page = 1;
+      loadData();
+    }, 300);
   });
   sortSel.addEventListener("change", function () {
-    state.sort = sortSel.value;
-    renderGrid();
+    var next = sortSel.value;
+    if (next === state.sort) return;
+    state.sort = next;
+    state.page = 1;
+    loadData();
   });
   clearFilters.addEventListener("click", resetFilters);
 
   emptyReset.addEventListener("click", function () {
-    if (state.total === 0) fileInput.click();
+    var filtered = state.category !== "all" || !!state.q;
+    if (!filtered && !state.loading && state.total === 0) fileInput.click();
     else resetFilters();
   });
 
@@ -811,6 +1429,8 @@
 
   /* ---------------- 初始化 ---------------- */
   sortSel.value = state.sort;
+  renderCatChips();
+  renderCatSelects();
   paintSummary();
   loadData();
 })();

@@ -772,6 +772,8 @@
       api: MEDIA_API,
       gifApi: GIF_API,
       base: MEDIA_BASE,
+      // 动态入口：上传默认归入「动态」分类（cat_moments）
+      categoryId: "cat_moments",
       sizes: IMAGE_SIZES,
       defaultSize: DEFAULT_MEDIA_SIZE,
       size: state.mediaSize || DEFAULT_MEDIA_SIZE,

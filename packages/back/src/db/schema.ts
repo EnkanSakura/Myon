@@ -106,3 +106,37 @@ export const pageViews = sqliteTable('page_views', {
   path: text('path').notNull().default(''),
   createdAt: text('created_at').notNull(),
 });
+
+/** 媒体库分类：后台可自定义的分类/相册。分类只存在 D1，与 R2 key / URL 无关。 */
+export const mediaCategories = sqliteTable('media_categories', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  position: integer('position').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+});
+
+/** 媒体元数据：R2 对象 → 分类/别名的映射；图片文件本身仍只存 R2。 */
+export const media = sqliteTable('media', {
+  id: text('id').primaryKey(),
+  /** R2 对象 key；不含分类信息。 */
+  r2Key: text('r2_key').notNull().unique(),
+  filename: text('filename').notNull(),
+  mime: text('mime').notNull(),
+  size: integer('size').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  categoryId: text('category_id').references(() => mediaCategories.id, {
+    onDelete: 'set null',
+  }),
+  uploadedAt: text('uploaded_at').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+/** 媒体别名：每张图最多 8 个，搜索时与文件名/R2 key 一起匹配。 */
+export const mediaAliases = sqliteTable('media_aliases', {
+  mediaId: text('media_id')
+    .notNull()
+    .references(() => media.id, { onDelete: 'cascade' }),
+  alias: text('alias').notNull(),
+});

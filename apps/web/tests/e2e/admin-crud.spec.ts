@@ -56,6 +56,9 @@ interface MediaItem {
   key: string;
   mime: string;
   size: number;
+  categoryId: string | null;
+  categoryName: string | null;
+  aliases: string[];
 }
 
 interface BangumiSyncResult {
@@ -197,8 +200,9 @@ test.describe('后台动态 CRUD', () => {
 });
 
 test.describe('后台媒体上传', () => {
-  test('上传 WebP → /media/<key> 可访问 → 删除后 404', async ({ request }) => {
+  test('上传 WebP 带分类 → 改别名可搜到 → 删除后 404', async ({ request }) => {
     const filename = `e2e-pixel-${uniqueSuffix()}.webp`;
+    const alias = `e2e-alias-${uniqueSuffix()}`;
     let id: string | undefined;
     let key: string | undefined;
     let deleted = false;
@@ -212,6 +216,7 @@ test.describe('后台媒体上传', () => {
             mimeType: 'image/webp',
             buffer: WEBP_1PX,
           },
+          categoryId: 'cat_posts',
         },
       });
       expect(uploaded.status()).toBe(201);
@@ -220,11 +225,32 @@ test.describe('后台媒体上传', () => {
       key = uploadedBody.item.key;
       expect(uploadedBody.item.mime).toBe('image/webp');
       expect(uploadedBody.item.size).toBe(WEBP_1PX.byteLength);
-      expect(key).toMatch(/^uploads\//);
+      // R2 key 不含分类：固定 uploads/<yyyymm>/<uuid>-<name>
+      expect(key).toMatch(/^uploads\/\d{6}\//);
+      expect(uploadedBody.item.categoryId).toBe('cat_posts');
+      expect(uploadedBody.item.categoryName).toBe('文章');
+      expect(uploadedBody.item.aliases).toEqual([]);
 
       const fetched = await request.get(`/media/${key}`);
       expect(fetched.status()).toBe(200);
       expect(fetched.headers()['content-type']).toContain('image/webp');
+
+      // 改别名后能按别名全库搜到（分类/别名只存 D1）
+      const patched = await request.patch(`/api/v1/admin/media/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { aliases: [alias, alias] },
+      });
+      expect(patched.status()).toBe(200);
+      const patchedBody = (await patched.json()) as { item: MediaItem };
+      expect(patchedBody.item.aliases).toEqual([alias]);
+
+      const searched = await request.get(
+        `/api/v1/admin/media?limit=100&q=${encodeURIComponent(alias)}`,
+        { headers: ADMIN_HEADERS },
+      );
+      expect(searched.status()).toBe(200);
+      const searchedBody = (await searched.json()) as Paginated<MediaItem>;
+      expect(searchedBody.items.some((item) => item.id === id)).toBe(true);
 
       const removed = await request.delete(`/api/v1/admin/media/${id}`, {
         headers: ADMIN_HEADERS,

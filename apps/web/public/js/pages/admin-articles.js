@@ -92,6 +92,8 @@
     api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
     gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
     base: pageEl ? pageEl.getAttribute("data-media-base") || "" : "",
+    // 文章正文图片默认归入「文章」分类（D1 预置分类 id）
+    categoryId: "cat_posts",
     sizes: IMAGE_SIZES,
     // 文章正文的默认档位：与 @myon/shared 的 defaultMediaImageSize 一致。
     defaultSize: "720"

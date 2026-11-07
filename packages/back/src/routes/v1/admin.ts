@@ -3,6 +3,11 @@ import {
   aboutPatchSchema,
   galleryInputSchema,
   galleryPatchSchema,
+  mediaCategoryInputSchema,
+  mediaCategoryPatchSchema,
+  mediaListQuerySchema,
+  mediaPatchSchema,
+  mediaUploadCategorySchema,
   momentInputSchema,
   momentPatchSchema,
   paginationSchema,
@@ -26,7 +31,17 @@ import {
   tools,
 } from '../../db/schema';
 import { renderMarkdown } from '../../markdown';
-import { deleteMedia, listMedia, MediaError, storeMedia } from '../../media';
+import {
+  createMediaCategory,
+  deleteMedia,
+  deleteMediaCategory,
+  listMedia,
+  listMediaCategories,
+  MediaError,
+  storeMedia,
+  updateMediaCategory,
+  updateMediaMeta,
+} from '../../media';
 import { readSiteSettings, writeSiteSettings } from '../../site';
 import type { AppBindings } from '../../types';
 
@@ -502,10 +517,79 @@ admin.delete('/tools/:id', async (c) => {
 // 媒体
 // ---------------------------------------------------------------------------
 
+/** 分类增删改查（分类只存在 D1；图片 R2 key / URL 不含分类信息）。 */
+admin.get('/media/categories', async (c) => {
+  const items = await listMediaCategories(c.env);
+  return c.json({ items });
+});
+
+admin.post('/media/categories', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = mediaCategoryInputSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+
+  try {
+    const item = await createMediaCategory(c.env, parsed.data.name);
+    return c.json({ item }, 201);
+  } catch (error) {
+    if (error instanceof MediaError) {
+      return c.json(
+        { error: error.code, message: error.message },
+        error.code === 'name_taken' ? 409 : 400,
+      );
+    }
+    throw error;
+  }
+});
+
+admin.patch('/media/categories/:id', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = mediaCategoryPatchSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+
+  try {
+    const item = await updateMediaCategory(
+      c.env,
+      c.req.param('id'),
+      parsed.data,
+    );
+    if (!item) return c.json({ error: 'not_found' }, 404);
+    return c.json({ item });
+  } catch (error) {
+    if (error instanceof MediaError) {
+      return c.json(
+        { error: error.code, message: error.message },
+        error.code === 'name_taken' ? 409 : 400,
+      );
+    }
+    throw error;
+  }
+});
+
+admin.delete('/media/categories/:id', async (c) => {
+  const removed = await deleteMediaCategory(c.env, c.req.param('id'));
+  if (!removed) return c.json({ error: 'not_found' }, 404);
+  return c.json({ ok: true });
+});
+
 admin.get('/media', async (c) => {
-  const { limit, offset } = paginationSchema.parse(c.req.query());
-  const { items, total } = await listMedia(c.env, limit, offset);
-  return c.json({ items, total, limit, offset });
+  const query = mediaListQuerySchema.parse(c.req.query());
+  const result = await listMedia(c.env, {
+    limit: query.limit,
+    offset: query.offset,
+    category: query.category,
+    q: query.q,
+    sort: query.sort,
+  });
+  return c.json({
+    ...result,
+    limit: query.limit,
+    offset: query.offset,
+  });
 });
 
 admin.post('/media', async (c) => {
@@ -519,8 +603,16 @@ admin.post('/media', async (c) => {
   const file = form.get('file');
   if (!(file instanceof File)) return c.json({ error: 'file_required' }, 400);
 
+  const rawCategory = form.get('categoryId');
+  const parsedCategory = mediaUploadCategorySchema.safeParse(
+    typeof rawCategory === 'string' ? rawCategory : undefined,
+  );
+  if (!parsedCategory.success) {
+    return c.json({ error: 'invalid_category' }, 400);
+  }
+
   try {
-    const item = await storeMedia(c.env, file);
+    const item = await storeMedia(c.env, file, parsedCategory.data);
     return c.json({ item }, 201);
   } catch (error) {
     if (error instanceof MediaError) {
@@ -528,6 +620,28 @@ admin.post('/media', async (c) => {
     }
     console.error('media upload failed', error);
     return c.json({ error: 'upload_failed' }, 500);
+  }
+});
+
+admin.patch('/media/:id', async (c) => {
+  const payload = await readJson(c);
+  if (payload === undefined) return c.json({ error: 'invalid_json' }, 400);
+
+  const parsed = mediaPatchSchema.safeParse(payload);
+  if (!parsed.success) return validationError(c, parsed.error);
+
+  try {
+    const item = await updateMediaMeta(c.env, c.req.param('id'), parsed.data);
+    if (!item) return c.json({ error: 'not_found' }, 404);
+    return c.json({ item });
+  } catch (error) {
+    if (error instanceof MediaError) {
+      return c.json(
+        { error: error.code, message: error.message },
+        error.code === 'invalid_category' ? 400 : 500,
+      );
+    }
+    throw error;
   }
 });
 

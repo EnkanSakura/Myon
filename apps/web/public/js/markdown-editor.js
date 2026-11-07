@@ -347,6 +347,8 @@
         api: media.api,
         gifApi: media.gifApi || "",
         base: media.base || "/media/",
+        // 入口默认分类：文章编辑器 cat_posts、关于页 cat_about（由页面 media 配置传入）
+        categoryId: media.categoryId || "",
         onPick: function (item, size) {
           if (!item || !item.key) return;
           var range = savedRange || caret();

@@ -140,3 +140,53 @@
   .up-st{order:2;text-align:left}
   .up-track{grid-column:1;order:3}
 }
+
+/* ==========================================================================
+   分类 / 别名（D1 元数据）：分类管理弹窗 + 卡片 badge/别名 chips
+   ========================================================================== */
+
+/* 页头：管理分类按钮 + 上传分类下拉 */
+.up-acts .fb-sort{color:var(--pp-62)}
+#catChips .chip b{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0}
+
+/* 卡片右上角分类 badge；未分类用中性样式 */
+.mcat{position:absolute;top:8px;right:8px;z-index:5;display:inline-block;max-width:calc(100% - 48px);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;border:2px solid var(--ink);
+  background:var(--ppk);color:var(--ink);font-family:var(--mono);font-size:11px;letter-spacing:.06em;line-height:1.5}
+.mcat.is-empty{background:var(--panel-2);color:var(--pp-62);border-color:var(--pline)}
+
+/* 卡片别名 chips */
+.mtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.malias{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:1px 5px 2px;border:2px solid var(--pline);background:transparent;color:var(--pp-62);
+  font-family:var(--mono);font-size:11px;letter-spacing:.02em;line-height:1.5}
+
+/* 分类管理弹窗 */
+.cat-note{line-height:1.7;margin-bottom:10px}
+.cat-list{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto;scrollbar-width:thin}
+.cat-row{display:grid;grid-template-columns:24px minmax(0,1fr) 52px 34px 34px 56px;gap:6px;align-items:center}
+.cat-pos{font-family:var(--mono);font-size:12px;color:var(--ink-62);text-align:right}
+.cat-name{display:block;width:100%;height:36px;padding:0 8px;border:2px solid var(--ink);border-radius:0;
+  background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px}
+.cat-name:focus{outline:none;border-color:var(--ppk-deep);box-shadow:3px 3px 0 var(--ppk)}
+.cat-act{height:36px;padding:0 8px;border:2px solid var(--line-2);background:transparent;color:var(--ink-62);
+  font-family:var(--mono);font-size:12px;letter-spacing:.04em;line-height:1.4}
+.cat-act:hover:not(:disabled){border-color:var(--ink);color:var(--ink);background:var(--pink-wash)}
+.cat-act:disabled{opacity:.35;cursor:not-allowed}
+.cat-act:focus-visible{outline:2px solid var(--pink-deep);outline-offset:2px}
+.cat-del:hover:not(:disabled){background:var(--pink-deep);color:var(--pp);border-color:var(--ink)}
+.cat-add{display:flex;gap:8px;margin-top:10px;align-items:stretch}
+.cat-add .token-input{flex:1;min-width:0;height:40px}
+.cat-add .p-btn{flex:none;height:40px}
+
+/* 单图分类 / 别名弹窗 */
+.meta-target{word-break:break-all;margin-bottom:12px;line-height:1.6}
+.meta-alias-label{margin-top:12px}
+.meta-select{display:block;width:100%;height:40px;padding:0 8px;border:2px solid var(--ink);border-radius:0;
+  background:var(--paper);color:var(--ink);font-family:var(--mono);font-size:14px;letter-spacing:.04em}
+.meta-select:focus{outline:none;border-color:var(--ppk-deep);box-shadow:3px 3px 0 var(--ppk)}
+.meta-dlg .hint{margin-top:8px;font-size:11px;line-height:1.7}
+
+@media (max-width:600px){
+  .cat-row{grid-template-columns:20px minmax(0,1fr) 44px 30px 30px 48px;gap:4px}
+}

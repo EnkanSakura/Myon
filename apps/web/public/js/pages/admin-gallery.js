@@ -652,6 +652,8 @@
       api: MEDIA_API,
       gifApi: GIF_API,
       base: MEDIA_BASE,
+      // 展柜入口：上传默认归入「展柜」分类（cat_gallery）
+      categoryId: "cat_gallery",
       sizes: IMAGE_SIZES,
       defaultSize: DEFAULT_MEDIA_SIZE,
       size: state.mediaSize || DEFAULT_MEDIA_SIZE,

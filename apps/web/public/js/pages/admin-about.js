@@ -26,6 +26,8 @@
     api: pageEl ? pageEl.getAttribute("data-api-media") || "" : "",
     gifApi: pageEl ? pageEl.getAttribute("data-gif-api") || "" : "",
     base: pageEl ? pageEl.getAttribute("data-media-base") || "/media/" : "/media/",
+    // 关于 / README 正文图片默认归入「关于」分类（D1 预置分类 id）
+    categoryId: "cat_about",
     sizes: IMAGE_SIZES,
     // README 正文与文章正文一样，默认长边 720px。
     defaultSize: "720"
