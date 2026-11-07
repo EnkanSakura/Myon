@@ -16,7 +16,10 @@ interface Props {
 const { settings } = Astro.props;
 const icpHasLink = /<a[\s>]/i.test(settings.footerIcp ?? '');
 // 版权不再作为独立配置项：© 当前年份 + 后台配置的作者。
-const copyright = `© ${new Date().getFullYear()} ${settings.author || 'Myon'}`;
+// 不写死作者兜底：作者为空时只显示年份，避免和站点设置重复一份硬编码。
+const copyright = ['©', String(new Date().getFullYear()), settings.author]
+  .filter(Boolean)
+  .join(' ');
 ---
 
 <footer class="sitebar" aria-label="页脚">

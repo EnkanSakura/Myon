@@ -5,12 +5,19 @@
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { GalleryItem, Paginated, SiteStats } from '@myon/shared';
+import {
+  defaultSiteSettings,
+  type GalleryItem,
+  type Paginated,
+  type SiteStats,
+  toPublicSiteSettings,
+} from '@myon/shared';
 import SiteLayout from '../layouts/SiteLayout.astro';
 import { formatDate } from '../lib/format';
 import { contentImageUrl } from '../lib/media';
 
 const binding = env as unknown as AppBindings;
+const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 
 const PAGE_SIZE = 24;
 const rawPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
@@ -210,7 +217,7 @@ const cards = items.map((item, index) => {
             <img id="lbImg" alt="" hidden />
           )}
           <div class="lb-nofig" id="lbNofig" hidden={!!firstUrl}><b>未拍摄</b><span>NO IMAGE</span></div>
-          <div class="cap"><span id="lbPlate">PLATE 01 / {pad(items.length)}</span><span>MYON COLLECTION</span></div>
+          <div class="cap"><span id="lbPlate">PLATE 01 / {pad(items.length)}</span><span>{site.name.toUpperCase()} COLLECTION</span></div>
         </div>
       </div>
       <div class="lb-side">

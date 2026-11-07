@@ -1,50 +1,67 @@
-import {
-  type APIRequestContext,
-  expect,
-  type Locator,
-  type Page,
-  test,
-} from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-// 后台设置页的数据块 / 联系方式排序：顺序就是 home_stats / home_links 数组顺序，
-// 可以用行首把手拖拽，也可以用每行的 ↑ ↓。
+// 后台设置页只编辑 KV 里的运行时配置（站点 / 首页图片与联系方式 / 外观 / 页脚 / 后记）。
+// 首页固定文案（标题/导语/页头标签说明/数据块/封面贴纸便签/尾页标题导语）
+// 已迁到 @myon/shared 的 i18n 与 site.config.json，设置页不再出现这些输入框。
 //
-// 这里用真实设置做底稿，但把后台设置的读写接口拦在内存里：
-// 排序交互与保存后的回填都能测到，又不会污染本地 D1（其他 e2e 用例共用同一份设置）。
+// 这里用固定 fixture 把后台设置的读写接口拦在内存里：保存回读都能测到，
+// 又不会污染本地 KV（其他 e2e 用例共用同一份站点设置）。
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
-const ADMIN_HEADERS = { 'x-admin-token': ADMIN_TOKEN };
 
-interface HomeToggleRow {
-  label: string;
-}
+/** 首页联系方式默认 fixture：4 条，字段与 @myon/shared 的 HomeLink 一致。 */
+const LINKS_FIXTURE = [
+  { label: '写邮件', href: 'mailto:hi@myon.studio' },
+  { label: 'GitHub', href: 'https://github.com/Myon' },
+  { label: 'Bangumi', href: 'https://bgm.tv/' },
+  { label: 'RSS', href: '/rss.xml' },
+];
+
+/** 与 @myon/shared 的 defaultSiteSettings 对齐的最小 fixture（只放设置页会读的键）。 */
+const SETTINGS_FIXTURE: Record<string, string> = {
+  site_name: 'Myon',
+  site_subtitle: '同人志',
+  site_description: '一个人的二次元生活志',
+  site_author: 'Myon',
+  theme_color: '#EC88C2',
+  footer_tech: 'Astro · Cloudflare Workers · D1 · R2',
+  footer_icp: '京ICP备 2026000000 号',
+  footer_rss: '/rss.xml',
+  footer_email: 'hi@myon.studio',
+  home_links: JSON.stringify(LINKS_FIXTURE),
+  home_cover_image: '/media/cabinet.jpg',
+  home_p2_figure_a: '',
+  home_p2_figure_b: '',
+  home_afterword_body:
+    '这一册做到第七页的时候，窗外刚好天亮了。\n下一册想多放一点动画截图和旅行速写。',
+  home_afterword_sign: '—— Myon，于 10 月的某个凌晨',
+  home_afterword_next: 'NEXT ISSUE · ？',
+  maintenance_enabled: 'false',
+};
+
+/** 已从 KV / 设置页移除的键：保存时不应再被提交。 */
+const REMOVED_KEYS = [
+  'home_title',
+  'home_lead',
+  'home_page_labels',
+  'home_page_notes',
+  'home_cover_badge',
+  'home_cover_note',
+  'home_stats',
+  'home_end_title',
+  'home_end_lead',
+  'site_email',
+  'footer_copyright',
+  'default_theme',
+  'comments_enabled',
+];
 
 interface MockedSettings {
-  statsBefore: { preset: string }[];
-  linksBefore: HomeToggleRow[];
   readSettings: () => Record<string, string>;
-  statRows: ReturnType<Page['locator']>;
-  linkRows: ReturnType<Page['locator']>;
 }
 
-async function openMockedSettings(
-  page: Page,
-  request: APIRequestContext,
-): Promise<MockedSettings> {
-  const res = await request.get('/api/v1/admin/settings', {
-    headers: ADMIN_HEADERS,
-  });
-  expect(res.status()).toBe(200);
-  const original = (await res.json()) as {
-    settings: Record<string, string>;
-  };
-  let settings = { ...original.settings };
-
-  const statsBefore = JSON.parse(settings.home_stats ?? '[]') as {
-    preset: string;
-  }[];
-  const linksBefore = JSON.parse(
-    settings.home_links ?? '[]',
-  ) as HomeToggleRow[];
+/** 用内存 fixture 顶住设置接口，返回当前保存值。 */
+async function openMockedSettings(page: Page): Promise<MockedSettings> {
+  let settings = { ...SETTINGS_FIXTURE };
 
   await page.route('**/api/v1/admin/settings', async (route) => {
     const method = route.request().method();
@@ -67,43 +84,10 @@ async function openMockedSettings(
   }, ADMIN_TOKEN);
 
   await page.goto('/admin/settings');
-  const statRows = page.locator('#homeStatsRows .row');
-  const linkRows = page.locator('#homeLinksRows .row');
-  await expect(statRows).toHaveCount(statsBefore.length);
-  await expect(linkRows).toHaveCount(linksBefore.length);
-
-  return {
-    statsBefore,
-    linksBefore,
-    readSettings: () => settings,
-    statRows,
-    linkRows,
-  };
-}
-
-/** 用鼠标把把手拖到目标行顶部（placeAfter=false）或底部（placeAfter=true）。 */
-async function dragRowByHandle(
-  page: Page,
-  handle: Locator,
-  target: Locator,
-  placeAfter: boolean,
-) {
-  await handle.scrollIntoViewIfNeeded();
-  const sourceBox = await handle.boundingBox();
-  const targetBox = await target.boundingBox();
-  if (!sourceBox || !targetBox) throw new Error('拖拽元素不在视口内');
-
-  await page.mouse.move(
-    sourceBox.x + sourceBox.width / 2,
-    sourceBox.y + sourceBox.height / 2,
+  await expect(page.locator('#siteName')).toHaveValue(
+    SETTINGS_FIXTURE.site_name as string,
   );
-  await page.mouse.down();
-  await page.mouse.move(
-    targetBox.x + 30,
-    placeAfter ? targetBox.y + targetBox.height - 4 : targetBox.y + 4,
-    { steps: 10 },
-  );
-  await page.mouse.up();
+  return { readSettings: () => settings };
 }
 
 // 媒体选择器 mock 用的一条图：选中后应该填 /media/<key>
@@ -136,15 +120,28 @@ async function mockMediaList(page: Page) {
   });
 }
 
-test.describe('后台设置 · 清理后的页面', () => {
-  test('已删除的字段与面板不再出现，尾页/后记可以保存', async ({
+test.describe('后台设置 · 运行时配置页', () => {
+  test('已移除的字段不再出现，剩下的运行时配置可以保存并回读', async ({
     page,
-    request,
   }) => {
-    const { readSettings } = await openMockedSettings(page, request);
+    const { readSettings } = await openMockedSettings(page);
 
-    // 站点邮箱、默认主题、评论、版权、订阅镜像、部署、危险区与令牌区都已删除
+    // 已静态化的首页文案 / 旧死配置都不在页面里了（联系方式编辑器是保留的）
     for (const selector of [
+      // 首页固定文案与数据块行编辑器
+      '#homeTitle',
+      '#homeLead',
+      '#homePageLabels',
+      '#homePageNotes',
+      '#homeStatsRows',
+      '#homeStatsAdd',
+      '#homeCoverBadge',
+      '#homeCoverNote',
+      '#homeEndTitle',
+      '#homeEndLead',
+      '.page-labels',
+      '.page-notes',
+      // 历史死配置
       '#siteEmail',
       '#footerCopyright',
       '#swComments',
@@ -164,37 +161,61 @@ test.describe('后台设置 · 清理后的页面', () => {
       ).toHaveCount(0);
     }
 
-    // 尾页 / 后记字段随设置一起保存并回读
-    const title = `谢谢翻完 ${Date.now()}`;
+    // 保留的分区：基本信息 / 首页（图片 + 联系方式）/ 外观 / 页脚 / 后记
+    await expect(page.locator('#cat-site')).toHaveText('站点');
+    await expect(page.locator('#cat-home')).toHaveText('首页');
+    await expect(page.locator('#cat-theme')).toHaveText('外观');
+    await expect(page.locator('#cat-footer')).toHaveText('页脚');
+    await expect(page.locator('#cat-end')).toHaveText('尾页 / 后记');
+    await expect(page.locator('#homeCoverImage')).toHaveValue(
+      SETTINGS_FIXTURE.home_cover_image as string,
+    );
+    // 联系方式行编辑器已恢复：默认 4 行 + 添加按钮
+    await expect(page.locator('#homeLinksRows .row')).toHaveCount(4);
+    await expect(page.locator('#homeLinksAdd')).toBeVisible();
+    await expect(page.locator('#homeLinksCount')).toHaveText('4 / 6');
+
+    // 站点 / 外观 / 页脚 / 后记：改完保存，接口只收到改动过的键
+    const subtitle = `副标题 ${Date.now()}`;
     const sign = '—— E2E 落款';
-    await page.locator('#homeEndTitle').fill(title);
-    await page.locator('#homeEndLead').fill('这一段是结尾导语。');
+    await page.locator('#siteSubtitle').fill(subtitle);
+    await page.locator('#themeColorText').fill('#3366FF');
+    await page.locator('#footerRss').fill('/feed.xml');
+    await page.locator('#footerEmail').fill('e2e@myon.studio');
     await page
       .locator('#homeAfterwordBody')
       .fill('第一段后记。\n\n第二段后记。');
     await page.locator('#homeAfterwordSign').fill(sign);
     await page.locator('#homeAfterwordNext').fill('NEXT ISSUE · 测试');
+    await expect(page.locator('#saveState')).toContainText('有未保存的修改');
 
     await page.locator('#saveBtn').click();
     await expect(page.locator('#saveState')).toContainText('最后保存');
 
     const saved = readSettings();
-    expect(saved.home_end_title).toBe(title);
-    expect(saved.home_end_lead).toBe('这一段是结尾导语。');
+    expect(saved.site_subtitle).toBe(subtitle);
+    expect(saved.theme_color).toBe('#3366FF');
+    expect(saved.footer_rss).toBe('/feed.xml');
+    expect(saved.footer_email).toBe('e2e@myon.studio');
     expect(saved.home_afterword_body).toBe('第一段后记。\n\n第二段后记。');
     expect(saved.home_afterword_sign).toBe(sign);
     expect(saved.home_afterword_next).toBe('NEXT ISSUE · 测试');
+    // 已移除的键不会被提交
+    for (const key of REMOVED_KEYS) {
+      expect(saved[key], `${key} 不应再被提交`).toBeUndefined();
+    }
 
     // 重新加载后仍能读到服务端保存的值
     await page.reload();
-    await expect(page.locator('#homeEndTitle')).toHaveValue(title);
+    await expect(page.locator('#siteSubtitle')).toHaveValue(subtitle);
+    await expect(page.locator('#themeColorText')).toHaveValue('#3366FF');
     await expect(page.locator('#homeAfterwordSign')).toHaveValue(sign);
   });
 });
 
 test.describe('后台设置 · 第 2 页装饰图', () => {
-  test('两个装饰图输入框随设置一起保存', async ({ page, request }) => {
-    const { readSettings } = await openMockedSettings(page, request);
+  test('两个装饰图输入框随设置一起保存', async ({ page }) => {
+    const { readSettings } = await openMockedSettings(page);
 
     const figureA = page.locator('#homeFigureA');
     const figureB = page.locator('#homeFigureB');
@@ -213,65 +234,128 @@ test.describe('后台设置 · 第 2 页装饰图', () => {
   });
 });
 
-test.describe('后台设置 · 页头说明', () => {
-  test('第 2–6 页各一段，保存时写回 5 项 JSON', async ({ page, request }) => {
-    const { readSettings } = await openMockedSettings(page, request);
+test.describe('后台设置 · 首页联系方式', () => {
+  test('默认 4 行，编辑 / 排序 / 添加 / 删除后保存并回读', async ({ page }) => {
+    const { readSettings } = await openMockedSettings(page);
+    const rows = page.locator('#homeLinksRows .row');
+    await expect(rows).toHaveCount(4);
+    await expect(page.locator('#homeLinksCount')).toHaveText('4 / 6');
+    // 每行都有拖拽把手（也可以继续用 ↑ ↓ 排序）
+    await expect(page.locator('#homeLinksRows .row-grip')).toHaveCount(4);
 
-    // 5 个输入与第 2–6 页一一对应
-    const notes = page.locator('#homePageNotes .page-note-input');
-    await expect(notes).toHaveCount(5);
-    for (const id of [
-      'homeNoteP2',
-      'homeNoteP3',
-      'homeNoteP4',
-      'homeNoteP5',
-      'homeNoteP6',
-    ]) {
-      await expect(page.locator(`#${id}`)).toHaveCount(1);
-    }
-    await expect(page.locator('label[for="homeNoteP2"]')).toHaveText(
-      '第 2 页 / PAGE 02 · 文章',
-    );
-    await expect(page.locator('label[for="homeNoteP3"]')).toHaveText(
-      '第 3 页 / PAGE 03 · 动态',
-    );
-    await expect(page.locator('label[for="homeNoteP4"]')).toHaveText(
-      '第 4 页 / PAGE 04 · 展柜',
-    );
-    await expect(page.locator('label[for="homeNoteP5"]')).toHaveText(
-      '第 5 页 / PAGE 05 · 追番',
-    );
-    await expect(page.locator('label[for="homeNoteP6"]')).toHaveText(
-      '第 6 页 / PAGE 06 · 工具',
-    );
-    // 默认第 3 页有文案，其它页为空
-    await expect(page.locator('#homeNoteP3')).not.toHaveValue('');
-    await expect(page.locator('#homeNoteP2')).toHaveValue('');
+    // 编辑第一行：标签 / 链接 / 图标
+    const first = rows.first();
+    await first.locator('[data-key="label"]').fill('邮件联系');
+    await first.locator('[data-key="href"]').fill('mailto:hello@myon.studio');
+    await first.locator('[data-key="icon"]').fill('ri:mail-fill');
+    await expect(page.locator('#saveState')).toContainText('有未保存的修改');
 
-    const note = `第 2 页说明 ${Date.now()}`;
-    await page.locator('#homeNoteP2').fill(note);
-    await page.locator('#homeNoteP6').fill('工具页说明');
+    // 把第一行下移一位：顺序变成 [GitHub, 邮件联系, Bangumi, RSS]
+    await first.locator('[data-move="down"]').click();
+    await expect(rows.first().locator('[data-key="label"]')).toHaveValue(
+      'GitHub',
+    );
+    await expect(rows.nth(1).locator('[data-key="label"]')).toHaveValue(
+      '邮件联系',
+    );
+
+    // 添加一行并填写，再删掉：计数与空态/按钮跟随行数
+    await page.locator('#homeLinksAdd').click();
+    await expect(rows).toHaveCount(5);
+    await expect(page.locator('#homeLinksCount')).toHaveText('5 / 6');
+    const added = rows.last();
+    await added.locator('[data-key="label"]').fill('临时链接');
+    await added.locator('[data-key="href"]').fill('/about');
+    await added.locator('.row-del').click();
+    await expect(rows).toHaveCount(4);
+    await expect(page.locator('#homeLinksCount')).toHaveText('4 / 6');
+
     await page.locator('#saveBtn').click();
     await expect(page.locator('#saveState')).toContainText('最后保存');
 
-    const saved = JSON.parse(
-      readSettings().home_page_notes ?? '[]',
-    ) as string[];
-    expect(saved).toHaveLength(5);
-    // 顺序对应第 2/3/4/5/6 页：index 0 是第 2 页，index 4 是第 6 页
-    expect(saved[0]).toBe(note);
-    expect(saved[4]).toBe('工具页说明');
-    // 未改动的第 3 页仍是默认文案
-    expect(saved[1]).not.toBe('');
+    const saved = JSON.parse(readSettings().home_links ?? '[]') as {
+      label: string;
+      href: string;
+      icon?: string;
+    }[];
+    expect(saved).toEqual([
+      { label: 'GitHub', href: 'https://github.com/Myon' },
+      {
+        label: '邮件联系',
+        href: 'mailto:hello@myon.studio',
+        icon: 'ri:mail-fill',
+      },
+      { label: 'Bangumi', href: 'https://bgm.tv/' },
+      { label: 'RSS', href: '/rss.xml' },
+    ]);
+
+    // 重新加载后从接口回读同一份顺序
+    await page.reload();
+    await expect(rows).toHaveCount(4);
+    await expect(rows.first().locator('[data-key="label"]')).toHaveValue(
+      'GitHub',
+    );
+    await expect(rows.nth(1).locator('[data-key="label"]')).toHaveValue(
+      '邮件联系',
+    );
+    await expect(rows.nth(1).locator('[data-key="icon"]')).toHaveValue(
+      'ri:mail-fill',
+    );
+  });
+
+  test('非法链接 / 图标报错，最多 6 条后禁用添加', async ({ page }) => {
+    const { readSettings } = await openMockedSettings(page);
+    const rows = page.locator('#homeLinksRows .row');
+    const original = readSettings().home_links;
+
+    // 非法链接：前后端同样的协议白名单，保存前就被拦下
+    await rows.first().locator('[data-key="href"]').fill('not-a-link');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#homeLinksErr')).toBeVisible();
+    await expect(page.locator('#homeLinksErr')).toContainText('http(s)://');
+    await expect(rows.first()).toHaveClass(/is-invalid/);
+    expect(readSettings().home_links).toBe(original);
+
+    // 链接改对、图标非法
+    await rows
+      .first()
+      .locator('[data-key="href"]')
+      .fill('https://example.com/');
+    await rows.first().locator('[data-key="icon"]').fill('not an icon');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#homeLinksErr')).toBeVisible();
+    await expect(page.locator('#homeLinksErr')).toContainText('Iconify');
+    expect(readSettings().home_links).toBe(original);
+
+    // 图标改对后保存成功
+    await rows.first().locator('[data-key="label"]').fill('官网');
+    await rows.first().locator('[data-key="icon"]').fill('ri:links-line');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#saveState')).toContainText('最后保存');
+    const saved = JSON.parse(readSettings().home_links ?? '[]') as {
+      label: string;
+      href: string;
+      icon?: string;
+    }[];
+    expect(saved[0]).toEqual({
+      label: '官网',
+      href: 'https://example.com/',
+      icon: 'ri:links-line',
+    });
+
+    // 上限 6 条：加满后按钮禁用、计数到 6 / 6
+    await page.locator('#homeLinksAdd').click();
+    await expect(page.locator('#homeLinksCount')).toHaveText('5 / 6');
+    await page.locator('#homeLinksAdd').click();
+    await expect(rows).toHaveCount(6);
+    await expect(page.locator('#homeLinksCount')).toHaveText('6 / 6');
+    await expect(page.locator('#homeLinksAdd')).toBeDisabled();
   });
 });
 
 test.describe('后台设置 · 图片路径媒体选择器', () => {
-  test('点文件夹图标选图后填入 /media/<key> 并关闭选择器', async ({
-    page,
-    request,
-  }) => {
-    await openMockedSettings(page, request);
+  test('点文件夹图标选图后填入 /media/<key> 并关闭选择器', async ({ page }) => {
+    await openMockedSettings(page);
     await mockMediaList(page);
     await expect(page.locator('#saveBtn')).toBeEnabled();
 
@@ -312,29 +396,29 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
     );
   });
 
-  test('未填写管理令牌时文件夹按钮仍可点击并提示需要令牌', async ({ page }) => {
+  test('未填写管理令牌时页面只读，文件夹按钮仍可点击并提示需要令牌', async ({
+    page,
+  }) => {
     // 不注入令牌：设置页进入只读态，但选图按钮不能被一起禁用
     await page.goto('/admin/settings');
     const picker = page.locator('[data-media-pick="homeCoverImage"]');
     await expect(picker).toBeEnabled();
     await expect(page.locator('#saveBtn')).toBeDisabled();
-    // 只读态下带 [data-setting] 的控件（含新增的页头说明 textarea）一起禁用
-    await expect(page.locator('#homePageNotes .page-note-input')).toHaveCount(
-      5,
-    );
-    await expect(page.locator('#homeNoteP2')).toBeDisabled();
-    await expect(page.locator('#homeNoteP6')).toBeDisabled();
+    await expect(page.locator('#setBanner')).toBeVisible();
+    await expect(page.locator('#setTokenBtn')).toBeVisible();
+    // 只读态下带 [data-setting] 的控件一起禁用
+    await expect(page.locator('#homeCoverImage')).toBeDisabled();
+    await expect(page.locator('#footerTech')).toBeDisabled();
+    await expect(page.locator('#themeColorText')).toBeDisabled();
+    await expect(page.locator('#homeLinksAdd')).toBeDisabled();
 
     await picker.click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#mpNotice')).toBeVisible();
   });
 
-  test('同源图片 URL 去域名，外站图片 URL 保持原样', async ({
-    page,
-    request,
-  }) => {
-    await openMockedSettings(page, request);
+  test('同源图片 URL 去域名，外站图片 URL 保持原样', async ({ page }) => {
+    await openMockedSettings(page);
     await expect(page.locator('#saveBtn')).toBeEnabled();
 
     const origin = await page.evaluate(() => window.location.origin);
@@ -442,171 +526,5 @@ test.describe('后台关于页 · 服务端 Markdown', () => {
     await expect(page.locator('#saveState')).toContainText('已保存');
     expect(markdown).toBe('# 改过的关于\n\n新的正文。');
     await expect(page.locator('#sourceTag')).toContainText('服务端');
-  });
-});
-
-test.describe('后台设置 · 行排序', () => {
-  test('数据块和联系方式可以用 ↑ ↓ 调整顺序并在保存后生效', async ({
-    page,
-    request,
-  }) => {
-    const { statsBefore, linksBefore, readSettings, statRows, linkRows } =
-      await openMockedSettings(page, request);
-    test.skip(
-      statsBefore.length < 2 || linksBefore.length < 2,
-      '需要至少两个数据块和两条联系方式才能测试排序',
-    );
-
-    const linkLabel = (index: number) =>
-      linkRows.nth(index).locator('[data-key="label"]');
-    const statPreset = (index: number) =>
-      statRows.nth(index).locator('[data-key="preset"]');
-
-    // 刚到边界时，第一行的 ↑ 与最后一行的 ↓ 不可用
-    await expect(linkRows.first().locator('[data-move="up"]')).toBeDisabled();
-    await expect(linkRows.last().locator('[data-move="down"]')).toBeDisabled();
-    await expect(page.locator('#saveState')).toContainText('已读取');
-
-    // 联系方式：把第一条往下移，页面应标记为有未保存修改
-    const expectedLinks = [...linksBefore];
-    const firstLink = expectedLinks.shift();
-    expectedLinks.splice(1, 0, firstLink as HomeToggleRow);
-    await linkRows.first().locator('[data-move="down"]').click();
-    await expect(linkLabel(0)).toHaveValue(expectedLinks[0]?.label as string);
-    await expect(linkLabel(1)).toHaveValue(expectedLinks[1]?.label as string);
-    await expect(page.locator('#saveState')).toContainText('有未保存的修改');
-
-    // 数据块：把最后一条往上移
-    const expectedStats = [...statsBefore];
-    const lastStat = expectedStats.pop();
-    expectedStats.splice(
-      expectedStats.length - 1,
-      0,
-      lastStat as { preset: string },
-    );
-    await statRows.last().locator('[data-move="up"]').click();
-    await expect(statPreset(0)).toHaveValue(expectedStats[0]?.preset as string);
-    await expect(statPreset(1)).toHaveValue(expectedStats[1]?.preset as string);
-
-    await page.locator('#saveBtn').click();
-    await expect(page.locator('#saveState')).toContainText('最后保存');
-
-    // 保存时写回接口的顺序就是 DOM 顺序
-    const savedLinks = (
-      JSON.parse(readSettings().home_links ?? '[]') as HomeToggleRow[]
-    ).map((link) => link.label);
-    expect(savedLinks).toEqual(expectedLinks.map((link) => link.label));
-    const savedStats = JSON.parse(readSettings().home_stats ?? '[]') as {
-      preset: string;
-    }[];
-    expect(savedStats.map((stat) => stat.preset)).toEqual(
-      expectedStats.map((stat) => stat.preset),
-    );
-
-    // 重新加载后顺序保持
-    await page.reload();
-    await expect(linkRows).toHaveCount(linksBefore.length);
-    await expect(statRows).toHaveCount(statsBefore.length);
-    for (let index = 0; index < expectedLinks.length; index += 1) {
-      await expect(linkLabel(index)).toHaveValue(
-        expectedLinks[index]?.label as string,
-      );
-    }
-    for (let index = 0; index < expectedStats.length; index += 1) {
-      await expect(statPreset(index)).toHaveValue(
-        expectedStats[index]?.preset as string,
-      );
-    }
-  });
-
-  test('行首把手可以拖拽调整顺序并在保存后生效', async ({ page, request }) => {
-    // 拖拽要求源和目标同时可见，用一个足够高的视口避免 Playwright 中途滚动
-    await page.setViewportSize({ width: 1280, height: 1600 });
-    const { statsBefore, linksBefore, readSettings, statRows, linkRows } =
-      await openMockedSettings(page, request);
-    test.skip(
-      linksBefore.length < 3 || statsBefore.length < 2,
-      '需要至少三个联系方式与两个数据块才能测试拖拽',
-    );
-
-    const linkLabel = (index: number) =>
-      linkRows.nth(index).locator('[data-key="label"]');
-    const statPreset = (index: number) =>
-      statRows.nth(index).locator('[data-key="preset"]');
-
-    // 每一行都有拖拽把手
-    await expect(page.locator('#homeLinksRows .row-grip')).toHaveCount(
-      linksBefore.length,
-    );
-    await expect(page.locator('#homeStatsRows .row-grip')).toHaveCount(
-      statsBefore.length,
-    );
-
-    // 拖第一条到第三条上方 → [B, A, C, ...]
-    const first = linksBefore[0] as HomeToggleRow;
-    const second = linksBefore[1] as HomeToggleRow;
-    const third = linksBefore[2] as HomeToggleRow;
-    const expectedLinks = [second, first, third, ...linksBefore.slice(3)];
-    await page.locator('#homeLinksRows').scrollIntoViewIfNeeded();
-    await dragRowByHandle(
-      page,
-      linkRows.first().locator('.row-grip'),
-      linkRows.nth(2),
-      false,
-    );
-    for (let index = 0; index < expectedLinks.length; index += 1) {
-      await expect(linkLabel(index)).toHaveValue(
-        expectedLinks[index]?.label as string,
-      );
-    }
-    await expect(linkRows.first()).not.toHaveClass(/is-dragging/);
-    await expect(page.locator('#saveState')).toContainText('有未保存的修改');
-
-    // 拖最后一个数据块到第一条上方 → [C, A, B]
-    const lastStat = statsBefore[statsBefore.length - 1] as {
-      preset: string;
-    };
-    const expectedStats = [lastStat, ...statsBefore.slice(0, -1)];
-    await page.locator('#homeStatsRows').scrollIntoViewIfNeeded();
-    await dragRowByHandle(
-      page,
-      statRows.last().locator('.row-grip'),
-      statRows.first(),
-      false,
-    );
-    for (let index = 0; index < expectedStats.length; index += 1) {
-      await expect(statPreset(index)).toHaveValue(
-        expectedStats[index]?.preset as string,
-      );
-    }
-
-    await page.locator('#saveBtn').click();
-    await expect(page.locator('#saveState')).toContainText('最后保存');
-
-    // 写回接口的顺序与拖拽后的 DOM 顺序一致
-    const savedLinks = (
-      JSON.parse(readSettings().home_links ?? '[]') as HomeToggleRow[]
-    ).map((link) => link.label);
-    expect(savedLinks).toEqual(expectedLinks.map((link) => link.label));
-    const savedStats = JSON.parse(readSettings().home_stats ?? '[]') as {
-      preset: string;
-    }[];
-    expect(savedStats.map((stat) => stat.preset)).toEqual(
-      expectedStats.map((stat) => stat.preset),
-    );
-
-    // 重新加载后顺序保持
-    await page.reload();
-    await expect(linkRows).toHaveCount(linksBefore.length);
-    for (let index = 0; index < expectedLinks.length; index += 1) {
-      await expect(linkLabel(index)).toHaveValue(
-        expectedLinks[index]?.label as string,
-      );
-    }
-    for (let index = 0; index < expectedStats.length; index += 1) {
-      await expect(statPreset(index)).toHaveValue(
-        expectedStats[index]?.preset as string,
-      );
-    }
   });
 });

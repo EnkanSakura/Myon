@@ -1,35 +1,34 @@
 import { z } from 'zod';
+import { defaultLocale, getMessages, type Locale } from './i18n';
 import { iconifyNamePattern, isIconifyIconName } from './icons';
+import {
+  type HomeLink,
+  type HomeStatView,
+  staticHomeStats,
+} from './site-config';
 
-/** 站点设置的键、默认值与校验。后台可改，前台与 API 共读同一份。 */
+/**
+ * 站点设置的键、默认值与校验。后台可改，前台与 API 共读同一份。
+ *
+ * 这里只放「部署后可能还会改」的运行配置（站点身份、页脚、首页图片、联系方式、后记、维护开关）。
+ * 首页固定文案、页头标签/说明、统计块、尾页标题/导语都不再进 KV：
+ * 文案在 `i18n/zh-CN.json`，结构在 `site.config.json`，改文案走代码发布。
+ */
 
 export const siteSettingKeys = [
   'site_name',
   'site_subtitle',
   'site_description',
   'site_author',
-  'site_email',
   'theme_color',
-  'footer_copyright',
   'footer_tech',
   'footer_icp',
   'footer_rss',
   'footer_email',
-  'default_theme',
-  'comments_enabled',
-  'home_title',
-  'home_lead',
-  'home_page_labels',
-  'home_page_notes',
-  'home_stats',
   'home_links',
   'home_cover_image',
-  'home_cover_badge',
-  'home_cover_note',
   'home_p2_figure_a',
   'home_p2_figure_b',
-  'home_end_title',
-  'home_end_lead',
   'home_afterword_body',
   'home_afterword_sign',
   'home_afterword_next',
@@ -45,86 +44,7 @@ export const siteSettingsKvKey = 'site-settings:v1';
 /** 默认主题色。改它等于改设计基线，一般只在后台覆盖。 */
 export const defaultThemeColor = '#EC88C2';
 
-/** 首页七页的主标签（CH.0X 那一层），可在后台逐页配置。 */
-export const defaultHomePageLabels = [
-  'CH.01 封面',
-  'CH.02 目次',
-  'CH.03 四格',
-  'CH.04 收藏',
-  'CH.05 放送',
-  'CH.06 部室',
-  'CH.07 后记',
-];
-
-/**
- * 首页第 2–6 页页头（.head.reveal）里的说明文字，后台逐页配置。
- * 顺序对应第 2/3/4/5/6 页；空字符串表示该页不显示说明。
- * 第 3 页默认保留原文案；第 6 页默认留空，前台会按工具数量生成默认文案。
- */
-export const homePageNoteSlots = 5;
-
-export const defaultHomePageNotes = [
-  // 第 2 页：文章
-  '',
-  // 第 3 页：动态
-  '写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。',
-  // 第 4 页：展柜
-  '',
-  // 第 5 页：追番
-  '',
-  // 第 6 页：工具（留空时按工具数量自动生成）
-  '',
-];
-
-/**
- * 首页数据块的预设：只选含义，数值由站点统计实时算出来。
- * 顺序即后台下拉的顺序。
- */
-export const homeStatPresets = [
-  { key: 'latest_update', label: '最后更新', unit: '' },
-  { key: 'posts', label: '文章', unit: '篇' },
-  { key: 'moments', label: '动态', unit: '条' },
-  { key: 'gallery', label: '展柜', unit: '件' },
-  { key: 'bangumi_watching', label: '在追', unit: '部' },
-  { key: 'bangumi_total', label: '追番', unit: '部' },
-  { key: 'words', label: '字数', unit: '字' },
-  { key: 'media', label: '媒体', unit: '件' },
-  { key: 'categories', label: '分类', unit: '个' },
-] as const;
-
-export type HomeStatPreset = (typeof homeStatPresets)[number]['key'];
-
-/** 存进 settings 的数据块定义：只存预设与可选覆盖。 */
-export interface HomeStatSetting {
-  preset: HomeStatPreset;
-  label?: string;
-  accent?: boolean;
-}
-
-/** 前台拿到的数据块：预设默认标签与单位，数值另行从统计接口取。 */
-export interface HomeStatView {
-  preset: HomeStatPreset;
-  label: string;
-  unit: string;
-  accent: boolean;
-}
-
-/** 首页封面上的联系方式 / 外链（最多 6 条）。 */
-export interface HomeLink {
-  label: string;
-  /** 旧数据里的“说明”字段，前台已不再展示，仅为兼容保留。 */
-  value?: string;
-  /** Iconify 图标名（icones.js.org），如 ri:rss-fill；不填时按链接自动识别。 */
-  icon?: string;
-  href: string;
-}
-
-export const defaultHomeStats: HomeStatSetting[] = [
-  { preset: 'latest_update', accent: false },
-  { preset: 'bangumi_watching', accent: true },
-  { preset: 'gallery', accent: false },
-];
-
+/** 首页联系方式默认值：标签、链接与图标都随数组存在 KV 里，后台可改。 */
 export const defaultHomeLinks: HomeLink[] = [
   { label: '写邮件', href: 'mailto:hi@myon.studio' },
   { label: 'GitHub', href: '#' },
@@ -137,31 +57,16 @@ export const defaultSiteSettings: SiteSettings = {
   site_subtitle: '同人志',
   site_description: '一个人的二次元生活志',
   site_author: 'Myon',
-  site_email: 'hi@myon.studio',
   theme_color: defaultThemeColor,
-  footer_copyright: '© 2026 MYON',
   footer_tech: 'Astro · Cloudflare Workers · D1 · R2',
   footer_icp: '京ICP备 2026000000 号',
   footer_rss: '/rss.xml',
   footer_email: 'hi@myon.studio',
-  default_theme: 'system',
-  comments_enabled: 'true',
-  home_title: '灯下的一格',
-  home_lead:
-    '写字、看番、存图、做点小工具。\n一个人的二次元生活志，自己画、自己印，一共七页。',
-  home_page_labels: JSON.stringify(defaultHomePageLabels),
-  home_page_notes: JSON.stringify(defaultHomePageNotes),
-  home_stats: JSON.stringify(defaultHomeStats),
   home_links: JSON.stringify(defaultHomeLinks),
   home_cover_image: '/media/cabinet.jpg',
-  home_cover_badge: '全七页 / ALL 7',
-  home_cover_note: 'LIGHT ON · 只开一盏灯',
   // 第 2 页两张装饰图：留空表示沿用封面图，保证旧设置视觉零变化。
   home_p2_figure_a: '',
   home_p2_figure_b: '',
-  home_end_title: '谢谢翻完',
-  home_end_lead:
-    '如果哪一件你也喜欢，或者只是想聊两句——下次漫展见，或者现在写邮件给我。',
   home_afterword_body: `这一册做到第七页的时候，窗外刚好天亮了。
 下一册想多放一点动画截图和旅行速写，也可能什么计划都没有，想到哪画到哪。`,
   home_afterword_sign: '—— Myon，于 10 月的某个凌晨',
@@ -180,16 +85,23 @@ const optionalFigurePath = z
     '装饰图需要是 / 开头的站内路径或 http(s):// 链接；留空则沿用封面图',
   );
 
-const homeStatSettingSchema = z.object({
-  preset: z.enum(
-    homeStatPresets.map((preset) => preset.key) as [
-      HomeStatPreset,
-      ...HomeStatPreset[],
-    ],
-  ),
-  label: text(24).optional(),
-  accent: z.boolean().optional(),
-});
+/** JSON 数组字符串的校验：后台用行编辑器，最终仍以字符串存 KV。 */
+const jsonArrayText = <T extends z.ZodTypeAny>(item: T, maxItems: number) =>
+  z
+    .string()
+    .max(3000)
+    .refine((raw) => {
+      try {
+        const parsed = JSON.parse(raw);
+        return (
+          Array.isArray(parsed) &&
+          parsed.length <= maxItems &&
+          parsed.every((entry) => item.safeParse(entry).success)
+        );
+      } catch {
+        return false;
+      }
+    }, '需要是 JSON 数组');
 
 const homeLinkSchema = z.object({
   label: text(24),
@@ -209,35 +121,15 @@ const homeLinkSchema = z.object({
     ),
 });
 
-/** JSON 数组字符串的校验：后台用行编辑器，最终仍以字符串存 D1。 */
-const jsonArrayText = <T extends z.ZodTypeAny>(item: T, maxItems: number) =>
-  z
-    .string()
-    .max(3000)
-    .refine((raw) => {
-      try {
-        const parsed = JSON.parse(raw);
-        return (
-          Array.isArray(parsed) &&
-          parsed.length <= maxItems &&
-          parsed.every((entry) => item.safeParse(entry).success)
-        );
-      } catch {
-        return false;
-      }
-    }, '需要是 JSON 数组');
-
 export const siteSettingsPatchSchema = z
   .object({
     site_name: text(60),
     site_subtitle: text(60),
     site_description: text(200),
     site_author: text(60),
-    site_email: text(120),
     theme_color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, '主题色需要是 #RRGGBB 形式的十六进制颜色'),
-    footer_copyright: text(120),
     // 技术支持与备案号允许写多个 <a>，后端白名单过滤后再输出
     footer_tech: text(500),
     footer_icp: text(300),
@@ -249,24 +141,13 @@ export const siteSettingsPatchSchema = z
         'RSS 地址需要是以 / 开头的站内路径或 http(s) 链接',
       ),
     footer_email: text(120),
-    default_theme: z.enum(['light', 'dark', 'system']),
-    comments_enabled: z.enum(['true', 'false']),
-    home_title: text(60),
-    home_lead: text(240),
-    home_page_labels: jsonArrayText(text(40), 7),
-    home_page_notes: jsonArrayText(text(240), homePageNoteSlots),
-    home_stats: jsonArrayText(homeStatSettingSchema, 4),
     home_links: jsonArrayText(homeLinkSchema, 6),
     home_cover_image: z
       .string()
       .max(300)
       .regex(/^(\/|https?:\/\/)/, '封面图需要是站内路径或 http(s) 链接'),
-    home_cover_badge: text(40),
-    home_cover_note: text(60),
     home_p2_figure_a: optionalFigurePath,
     home_p2_figure_b: optionalFigurePath,
-    home_end_title: text(60),
-    home_end_lead: text(240),
     home_afterword_body: text(600),
     home_afterword_sign: text(120),
     home_afterword_next: text(80),
@@ -288,7 +169,7 @@ export function formatPageTitle(
   return tail ? `${page} · ${tail}` : page;
 }
 
-/** 首页封面配置（后台可改，未配置时用默认值）。 */
+/** 首页封面配置：固定文案来自静态资源，图片路径仍来自后台设置。 */
 export interface HomeCoverSettings {
   title: string;
   lead: string;
@@ -326,7 +207,7 @@ export interface PublicSiteSettings {
   end: HomeEndSettings;
 }
 
-/** 尾页：左侧感谢语 + 后记正文。 */
+/** 尾页：左侧感谢语（静态）+ 后记正文（后台可改）。 */
 export interface HomeEndSettings {
   title: string;
   lead: string;
@@ -362,56 +243,11 @@ function normalizeLinks(links: HomeLink[]): HomeLink[] {
   });
 }
 
-function normalizePageLabels(labels: string[]): string[] {
-  return Array.from({ length: 7 }, (_, index) => {
-    const value = labels[index];
-    return typeof value === 'string' && value.trim()
-      ? value.trim()
-      : (defaultHomePageLabels[index] as string);
-  });
-}
-
-/** 第 2–6 页页头说明：固定 5 项，去掉首尾空白；空字符串保留为空（前台不渲染）。 */
-function normalizePageNotes(notes: string[]): string[] {
-  return Array.from({ length: homePageNoteSlots }, (_, index) => {
-    const value = notes[index];
-    return typeof value === 'string' ? value.trim() : '';
-  });
-}
-
-const presetByKey = new Map(
-  homeStatPresets.map((preset) => [preset.key as string, preset]),
-);
-const presetByLabel = new Map<string, (typeof homeStatPresets)[number]>(
-  homeStatPresets.map((preset) => [preset.label, preset]),
-);
-
-/** 兼容旧数据：按 preset、再按 label 匹配，实在不认识就退回第一个预设。 */
-function normalizeStats(stats: HomeStatSetting[]): HomeStatView[] {
-  return stats.slice(0, 4).map((entry) => {
-    const raw = entry as HomeStatSetting & { label?: string; value?: string };
-    const preset =
-      presetByKey.get(raw.preset) ??
-      (raw.label ? presetByLabel.get(raw.label) : undefined) ??
-      homeStatPresets[0];
-    const customLabel =
-      typeof raw.label === 'string' &&
-      raw.label.trim() &&
-      raw.label !== preset.label
-        ? raw.label.trim()
-        : '';
-    return {
-      preset: preset.key,
-      label: customLabel || preset.label,
-      unit: preset.unit,
-      accent: Boolean(raw.accent),
-    };
-  });
-}
-
 export function toPublicSiteSettings(
   settings: SiteSettings,
+  locale: Locale = defaultLocale,
 ): PublicSiteSettings {
+  const messages = getMessages(locale);
   // 兼容旧设置里的 /assets/<key>：图片现在只从 R2 出。
   const coverImage = settings.home_cover_image.replace(
     /^\/assets\//,
@@ -422,45 +258,44 @@ export function toPublicSiteSettings(
     settings.home_p2_figure_a.replace(/^\/assets\//, '/media/') || coverImage;
   const figureB =
     settings.home_p2_figure_b.replace(/^\/assets\//, '/media/') || coverImage;
+  const author = settings.site_author;
+  const footerCopyright = ['©', String(new Date().getFullYear()), author]
+    .filter(Boolean)
+    .join(' ');
 
   return {
     name: settings.site_name,
-    author: settings.site_author,
+    author,
     maintenanceEnabled: settings.maintenance_enabled === 'true',
     subtitle: settings.site_subtitle,
     description: settings.site_description,
     themeColor: settings.theme_color,
-    footerCopyright: settings.footer_copyright,
+    // 版权不再单独配置：由作者 + 当前年份生成（与前台底栏一致）。
+    footerCopyright,
     footerTech: settings.footer_tech,
     footerIcp: settings.footer_icp,
     footerRss: settings.footer_rss,
     footerEmail: settings.footer_email,
     home: {
-      title: settings.home_title,
-      lead: settings.home_lead,
-      pages: normalizePageLabels(
-        parseJsonArray(settings.home_page_labels, defaultHomePageLabels),
-      ),
-      pageNotes: normalizePageNotes(
-        parseJsonArray(settings.home_page_notes, defaultHomePageNotes),
-      ),
-      stats: normalizeStats(
-        parseJsonArray(settings.home_stats, defaultHomeStats),
-      ),
+      title: messages.home.title,
+      lead: messages.home.lead,
+      pages: [...messages.home.pageLabels],
+      pageNotes: [...messages.home.pageNotes],
+      stats: staticHomeStats(locale),
       links: normalizeLinks(
         parseJsonArray(settings.home_links, defaultHomeLinks),
       ),
       cover: {
         image: coverImage,
-        badge: settings.home_cover_badge,
-        note: settings.home_cover_note,
+        badge: messages.home.coverBadge,
+        note: messages.home.coverNote,
       },
       // 第 2 页两张装饰图：后台留空时回退封面图，前台不需要再判空。
       figures: { a: figureA, b: figureB },
     },
     end: {
-      title: settings.home_end_title,
-      lead: settings.home_end_lead,
+      title: messages.home.endTitle,
+      lead: messages.home.endLead,
       afterword: {
         body: settings.home_afterword_body,
         sign: settings.home_afterword_sign,

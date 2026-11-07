@@ -4,6 +4,10 @@
   /* ==========================================================================
      后台 · 设置：站点 / 首页 / 外观 / 页脚 / 尾页后记
      读取与保存都走 /api/v1/admin/settings（需要顶栏的「管理令牌」）。
+     编辑 KV 里的运行时配置：站点身份、主题色、页脚、首页图片与联系方式
+     （home_links）、尾页后记。首页固定文案（标题/导语/页头标签说明/数据块/
+     封面贴纸便签/尾页标题导语）在 @myon/shared 的 i18n 与站点配置里，
+     改文案走代码发布，本页不提供输入框。
      只有一个全局状态（页头 saveState）和一个页面级提示条（#setBanner）。
      ========================================================================== */
 
@@ -11,13 +15,11 @@
   var TOKEN_KEY = "myon-admin-token";
   var THEME_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   var RSS_RE = /^(\/|https?:\/\/)/;
-  var LINK_RE = /^(\/|https?:\/\/|mailto:|#)/;
-  // 与 @myon/shared 的 iconifyNamePattern 保持一致（public/js 不参与打包）
-  var ICON_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:[-_][a-z0-9]+)*$/i;
   var COVER_RE = /^(\/|https?:\/\/)/;
-  var HOME_STATS_MAX = 4;
+  // 联系方式：链接协议白名单、Iconify 名称与最多条数（与 @myon/shared 的校验一致）
+  var LINK_RE = /^(\/|https?:\/\/|mailto:|#)/;
+  var ICON_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:[-_][a-z0-9]+)*$/i;
   var HOME_LINKS_MAX = 6;
-  var HOME_JSON_MAX = 3000;
 
   // 图片路径字段：可以从媒体库选择，并把粘贴进来的站点域名去掉
   var IMAGE_PATH_IDS = ["homeCoverImage", "homeFigureA", "homeFigureB"];
@@ -37,15 +39,9 @@
     footer_icp: "footerIcp",
     footer_rss: "footerRss",
     footer_email: "footerEmail",
-    home_title: "homeTitle",
-    home_lead: "homeLead",
     home_cover_image: "homeCoverImage",
-    home_cover_badge: "homeCoverBadge",
-    home_cover_note: "homeCoverNote",
     home_p2_figure_a: "homeFigureA",
     home_p2_figure_b: "homeFigureB",
-    home_end_title: "homeEndTitle",
-    home_end_lead: "homeEndLead",
     home_afterword_body: "homeAfterwordBody",
     home_afterword_sign: "homeAfterwordSign",
     home_afterword_next: "homeAfterwordNext"
@@ -70,33 +66,14 @@
   var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
   var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
-
-  // 首页预设与默认七页标签由服务端注入（来自 @myon/shared）。
-  var HOME_CONFIG = {};
-  if (pageEl) {
-    try {
-      HOME_CONFIG = JSON.parse(pageEl.getAttribute("data-home-config") || "{}");
-    } catch (e) {
-      HOME_CONFIG = {};
-    }
+  // 联系方式默认值由服务端渲染（@myon/shared 的 defaultHomeLinks），接口没返回时兜底。
+  var DEFAULT_LINKS = [];
+  try {
+    DEFAULT_LINKS = JSON.parse((pageEl ? pageEl.getAttribute("data-home-links") : "") || "[]");
+  } catch (error) {
+    DEFAULT_LINKS = [];
   }
-  var HOME_PRESETS = Array.isArray(HOME_CONFIG.presets) ? HOME_CONFIG.presets : [];
-  var HOME_PRESET_MAP = {};
-  each(HOME_PRESETS, function (preset) { HOME_PRESET_MAP[preset.key] = preset; });
-  var DEFAULT_PAGE_LABELS = Array.isArray(HOME_CONFIG.pageLabels) ? HOME_CONFIG.pageLabels : [];
-  // 第 2–6 页页头说明的默认值来自 @myon/shared（服务端注入 data-home-config.pageNotes）；
-  // 注入缺失时退回同一份文案，保证设置页至少能按 5 项渲染。
-  var DEFAULT_PAGE_NOTES = (function () {
-    var injected = HOME_CONFIG.pageNotes;
-    if (Array.isArray(injected) && injected.length === 5) return injected;
-    return [
-      "",
-      "写了一半的、刚放下的、还没归档的。都是些小事，但确实发生过。",
-      "",
-      "",
-      ""
-    ];
-  })();
+  if (!Array.isArray(DEFAULT_LINKS)) DEFAULT_LINKS = [];
 
   var saveBtn = $("saveBtn");
   var saveState = $("saveState");
@@ -118,26 +95,19 @@
   var footerRss = $("footerRss");
   var footerRssErr = $("footerRssErr");
 
-  var homePageLabels = $("homePageLabels");
-  var homePageLabelsErr = $("homePageLabelsErr");
-  var homePageNotes = $("homePageNotes");
-  var homePageNotesErr = $("homePageNotesErr");
-  var homeStatsRows = $("homeStatsRows");
-  var homeStatsEmpty = $("homeStatsEmpty");
-  var homeStatsAdd = $("homeStatsAdd");
-  var homeStatsCount = $("homeStatsCount");
-  var homeStatsErr = $("homeStatsErr");
-  var homeLinksRows = $("homeLinksRows");
-  var homeLinksEmpty = $("homeLinksEmpty");
-  var homeLinksAdd = $("homeLinksAdd");
-  var homeLinksCount = $("homeLinksCount");
-  var homeLinksErr = $("homeLinksErr");
   var homeCoverImage = $("homeCoverImage");
   var homeCoverImageErr = $("homeCoverImageErr");
   var homeFigureA = $("homeFigureA");
   var homeFigureAErr = $("homeFigureAErr");
   var homeFigureB = $("homeFigureB");
   var homeFigureBErr = $("homeFigureBErr");
+
+  // 联系方式行编辑器
+  var homeLinksRows = $("homeLinksRows");
+  var homeLinksEmpty = $("homeLinksEmpty");
+  var homeLinksAdd = $("homeLinksAdd");
+  var homeLinksCount = $("homeLinksCount");
+  var homeLinksErr = $("homeLinksErr");
 
   /* ---------------- 页面状态 ---------------- */
   var state = {
@@ -206,7 +176,6 @@
       el.disabled = !on;
     });
     saveBtn.disabled = !on || state.saving;
-    syncRowState("stat");
     syncRowState("link");
   }
 
@@ -238,7 +207,7 @@
     return false;
   }
 
-  /* ---------------- 首页：图片路径（媒体库 + 去域名） ---------------- */
+  /* ---------------- 首页图片：路径（媒体库 + 去域名） ---------------- */
   /**
    * 去掉图片路径里的站点域名：
    * - 值不是 http(s):// 或 // 开头的完整 URL（含站内 /media/ 路径）时原样返回；
@@ -327,7 +296,7 @@
     });
   }
 
-  /* ---------------- 首页：数据块 / 联系方式行编辑器 ---------------- */
+  /* ---------------- 首页：联系方式行编辑器 ---------------- */
   var rowSeq = 0;
   var dragState = null;
 
@@ -345,7 +314,7 @@
     fld.className = "fld";
     var label = document.createElement("label");
     label.className = "sr-only";
-    label.htmlFor = "homeRow" + (++rowSeq);
+    label.htmlFor = "homeLinkRow" + (++rowSeq);
     label.textContent = labelText;
     var input = document.createElement("input");
     input.type = "text";
@@ -362,7 +331,7 @@
     return fld;
   }
 
-  function makeRowDelete(kind, row) {
+  function makeRowDelete(row) {
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "row-del";
@@ -370,23 +339,23 @@
     btn.textContent = "删除";
     btn.addEventListener("click", function () {
       row.remove();
-      syncRowState(kind);
+      syncRowState("link");
       dirty();
     });
     return btn;
   }
 
   /** 上移 / 下移一行；DOM 顺序就是保存进 KV 的数组顺序。 */
-  function moveRow(kind, row, direction) {
+  function moveRow(row, direction) {
     var sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
     if (!sibling) return;
     if (direction < 0) row.parentNode.insertBefore(row, sibling);
     else row.parentNode.insertBefore(sibling, row);
-    syncRowState(kind);
+    syncRowState("link");
     dirty();
   }
 
-  function makeMoveButton(kind, row, direction) {
+  function makeMoveButton(row, direction) {
     var label = direction < 0 ? "上移" : "下移";
     var btn = document.createElement("button");
     btn.type = "button";
@@ -397,7 +366,7 @@
     btn.title = label;
     btn.textContent = direction < 0 ? "↑" : "↓";
     btn.addEventListener("click", function () {
-      moveRow(kind, row, direction);
+      moveRow(row, direction);
       // 移动后本行可能到达边界，把焦点交给同一行仍可用的小按钮
       var arrow = row.querySelector('[data-move="' + (direction < 0 ? "up" : "down") + '"]');
       var target =
@@ -418,12 +387,12 @@
     });
   }
 
-  function makeRowActions(kind, row) {
+  function makeRowActions(row) {
     var wrap = document.createElement("div");
     wrap.className = "row-actions";
-    wrap.appendChild(makeMoveButton(kind, row, -1));
-    wrap.appendChild(makeMoveButton(kind, row, 1));
-    wrap.appendChild(makeRowDelete(kind, row));
+    wrap.appendChild(makeMoveButton(row, -1));
+    wrap.appendChild(makeMoveButton(row, 1));
+    wrap.appendChild(makeRowDelete(row));
     return wrap;
   }
 
@@ -440,7 +409,7 @@
     document.body.classList.remove("is-row-dragging");
   }
 
-  function moveRowTo(kind, row, target, placeAfter) {
+  function moveRowTo(row, target, placeAfter) {
     if (!row || !target || row === target) return;
     if (row.parentNode !== target.parentNode) return;
     if (placeAfter) {
@@ -450,7 +419,7 @@
       if (row.nextElementSibling === target) return;
       row.parentNode.insertBefore(row, target);
     }
-    syncRowState(kind);
+    syncRowState("link");
     dirty();
   }
 
@@ -462,7 +431,7 @@
   }
 
   /** 行首的拖拽把手：按住往下拖，松手时按落点前后插入。 */
-  function makeDragHandle(kind, row) {
+  function makeDragHandle(row) {
     var handle = document.createElement("span");
     handle.className = "row-grip";
     handle.setAttribute("aria-hidden", "true");
@@ -474,7 +443,6 @@
       var list = row.parentNode;
       dragState = {
         row: row,
-        kind: kind,
         list: list,
         target: null,
         placeAfter: false
@@ -514,7 +482,7 @@
         var target = current.target;
         var placeAfter = current.placeAfter;
         clearRowDrag();
-        if (target) moveRowTo(current.kind, current.row, target, placeAfter);
+        if (target) moveRowTo(current.row, target, placeAfter);
       }
 
       document.addEventListener("mousemove", onMove);
@@ -526,95 +494,10 @@
     return handle;
   }
 
-  function presetInfo(key) {
-    return HOME_PRESET_MAP[key] || HOME_PRESETS[0] || { key: key, label: key, unit: "" };
-  }
-
-  function presetLabelText(preset) {
-    return preset.label + (preset.unit ? " · " + preset.unit : "");
-  }
-
-  function updateStatHint(row) {
-    var hint = row.querySelector(".row-hint");
-    if (!hint) return;
-    var preset = presetInfo(row.querySelector('[data-key="preset"]').value);
-    var custom = row.querySelector('[data-key="label"]').value.trim();
-    var text = "默认「" + preset.label + "」";
-    if (preset.unit) text += " · 单位「" + preset.unit + "」";
-    text += " · 数值由站点统计实时计算";
-    hint.textContent = custom ? "自定义标签「" + custom + "」 · " + text : text;
-  }
-
-  function buildStatRow(stat, index) {
-    var row = document.createElement("div");
-    row.className = "row row--stat";
-    row.appendChild(makeDragHandle("stat", row));
-
-    // 预设下拉：只选含义，数值由站点统计实时算
-    var presetFld = document.createElement("div");
-    presetFld.className = "fld";
-    var presetLabel = document.createElement("label");
-    presetLabel.className = "sr-only";
-    presetLabel.htmlFor = "homeStatPreset" + (++rowSeq);
-    presetLabel.textContent = "数据块 " + (index + 1) + " 预设";
-    var select = document.createElement("select");
-    select.id = presetLabel.htmlFor;
-    select.setAttribute("data-key", "preset");
-    select.setAttribute("data-setting", "");
-    each(HOME_PRESETS, function (preset) {
-      var option = document.createElement("option");
-      option.value = preset.key;
-      option.textContent = presetLabelText(preset);
-      select.appendChild(option);
-    });
-    if (HOME_PRESET_MAP[stat.preset]) select.value = stat.preset;
-    presetFld.appendChild(presetLabel);
-    presetFld.appendChild(select);
-
-    // 标签覆盖：留空则用预设默认标签
-    var labelFld = makeRowField(
-      "数据块 " + (index + 1) + " 标签覆盖（可选）",
-      "label",
-      stat.label,
-      24
-    );
-    var labelInput = labelFld.querySelector("input");
-
-    var check = document.createElement("label");
-    check.className = "row-check";
-    var checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.setAttribute("data-key", "accent");
-    checkbox.setAttribute("data-setting", "");
-    checkbox.checked = stat.accent;
-    checkbox.addEventListener("change", dirty);
-    check.appendChild(checkbox);
-    check.appendChild(document.createTextNode("强调"));
-
-    var hint = document.createElement("p");
-    hint.className = "row-hint";
-
-    row.appendChild(presetFld);
-    row.appendChild(labelFld);
-    row.appendChild(check);
-    row.appendChild(makeRowActions("stat", row));
-    row.appendChild(hint);
-
-    select.addEventListener("change", function () {
-      updateStatHint(row);
-      dirty();
-    });
-    labelInput.addEventListener("input", function () {
-      updateStatHint(row);
-    });
-    updateStatHint(row);
-    return row;
-  }
-
   function buildLinkRow(link, index) {
     var row = document.createElement("div");
     row.className = "row row--link";
-    row.appendChild(makeDragHandle("link", row));
+    row.appendChild(makeDragHandle(row));
     row.appendChild(makeRowField("联系方式 " + (index + 1) + " 标签", "label", link.label, 24));
     var iconFld = makeRowField(
       "联系方式 " + (index + 1) + " 图标（Iconify 名称，留空自动识别）",
@@ -625,7 +508,7 @@
     var iconInput = iconFld.querySelector("input");
     row.appendChild(iconFld);
     row.appendChild(makeRowField("联系方式 " + (index + 1) + " 链接", "href", link.href, 300));
-    row.appendChild(makeRowActions("link", row));
+    row.appendChild(makeRowActions(row));
 
     // 链接 / 图标改对后即刻消掉行内报错
     var hrefInput = row.querySelector('[data-key="href"]');
@@ -640,26 +523,8 @@
     return row;
   }
 
-  function normalizeStat(stat) {
-    var preset = typeof stat.preset === "string" && HOME_PRESET_MAP[stat.preset] ? stat.preset : "";
-    var label = typeof stat.label === "string" ? stat.label : "";
-
-    if (!preset) {
-      // 兼容旧格式（label/value/unit）：按标签反查预设
-      var matched = "";
-      each(HOME_PRESETS, function (item) {
-        if (!matched && item.label === label) matched = item.key;
-      });
-      preset = matched || (HOME_PRESETS[0] ? HOME_PRESETS[0].key : "");
-      if (matched) label = "";
-    }
-    if (label === presetInfo(preset).label) label = "";
-
-    return { preset: preset, label: label, accent: stat.accent === true };
-  }
-
+  /** 兼容改版前的数据：图标名曾被填在 iconHtml 字段里；非 Iconify 名称一律丢弃。 */
   function normalizeLink(link) {
-    // 兼容改版前的数据：图标名曾被填在 iconHtml 字段里；非 Iconify 名称一律丢弃
     var rawIcon = typeof link.icon === "string" ? link.icon : "";
     if (!ICON_RE.test(rawIcon.trim()) && typeof link.iconHtml === "string") {
       rawIcon = link.iconHtml;
@@ -672,68 +537,15 @@
     };
   }
 
-  function renderStats(raw) {
-    var stats = parseJsonArray(raw).slice(0, HOME_STATS_MAX).map(normalizeStat);
-    while (homeStatsRows.firstChild) homeStatsRows.removeChild(homeStatsRows.firstChild);
-    each(stats, function (stat, index) {
-      homeStatsRows.appendChild(buildStatRow(stat, index));
-    });
-    syncRowState("stat");
-  }
-
   function renderLinks(raw) {
-    var links = parseJsonArray(raw).slice(0, HOME_LINKS_MAX).map(normalizeLink);
+    var links = parseJsonArray(raw);
+    if (!links.length && raw === undefined) links = DEFAULT_LINKS;
+    links = links.slice(0, HOME_LINKS_MAX).map(normalizeLink);
     while (homeLinksRows.firstChild) homeLinksRows.removeChild(homeLinksRows.firstChild);
     each(links, function (link, index) {
       homeLinksRows.appendChild(buildLinkRow(link, index));
     });
     syncRowState("link");
-  }
-
-  function readPageLabels() {
-    var out = [];
-    each(homePageLabels.querySelectorAll(".page-label-input"), function (input) {
-      out.push(input.value.trim());
-    });
-    return out;
-  }
-
-  function renderPageLabels(raw) {
-    var labels = parseJsonArray(raw);
-    each(homePageLabels.querySelectorAll(".page-label-input"), function (input, index) {
-      var value = labels[index];
-      input.value = typeof value === "string" ? value : (DEFAULT_PAGE_LABELS[index] || "");
-    });
-  }
-
-  /** 读第 2–6 页页头说明：固定按 DOM 顺序输出 5 项，去掉首尾空白。 */
-  function readPageNotes() {
-    var out = [];
-    each(homePageNotes.querySelectorAll(".page-note-input"), function (input) {
-      out.push(input.value.trim());
-    });
-    return out;
-  }
-
-  /** 回填页头说明：JSON 容错、固定 5 项；缺失项用共享默认值补齐。 */
-  function renderPageNotes(raw) {
-    var notes = parseJsonArray(raw);
-    each(homePageNotes.querySelectorAll(".page-note-input"), function (input, index) {
-      var value = notes[index];
-      input.value = typeof value === "string" ? value : (DEFAULT_PAGE_NOTES[index] || "");
-    });
-  }
-
-  function readStats() {
-    var out = [];
-    each(homeStatsRows.querySelectorAll(".row"), function (row) {
-      var item = { preset: row.querySelector('[data-key="preset"]').value };
-      var label = row.querySelector('[data-key="label"]').value.trim();
-      if (label) item.label = label;
-      item.accent = row.querySelector('[data-key="accent"]').checked;
-      out.push(item);
-    });
-    return out;
   }
 
   function readLinks() {
@@ -752,26 +564,12 @@
   }
 
   function syncRowState(kind) {
-    var isStats = kind === "stat";
-    var rows = (isStats ? homeStatsRows : homeLinksRows).querySelectorAll(".row");
-    var max = isStats ? HOME_STATS_MAX : HOME_LINKS_MAX;
-    (isStats ? homeStatsCount : homeLinksCount).textContent = rows.length + " / " + max;
-    (isStats ? homeStatsEmpty : homeLinksEmpty).hidden = !state.ready || rows.length > 0;
-    (isStats ? homeStatsAdd : homeLinksAdd).disabled = !state.ready || rows.length >= max;
+    if (kind !== "link" || !homeLinksRows) return;
+    var rows = homeLinksRows.querySelectorAll(".row");
+    homeLinksCount.textContent = rows.length + " / " + HOME_LINKS_MAX;
+    homeLinksEmpty.hidden = !state.ready || rows.length > 0;
+    homeLinksAdd.disabled = !state.ready || rows.length >= HOME_LINKS_MAX;
     each(rows, syncRowActions);
-  }
-
-  function addStatRow() {
-    var count = homeStatsRows.querySelectorAll(".row").length;
-    if (count >= HOME_STATS_MAX) {
-      toast("数据块最多 " + HOME_STATS_MAX + " 项");
-      return;
-    }
-    homeStatsRows.appendChild(buildStatRow(normalizeStat({}), count));
-    syncRowState("stat");
-    dirty();
-    var input = homeStatsRows.querySelector(".row:last-child input");
-    if (input) input.focus();
   }
 
   function addLinkRow() {
@@ -802,9 +600,6 @@
     });
     var color = themeColorText.value.trim();
     data.theme_color = THEME_COLOR_RE.test(color) ? color.toUpperCase() : color;
-    data.home_page_labels = JSON.stringify(readPageLabels());
-    data.home_page_notes = JSON.stringify(readPageNotes());
-    data.home_stats = JSON.stringify(readStats());
     data.home_links = JSON.stringify(readLinks());
     return data;
   }
@@ -817,9 +612,6 @@
       el.value = typeof value === "string" ? value : "";
     });
     applyColor(typeof settings.theme_color === "string" ? settings.theme_color : THEME_COLOR_DEFAULT);
-    renderPageLabels(settings.home_page_labels);
-    renderPageNotes(settings.home_page_notes);
-    renderStats(settings.home_stats);
     renderLinks(settings.home_links);
     clearFieldErrors();
     state.settings = settings;
@@ -834,33 +626,15 @@
     });
     themeColorErr.hidden = true;
     footerRssErr.hidden = true;
-    homePageLabelsErr.hidden = true;
-    homePageNotesErr.hidden = true;
     homeCoverImageErr.hidden = true;
     homeFigureAErr.hidden = true;
     homeFigureBErr.hidden = true;
-    homeStatsErr.hidden = true;
     homeLinksErr.hidden = true;
   }
 
   function markIssues(issues) {
     clearFieldErrors();
     each(issues || [], function (issue) {
-      if (issue.path === "home_page_labels") {
-        homePageLabelsErr.textContent = issue.message;
-        homePageLabelsErr.hidden = false;
-        return;
-      }
-      if (issue.path === "home_page_notes") {
-        homePageNotesErr.textContent = issue.message;
-        homePageNotesErr.hidden = false;
-        return;
-      }
-      if (issue.path === "home_stats") {
-        homeStatsErr.textContent = issue.message;
-        homeStatsErr.hidden = false;
-        return;
-      }
       if (issue.path === "home_links") {
         homeLinksErr.textContent = issue.message;
         homeLinksErr.hidden = false;
@@ -937,34 +711,23 @@
       ok = false;
     }
 
-    each(homePageLabels.querySelectorAll(".page-label-input"), function (input, index) {
-      if (!input.value.trim()) {
-        input.closest(".fld").classList.add("is-invalid");
-        homePageLabelsErr.textContent = "第 " + (index + 1) + " 页主标签不能为空";
-        homePageLabelsErr.hidden = false;
-        ok = false;
-      }
-    });
-
-    each(homeStatsRows.querySelectorAll(".row"), function (row) {
-      var preset = row.querySelector('[data-key="preset"]').value;
-      if (!HOME_PRESET_MAP[preset]) {
-        row.classList.add("is-invalid");
-        homeStatsErr.textContent = "数据块里有无法识别的预设";
-        homeStatsErr.hidden = false;
-        ok = false;
-      }
-    });
-
+    // 联系方式：标签 / 链接必填、链接协议白名单、图标留空或 Iconify 名称
     each(homeLinksRows.querySelectorAll(".row"), function (row, index) {
+      var label = row.querySelector('[data-key="label"]').value.trim();
       var href = row.querySelector('[data-key="href"]').value.trim();
+      var icon = row.querySelector('[data-key="icon"]').value.trim();
+      if (!label) {
+        row.classList.add("is-invalid");
+        homeLinksErr.textContent = "第 " + (index + 1) + " 条联系方式缺标签";
+        homeLinksErr.hidden = false;
+        ok = false;
+      }
       if (!LINK_RE.test(href)) {
         row.classList.add("is-invalid");
         homeLinksErr.textContent = "第 " + (index + 1) + " 条链接需要以 /、http(s)://、mailto: 或 # 开头";
         homeLinksErr.hidden = false;
         ok = false;
       }
-      var icon = row.querySelector('[data-key="icon"]').value.trim();
       if (icon && !ICON_RE.test(icon)) {
         row.classList.add("is-invalid");
         homeLinksErr.textContent = "第 " + (index + 1) + " 条图标需要是 Iconify 名称，例如 ri:rss-fill";
@@ -973,33 +736,8 @@
       }
     });
 
-    var statsJson = JSON.stringify(readStats());
-    var linksJson = JSON.stringify(readLinks());
-    var labelsJson = JSON.stringify(readPageLabels());
-    var notesJson = JSON.stringify(readPageNotes());
-    if (labelsJson.length > HOME_JSON_MAX) {
-      homePageLabelsErr.textContent = "七页主标签内容太长，最多 " + HOME_JSON_MAX + " 个字符";
-      homePageLabelsErr.hidden = false;
-      ok = false;
-    }
-    if (notesJson.length > HOME_JSON_MAX) {
-      homePageNotesErr.textContent = "页头说明内容太长，最多 " + HOME_JSON_MAX + " 个字符";
-      homePageNotesErr.hidden = false;
-      ok = false;
-    }
-    if (statsJson.length > HOME_JSON_MAX) {
-      homeStatsErr.textContent = "数据块内容太长，最多 " + HOME_JSON_MAX + " 个字符";
-      homeStatsErr.hidden = false;
-      ok = false;
-    }
-    if (linksJson.length > HOME_JSON_MAX) {
-      homeLinksErr.textContent = "联系方式内容太长，最多 " + HOME_JSON_MAX + " 个字符";
-      homeLinksErr.hidden = false;
-      ok = false;
-    }
-
     if (!ok) {
-      var first = document.querySelector(".fld.is-invalid input, .fld.is-invalid textarea, .fld.is-invalid select, .row.is-invalid input");
+      var first = document.querySelector(".fld.is-invalid input, .fld.is-invalid textarea, .row.is-invalid input");
       if (first) first.focus();
     }
     return ok;
@@ -1077,6 +815,7 @@
 
     var data = readForm();
     var base = state.settings || {};
+    // 只提交改动过的键，没动过的字段不进补丁（KV 里旧值保持）
     var patch = {};
     Object.keys(data).forEach(function (key) {
       var prev = base[key] === undefined ? "" : String(base[key]);
@@ -1132,16 +871,16 @@
       setStatus("最后保存 " + timeNow(), false);
       hideBanner();
       var homeChanged = Object.keys(patch).some(function (key) {
-        return key.indexOf("home_") === 0;
+        return key.indexOf("home_cover") === 0 || key.indexOf("home_p2_") === 0;
       });
       var endChanged = Object.keys(patch).some(function (key) {
-        return key.indexOf("home_end_") === 0 || key.indexOf("home_afterword_") === 0;
+        return key.indexOf("home_afterword_") === 0;
       });
       toast(
         endChanged
           ? "设置已保存 · 首页尾页已更新"
           : homeChanged
-            ? "设置已保存 · 首页已更新"
+            ? "设置已保存 · 首页图片已更新"
             : "设置已保存"
       );
     }).catch(function (err) {
@@ -1187,21 +926,6 @@
       dirty();
     });
   });
-  each(homePageLabels.querySelectorAll(".page-label-input"), function (input) {
-    input.addEventListener("input", function () {
-      input.closest(".fld").classList.remove("is-invalid");
-      homePageLabelsErr.hidden = true;
-      dirty();
-    });
-  });
-  each(homePageNotes.querySelectorAll(".page-note-input"), function (input) {
-    input.addEventListener("input", function () {
-      input.closest(".fld").classList.remove("is-invalid");
-      homePageNotesErr.hidden = true;
-      dirty();
-    });
-  });
-  homeStatsAdd.addEventListener("click", addStatRow);
   homeLinksAdd.addEventListener("click", addLinkRow);
   saveBtn.addEventListener("click", saveSettings);
 

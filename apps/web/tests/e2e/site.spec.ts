@@ -3,7 +3,14 @@ import { expect, test } from '@playwright/test';
 test.describe('浮动底栏', () => {
   test('内页左格是版权与技术支持，中格备案号，右格 RSS 与邮箱', async ({
     page,
+    request,
   }) => {
+    const res = await request.get('/api/v1/site');
+    expect(res.status()).toBe(200);
+    const { settings } = (await res.json()) as {
+      settings: { author: string };
+    };
+
     await page.goto('/articles');
     const bar = page.locator('.sitebar');
     await expect(bar).toBeVisible();
@@ -13,9 +20,10 @@ test.describe('浮动底栏', () => {
       'fixed',
     );
 
-    await expect(bar.locator('.sb-copy')).toContainText('Myon');
-    await expect(bar.locator('.sb-tech')).toContainText('Cloudflare');
-    await expect(bar.locator('.sb-icp')).toContainText('ICP备');
+    // 页脚文字来自后台设置，不在测试里写死
+    await expect(bar.locator('.sb-copy')).toContainText(settings.author);
+    await expect(bar.locator('.sb-tech')).not.toBeEmpty();
+    await expect(bar.locator('.sb-icp')).toContainText(/ICP|备案/);
     await expect(bar.locator('.sb-right a')).toHaveCount(2);
   });
 
@@ -23,7 +31,7 @@ test.describe('浮动底栏', () => {
     await page.goto('/');
     const bar = page.locator('.sitebar');
     await expect(bar.locator('.pager button')).toHaveCount(7);
-    await expect(bar.locator('.sb-icp')).toContainText('ICP备');
+    await expect(bar.locator('.sb-icp')).toContainText(/ICP|备案/);
     await expect(bar.locator('.sb-right a')).toHaveCount(2);
   });
 });
@@ -76,6 +84,50 @@ test.describe('站点配置与订阅', () => {
     };
     expect(body.settings.themeColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
     expect(body.settings.footerRss).toBeTruthy();
+  });
+
+  test('站点名与作者统一来自设置：品牌、封面年份、署名、展柜标签', async ({
+    page,
+    request,
+  }) => {
+    const siteRes = await request.get('/api/v1/site');
+    expect(siteRes.status()).toBe(200);
+    const { settings } = (await siteRes.json()) as {
+      settings: { name: string; author: string };
+    };
+    const brand = settings.name.toUpperCase();
+
+    // 首页：封面年份标签 + 关于纸卡 aria-label
+    await page.goto('/');
+    await expect(page.locator('.cover-year')).toContainText(brand);
+    await expect(page.locator('.about-card')).toHaveAttribute(
+      'aria-label',
+      `关于 ${settings.name}（README）`,
+    );
+
+    // 内页顶栏品牌、文章作者署名
+    await page.goto('/articles');
+    await expect(page.locator('.topbar .brand b')).toHaveText(brand);
+    const postsRes = await request.get('/api/v1/posts?limit=1');
+    expect(postsRes.status()).toBe(200);
+    const posts = (await postsRes.json()) as { items: { slug: string }[] };
+    expect(posts.items.length).toBeGreaterThan(0);
+    await page.goto(`/articles/${posts.items[0].slug}`);
+    await expect(page.locator('.byline .who')).toHaveText(settings.author);
+
+    // 展柜灯箱底部标签
+    await page.goto('/gallery');
+    const first = page
+      .locator('.gal-grid .ex')
+      .filter({ has: page.locator('img') })
+      .first();
+    await expect(first).toHaveCount(1);
+    await first.locator('.ex-open').click();
+    await expect(page.locator('.lb .cap')).toContainText(`${brand} COLLECTION`);
+
+    // 后台品牌同样取站点设置
+    await page.goto('/admin');
+    await expect(page.locator('.s-brand b')).toHaveText(brand);
   });
 
   test('head-title 与 head-description 来自站点设置', async ({

@@ -158,7 +158,7 @@
 
 - 页头几何（唯一口径）：`padding-top: calc(var(--topbar-h) + 32px)`、`padding-bottom: 32px`、
   水印 `.chapter` 150px、导语 `.sub` 14px。
-- 首页第 2–6 页的 `.head.reveal` 可带一段说明（`home_page_notes`，第 2/3/4/5/6 页各一项，空串不渲染）；
+- 首页第 2–6 页的 `.head.reveal` 可带一段说明（文案在 `packages/shared/src/i18n/zh-CN.json` 的 `home.pageNotes`，第 2/3/4/5/6 页各一项，空串不渲染）；
   第 3 页默认有文案，第 6 页留空时按工具数量生成默认文案；样式与 `.p3/.p6 .head p` 一致（14px、`var(--ink-62)`、窄栏宽）。
 - 统计条：`.room-stats` + `.stat-box`（`.is-pink` / `.is-ink` 两个变体）。
   **每页只突出一个指标**（`.is-pink`），其余保持纸色；`.is-ink` 用于需要反白的次要指标。

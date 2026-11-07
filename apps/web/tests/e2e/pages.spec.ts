@@ -18,9 +18,8 @@ function contentSrc(item: {
   return `${base}?size=${size}&q=80`;
 }
 
-// 前台房间、工具页与九个后台页面的路由覆盖。
+// 前台房间、工具页与九个后台页面的路由覆盖（首页标题来自站点设置，单独断言）。
 const routes = [
-  { path: '/', heading: '灯下的一格' },
   { path: '/articles', heading: '文章' },
   { path: '/moments', heading: '动态' },
   { path: '/gallery', heading: '展柜' },
@@ -39,6 +38,18 @@ const routes = [
 ];
 
 test.describe('页面路由', () => {
+  test('/ 正常渲染', async ({ page, request }) => {
+    const res = await request.get('/api/v1/site');
+    expect(res.status()).toBe(200);
+    const { settings } = (await res.json()) as {
+      settings: { home: { title: string } };
+    };
+    const nav = await page.goto('/');
+    expect(nav?.status()).toBe(200);
+    await expect(page.locator('h1').first()).toContainText(settings.home.title);
+    await expect(page.locator('a[href$=".html"]')).toHaveCount(0);
+  });
+
   for (const route of routes) {
     test(`${route.path} 正常渲染`, async ({ page }) => {
       const res = await page.goto(route.path);

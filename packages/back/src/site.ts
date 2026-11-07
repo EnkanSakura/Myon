@@ -114,8 +114,11 @@ function escapeHtml(value: string): string {
 export function renderMaintenancePage(
   settings: Pick<PublicSiteSettings, 'name' | 'author' | 'themeColor'>,
 ): string {
-  const name = escapeHtml(settings.name || 'Myon');
-  const author = escapeHtml(settings.author || settings.name || 'Myon');
+  // 站点名 / 作者取设置；设置缺失时用共享默认值，不在维护页里写死一份。
+  const name = escapeHtml(settings.name || defaultSiteSettings.site_name);
+  const author = escapeHtml(
+    settings.author || settings.name || defaultSiteSettings.site_author,
+  );
   const accent = /^#[0-9a-fA-F]{6}$/.test(settings.themeColor)
     ? settings.themeColor
     : defaultThemeColor;

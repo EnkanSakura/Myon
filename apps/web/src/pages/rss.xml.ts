@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { PostListItem, PublicSiteSettings } from '@myon/shared';
+import {
+  defaultSiteSettings,
+  type PostListItem,
+  type PublicSiteSettings,
+} from '@myon/shared';
 import type { APIRoute } from 'astro';
 
 const escapeXml = (value: string) =>
@@ -13,8 +17,9 @@ const escapeXml = (value: string) =>
     .replace(/'/g, '&apos;');
 
 /** RSS 2.0：从进程内 API 取已发布文章，供页脚「RSS 订阅」使用。 */
-export const GET: APIRoute = async ({ site }) => {
-  const origin = site ?? new URL('https://myon.top');
+export const GET: APIRoute = async ({ site, url }) => {
+  // 站点地址优先用 Astro 配置的 site；没有配置时用本次请求的 origin，不回退写死的域名。
+  const origin = site ?? new URL(url.origin);
 
   let siteSettings: PublicSiteSettings | null = null;
   const siteRes = await app.request(
@@ -57,10 +62,16 @@ export const GET: APIRoute = async ({ site }) => {
     })
     .join('\n');
 
+  // 频道标题来自站点设置；设置缺失时用共享默认值，不在页面里再写一份站点名。
+  const channelTitle = escapeXml(
+    [siteSettings?.name, siteSettings?.subtitle].filter(Boolean).join(' · ') ||
+      defaultSiteSettings.site_name,
+  );
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>${escapeXml([siteSettings?.name, siteSettings?.subtitle].filter(Boolean).join(' · ') || 'Myon')}</title>
+    <title>${channelTitle}</title>
     <link>${escapeXml(new URL('/', origin).toString())}</link>
     <atom:link href="${escapeXml(new URL('/rss.xml', origin).toString())}" rel="self" type="application/rss+xml" />
     <description>${escapeXml(siteSettings?.description ?? '')}</description>

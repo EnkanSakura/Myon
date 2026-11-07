@@ -6,9 +6,11 @@ import type { MediaImageSize } from './media';
 
 export * from './admin';
 export * from './bangumi';
+export * from './i18n';
 export * from './icons';
 export * from './media';
 export * from './settings';
+export * from './site-config';
 export * from './tools';
 
 export const postStatusSchema = z.enum(['draft', 'published', 'archived']);

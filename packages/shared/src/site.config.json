@@ -1,0 +1,9 @@
+{
+  "home": {
+    "stats": [
+      { "preset": "latest_update", "accent": false },
+      { "preset": "bangumi_watching", "accent": true },
+      { "preset": "gallery", "accent": false }
+    ]
+  }
+}

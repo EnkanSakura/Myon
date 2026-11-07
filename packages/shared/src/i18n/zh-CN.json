@@ -1,0 +1,31 @@
+{
+  "home": {
+    "title": "Myon",
+    "lead": "记录、日常、看番、收藏、工具。",
+    "pageLabels": [
+      "CH.01 封面",
+      "CH.02 记录",
+      "CH.03 日常",
+      "CH.04 收藏",
+      "CH.05 放送",
+      "CH.06 工坊",
+      "CH.07 后记"
+    ],
+    "pageNotes": ["", "", "", "", ""],
+    "coverBadge": "全七页 / ALL 7",
+    "coverNote": "YURI · ユリ",
+    "endTitle": "End",
+    "endLead": "感谢访问。",
+    "stats": {
+      "latest_update": { "label": "最后更新", "unit": "" },
+      "posts": { "label": "文章", "unit": "篇" },
+      "moments": { "label": "动态", "unit": "条" },
+      "gallery": { "label": "展柜", "unit": "件" },
+      "bangumi_watching": { "label": "在追", "unit": "部" },
+      "bangumi_total": { "label": "追番", "unit": "部" },
+      "words": { "label": "字数", "unit": "字" },
+      "media": { "label": "媒体", "unit": "件" },
+      "categories": { "label": "分类", "unit": "个" }
+    }
+  }
+}

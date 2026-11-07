@@ -1,8 +1,14 @@
 import { expect, test } from '@playwright/test';
 
-test('七页封面、翻页与深浅色切换', async ({ page }) => {
+test('七页封面、翻页与深浅色切换', async ({ page, request }) => {
+  const res = await request.get('/api/v1/site');
+  expect(res.status()).toBe(200);
+  const { settings } = (await res.json()) as {
+    settings: { home: { title: string } };
+  };
+
   await page.goto('/');
-  await expect(page.locator('.p1 .copy h1')).toContainText('灯下的一格');
+  await expect(page.locator('.p1 .copy h1')).toContainText(settings.home.title);
   // 关于卡由服务端渲染；内容来自 D1（可能是任意真实文案），这里只校验有结构化内容。
   expect(await page.locator('#aboutBody > *').count()).toBeGreaterThan(0);
 
@@ -17,13 +23,31 @@ test('七页封面、翻页与深浅色切换', async ({ page }) => {
   );
 });
 
-test('尾页后记文案来自后台设置', async ({ page }) => {
+test('尾页后记文案来自站点设置', async ({ page, request }) => {
+  const res = await request.get('/api/v1/site');
+  expect(res.status()).toBe(200);
+  const { settings } = (await res.json()) as {
+    settings: {
+      author: string;
+      end: {
+        title: string;
+        lead: string;
+        afterword: { body: string };
+      };
+    };
+  };
+
   await page.goto('/');
   const end = page.locator('.p7');
-  await expect(end.locator('h2')).toContainText('谢谢翻完');
-  await expect(end.locator('.after')).toContainText('如果哪一件你也喜欢');
-  await expect(end.locator('.letter')).toContainText('第七页');
-  await expect(end.locator('.thank')).toContainText('Myon');
+  await expect(end.locator('h2')).toContainText(settings.end.title);
+  await expect(end.locator('.after')).toContainText(
+    settings.end.lead.replace(/\s+/g, ''),
+  );
+  // 后记正文里的换行由模板拆成多行/多段，比较时忽略空白
+  await expect(end.locator('.letter')).toContainText(
+    settings.end.afterword.body.replace(/\s+/g, ''),
+  );
+  await expect(end.locator('.thank')).toContainText(settings.author);
 });
 
 test('第 2 页最近文章来自 D1', async ({ page }) => {

@@ -1,23 +1,17 @@
 ---
 // 后台设置：站点 / 首页 / 外观 / 页脚 / 尾页后记，保存走 /api/v1/admin/settings。
+// 只放部署后还会改的运行时配置；首页固定文案（标题/导语/页头标签说明/数据块/
+// 封面贴纸便签/尾页标题导语）在 @myon/shared 的 i18n 与 site.config.json，不在这里编辑。
+// 首页可编辑项：封面图、第 2 页装饰图、联系方式（home_links）。
 // 样式：public/css/pages/admin-settings.css；脚本：public/js/pages/admin-settings.js
-import {
-  apiBasePath,
-  defaultHomePageLabels,
-  defaultHomePageNotes,
-  defaultThemeColor,
-  homeStatPresets,
-} from '@myon/shared';
+import { apiBasePath, defaultHomeLinks, defaultThemeColor } from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { mediaUrl } from '../../lib/media';
 
-// 接口地址、默认主题色与首页预设由服务端注入，public/js 里不硬编码。
+// 接口地址与默认主题色由服务端注入，public/js 里不硬编码。
 const settingsApi = `${apiBasePath}/admin/settings`;
-const homeConfig = JSON.stringify({
-  presets: homeStatPresets,
-  pageLabels: defaultHomePageLabels,
-  pageNotes: defaultHomePageNotes,
-});
+// 联系方式默认值来自 @myon/shared（接口没返回 home_links 时前端兜底用）。
+const homeLinksDefaults = JSON.stringify(defaultHomeLinks);
 // 图片路径可以走共享媒体选择器：媒体接口与 GIF 转码地址由服务端渲染。
 const mediaApi = `${apiBasePath}/admin/media`;
 const gifWebpApi = `${mediaApi}/gif-webp`;
@@ -35,7 +29,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <link rel="stylesheet" href="/css/pages/admin-settings.css" />
   </Fragment>
 
-  <div class="page" data-api={settingsApi} data-theme-color={defaultThemeColor} data-home-config={homeConfig} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase}>
+  <div class="page" data-api={settingsApi} data-theme-color={defaultThemeColor} data-home-links={homeLinksDefaults} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -113,142 +107,23 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
       <div class="set-cat-h">
         <span class="set-cat-mark" aria-hidden="true"></span>
         <h2 id="cat-home">首页</h2>
-        <span class="set-cat-en">HOME / COVER</span>
-        <span class="set-cat-note">七页主标签、数据块与联系方式</span>
+        <span class="set-cat-en">HOME</span>
+        <span class="set-cat-note">图片与联系方式</span>
       </div>
 
       <div class="set-grid">
         <section class="sp sp--wide" aria-labelledby="sp-home">
           <div class="sp-head">
             <span class="num-badge">02</span>
-            <h2 id="sp-home">首页封面</h2>
-            <span class="sp-en">HOME / COVER</span>
+            <h2 id="sp-home">首页</h2>
+            <span class="sp-en">HOME</span>
           </div>
           <div class="sp-body">
             <div class="hf">
               <div class="hf-head">
-                <b>封面文案</b>
-                <span>PAGE LABELS / TITLE / LEAD</span>
-                <span class="hf-note">七页主标签与第一页文案</span>
-              </div>
-              <div class="page-labels" id="homePageLabels">
-                <div class="fld">
-                  <label for="homePageLabel1">第 1 页 / PAGE 01</label>
-                  <input id="homePageLabel1" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel2">第 2 页 / PAGE 02</label>
-                  <input id="homePageLabel2" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel3">第 3 页 / PAGE 03</label>
-                  <input id="homePageLabel3" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel4">第 4 页 / PAGE 04</label>
-                  <input id="homePageLabel4" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel5">第 5 页 / PAGE 05</label>
-                  <input id="homePageLabel5" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel6">第 6 页 / PAGE 06</label>
-                  <input id="homePageLabel6" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homePageLabel7">第 7 页 / PAGE 07</label>
-                  <input id="homePageLabel7" class="page-label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-              </div>
-              <p class="hint">第 1–7 页的主标签会显示在前台翻页器与页眉；副层标（VOL. + 当前年份）自动生成。</p>
-              <p class="fld-err" id="homePageLabelsErr" hidden></p>
-              <div class="fields">
-                <div class="fld fld--wide">
-                  <label for="homeTitle">标题 / TITLE</label>
-                  <input id="homeTitle" name="home_title" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld fld--wide">
-                  <label for="homeLead">导语 / LEAD</label>
-                  <textarea id="homeLead" name="home_lead" rows="3" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-              </div>
-            </div>
-
-            <div class="hf">
-              <div class="hf-head">
-                <b>页头说明</b>
-                <span>PAGE NOTES</span>
-                <span class="hf-note">第 2–6 页页头里的说明段落</span>
-              </div>
-              <div class="page-notes" id="homePageNotes">
-                <div class="fld">
-                  <label for="homeNoteP2">第 2 页 / PAGE 02 · 文章</label>
-                  <textarea id="homeNoteP2" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-                <div class="fld">
-                  <label for="homeNoteP3">第 3 页 / PAGE 03 · 动态</label>
-                  <textarea id="homeNoteP3" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-                <div class="fld">
-                  <label for="homeNoteP4">第 4 页 / PAGE 04 · 展柜</label>
-                  <textarea id="homeNoteP4" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-                <div class="fld">
-                  <label for="homeNoteP5">第 5 页 / PAGE 05 · 追番</label>
-                  <textarea id="homeNoteP5" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-                <div class="fld">
-                  <label for="homeNoteP6">第 6 页 / PAGE 06 · 工具</label>
-                  <textarea id="homeNoteP6" class="page-note-input" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
-                </div>
-              </div>
-              <p class="hint">每页一段，留空则该页不显示说明；第 3 页默认已有一段文案；第 6 页留空时前台按工具数量自动生成。单页最多 240 字。</p>
-              <p class="fld-err" id="homePageNotesErr" hidden></p>
-            </div>
-
-            <div class="hf">
-              <div class="hf-head">
-                <b>数据块</b>
-                <span>STATS</span>
-                <span class="hf-count" id="homeStatsCount">0 / 4</span>
-                <span class="hf-note">预设式 · 最多 4 项 · 数值实时计算 · 拖拽 / ↑ ↓ 排序</span>
-              </div>
-              <div class="row-head row-head--stat" aria-hidden="true">
-                <span></span><span>预设</span><span>标签覆盖（可选）</span><span>强调</span><span>操作</span>
-              </div>
-              <div class="row-list" id="homeStatsRows"></div>
-              <p class="empty empty--inline" id="homeStatsEmpty" hidden>还没有数据块，点下面「添加数据块」新增。</p>
-              <div class="row-foot">
-                <button class="row-add" id="homeStatsAdd" type="button" data-setting>＋ 添加数据块</button>
-                <p class="fld-err" id="homeStatsErr" hidden></p>
-              </div>
-            </div>
-
-            <div class="hf">
-              <div class="hf-head">
-                <b>联系方式</b>
-                <span>LINKS</span>
-                <span class="hf-count" id="homeLinksCount">0 / 6</span>
-                <span class="hf-note">最多 6 条 · 拖拽 / ↑ ↓ 排序 · 图标留空自动识别</span>
-              </div>
-              <div class="row-head row-head--link" aria-hidden="true">
-                <span></span><span>标签</span><span>图标（Iconify）</span><span>链接</span><span>操作</span>
-              </div>
-              <div class="row-list" id="homeLinksRows"></div>
-              <p class="empty empty--inline" id="homeLinksEmpty" hidden>还没有联系方式，点下面「添加联系方式」新增。</p>
-              <div class="row-foot">
-                <button class="row-add" id="homeLinksAdd" type="button" data-setting>＋ 添加联系方式</button>
-                <p class="fld-err" id="homeLinksErr" hidden></p>
-              </div>
-              <p class="hint">图标填 Iconify 名称，在 <a href="https://icones.js.org/" target="_blank" rel="noopener noreferrer">icones.js.org</a> 搜索后复制，例如 <code>ri:rss-fill</code>、<code>mdi:television-classic</code>；留空则按链接自动识别。</p>
-            </div>
-
-            <div class="hf">
-              <div class="hf-head">
                 <b>封面图</b>
                 <span>COVER IMAGE</span>
-                <span class="hf-note">路径、贴纸与便签</span>
+                <span class="hf-note">第一页封面，兼作装饰图回退</span>
               </div>
               <div class="fields">
                 <div class="fld fld--wide">
@@ -260,14 +135,6 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
                     <input id="homeCoverImage" name="home_cover_image" type="text" maxlength="300" spellcheck="false" autocomplete="off" data-setting>
                   </div>
                   <p class="fld-err" id="homeCoverImageErr" hidden></p>
-                </div>
-                <div class="fld">
-                  <label for="homeCoverBadge">贴纸 / BADGE</label>
-                  <input id="homeCoverBadge" name="home_cover_badge" type="text" maxlength="40" spellcheck="false" autocomplete="off" data-setting>
-                </div>
-                <div class="fld">
-                  <label for="homeCoverNote">便签 / NOTE</label>
-                  <input id="homeCoverNote" name="home_cover_note" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
                 </div>
               </div>
               <p class="hint">首页封面使用这张图；第 2 页装饰图留空时也沿用这张图，可以单独配置。点文件夹图标可以从已上传的图片里选，选完自动填 <code>/media/&lt;key&gt;</code>。</p>
@@ -304,7 +171,24 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
               <p class="hint">留空则沿用封面图；先把图片传到媒体库，再按 <code>/media/&lt;key&gt;</code> 填路径，也可以点文件夹图标直接选。</p>
             </div>
 
-            <p class="hint">数据块的数值由站点统计实时计算，只需要选预设。</p>
+            <div class="hf">
+              <div class="hf-head">
+                <b>联系方式</b>
+                <span>CONTACTS</span>
+                <span class="hf-count" id="homeLinksCount">0 / 6</span>
+                <span class="hf-note">最多 6 条 · 拖拽 / ↑ ↓ 排序 · 图标留空自动识别</span>
+              </div>
+              <div class="row-head row-head--link" aria-hidden="true">
+                <span></span><span>标签</span><span>图标（Iconify）</span><span>链接</span><span>操作</span>
+              </div>
+              <div class="row-list" id="homeLinksRows"></div>
+              <p class="empty empty--inline" id="homeLinksEmpty" hidden>还没有联系方式，点下面「添加联系方式」新增。</p>
+              <div class="row-foot">
+                <button class="row-add" id="homeLinksAdd" type="button" data-setting>＋ 添加联系方式</button>
+                <p class="fld-err" id="homeLinksErr" hidden></p>
+              </div>
+              <p class="hint">图标填 Iconify 名称，在 <a href="https://icones.js.org/" target="_blank" rel="noopener noreferrer">icones.js.org</a> 搜索后复制，例如 <code>ri:rss-fill</code>、<code>mdi:television-classic</code>；留空则按链接自动识别。链接支持 /、http(s)://、mailto: 与 # 开头。</p>
+            </div>
           </div>
         </section>
       </div>
@@ -403,24 +287,16 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
           <div class="sp-body">
             <div class="fields">
               <div class="fld">
-                <label for="homeEndTitle">谢谢翻完 / END TITLE</label>
-                <input id="homeEndTitle" name="home_end_title" type="text" maxlength="60" spellcheck="false" autocomplete="off" data-setting>
-              </div>
-              <div class="fld">
                 <label for="homeAfterwordNext">下一册 / NEXT</label>
                 <input id="homeAfterwordNext" name="home_afterword_next" type="text" maxlength="80" spellcheck="false" autocomplete="off" data-setting>
               </div>
-              <div class="fld fld--wide">
-                <label for="homeEndLead">结尾导语 / LEAD</label>
-                <textarea id="homeEndLead" name="home_end_lead" rows="2" maxlength="240" spellcheck="false" data-setting></textarea>
+              <div class="fld">
+                <label for="homeAfterwordSign">落款 / SIGN</label>
+                <input id="homeAfterwordSign" name="home_afterword_sign" type="text" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
               </div>
               <div class="fld fld--wide">
                 <label for="homeAfterwordBody">后记正文 / AFTERWORD</label>
                 <textarea id="homeAfterwordBody" name="home_afterword_body" rows="6" maxlength="600" spellcheck="false" data-setting></textarea>
-              </div>
-              <div class="fld fld--wide">
-                <label for="homeAfterwordSign">落款 / SIGN</label>
-                <input id="homeAfterwordSign" name="home_afterword_sign" type="text" maxlength="120" spellcheck="false" autocomplete="off" data-setting>
               </div>
             </div>
             <p class="hint">这些文字出现在首页第 07 页；「下一册」留空时前台保留默认占位。</p>

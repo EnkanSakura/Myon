@@ -98,7 +98,7 @@ const publishedCount = siteStats?.posts.published ?? 0;
 // 封面「关于」纸卡：直接用服务端渲染好的 HTML（与正文同一套 Markdown 渲染器），
 // 不再由前端迷你渲染器二次解析，删除线/表格/代码块等格式才不会丢。
 const aboutHtml =
-  aboutData?.html?.trim() || renderMarkdown(defaultAboutMarkdown);
+  aboutData?.html?.trim() || renderMarkdown(defaultAboutMarkdown(site));
 
 // 第 2 页：最近文章（按发布时间倒序，取最新 3 条）。
 const latestPosts = postsData?.items ?? [];
@@ -452,11 +452,11 @@ function presetValue(preset: HomeStatPreset): string {
         <span class="tape" aria-hidden="true"></span>
         <div class="frame">
           <img src={homeCoverImage} alt="被一盏灯照亮的木制陈列柜">
-          <span class="cover-year">MYON {year}</span>
+          <span class="cover-year">{site.name.toUpperCase()} {year}</span>
         </div>
         <span class="sticker cover-badge">{home.cover.badge}</span>
         <span class="meta-strip">{home.cover.note}</span>
-        <aside class="about-card" aria-label="关于 Myon（README）">
+        <aside class="about-card" aria-label={`关于 ${site.name}（README）`}>
           <div class="ah"><span>README.md · 关于</span></div>
           <div class="about-body" id="aboutBody" set:html={aboutHtml}></div>
         </aside>

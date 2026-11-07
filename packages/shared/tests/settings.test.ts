@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   bangumiInputSchema,
   bangumiPatchSchema,
-  defaultHomePageLabels,
+  defaultHomeLinks,
   defaultSiteSettings,
   defaultThemeColor,
   galleryInputSchema,
   galleryPatchSchema,
+  getMessages,
   momentInputSchema,
   momentPatchSchema,
   postInputSchema,
   postPatchSchema,
   siteSettingsPatchSchema,
+  staticHomeStats,
+  t,
   themePalette,
   toPublicSiteSettings,
 } from '../src/index';
@@ -41,13 +44,67 @@ describe('themePalette', () => {
   });
 });
 
+describe('i18n messages', () => {
+  it('reads zh-CN copy through dot paths', () => {
+    const messages = getMessages();
+    expect(t('home.title')).toBe(messages.home.title);
+    expect(t('home.endTitle')).toBe(messages.home.endTitle);
+    expect(t('home.title')).toBeTruthy();
+  });
+
+  it('falls back to the key when a message is missing', () => {
+    expect(t('home.notExists')).toBe('home.notExists');
+  });
+
+  it('exposes the default locale message tree', () => {
+    const messages = getMessages();
+    expect(messages.home.pageLabels).toHaveLength(7);
+    expect(messages.home.pageNotes).toHaveLength(5);
+  });
+});
+
+describe('static site config', () => {
+  it('maps home stats from structure + locale labels only', () => {
+    const labels = getMessages().home.stats;
+    expect(staticHomeStats()).toEqual([
+      {
+        preset: 'latest_update',
+        label: labels.latest_update.label,
+        unit: labels.latest_update.unit,
+        accent: false,
+      },
+      {
+        preset: 'bangumi_watching',
+        label: labels.bangumi_watching.label,
+        unit: labels.bangumi_watching.unit,
+        accent: true,
+      },
+      {
+        preset: 'gallery',
+        label: labels.gallery.label,
+        unit: labels.gallery.unit,
+        accent: false,
+      },
+    ]);
+  });
+});
+
 describe('site settings contract', () => {
-  it('accepts a partial patch', () => {
+  it('accepts a partial patch of KV-backed settings', () => {
     const parsed = siteSettingsPatchSchema.parse({
       theme_color: '#123456',
       footer_icp: '京ICP备 1 号',
     });
     expect(parsed.theme_color).toBe('#123456');
+  });
+
+  it('ignores keys that moved to static config', () => {
+    const parsed = siteSettingsPatchSchema.parse({
+      home_title: '自定义标题',
+      home_page_notes: JSON.stringify(['x']),
+    });
+    expect(parsed).not.toHaveProperty('home_title');
+    expect(parsed).not.toHaveProperty('home_page_notes');
   });
 
   it('rejects an invalid color and a non-URL rss value', () => {
@@ -64,9 +121,85 @@ describe('site settings contract', () => {
 
   it('maps to the public shape the frontend consumes', () => {
     const publicSettings = toPublicSiteSettings(defaultSiteSettings);
+    const messages = getMessages();
     expect(publicSettings.themeColor).toBe(defaultThemeColor);
     expect(publicSettings.footerEmail).toBe('hi@myon.studio');
     expect(publicSettings).not.toHaveProperty('site_name');
+    // 版权由作者 + 年份生成，不再从 KV 读取
+    expect(publicSettings.footerCopyright).toBe(
+      `© ${new Date().getFullYear()} Myon`,
+    );
+    // 固定文案来自静态资源（内容认文件，不在测试里写死）
+    expect(publicSettings.home.title).toBe(messages.home.title);
+    expect(publicSettings.home.cover.badge).toBe(messages.home.coverBadge);
+    expect(publicSettings.end.title).toBe(messages.home.endTitle);
+    expect(publicSettings.home.pages).toHaveLength(7);
+    expect(publicSettings.home.pageNotes).toHaveLength(5);
+    // 首页联系方式仍来自 KV，默认值与 defaultHomeLinks 一致
+    expect(publicSettings.home.links).toEqual(defaultHomeLinks);
+  });
+
+  it('keeps runtime fields from KV and static fields from i18n', () => {
+    const publicSettings = toPublicSiteSettings({
+      ...defaultSiteSettings,
+      site_name: '测试站',
+      site_author: '测试作者',
+      home_cover_image: '/media/cover.webp',
+      home_afterword_body: '自定义后记',
+    });
+    expect(publicSettings.name).toBe('测试站');
+    expect(publicSettings.home.cover.image).toBe('/media/cover.webp');
+    expect(publicSettings.end.afterword.body).toBe('自定义后记');
+    expect(publicSettings.home.title).toBe(getMessages().home.title);
+  });
+
+  it('normalizes custom home links from KV', () => {
+    const publicSettings = toPublicSiteSettings({
+      ...defaultSiteSettings,
+      home_links: JSON.stringify([
+        { label: '邮件', href: 'mailto:hi@example.com', icon: 'RI:Rss-Fill' },
+        { label: '站点', href: '/' },
+      ]),
+    });
+    expect(publicSettings.home.links).toEqual([
+      { label: '邮件', href: 'mailto:hi@example.com', icon: 'ri:rss-fill' },
+      { label: '站点', href: '/' },
+    ]);
+  });
+
+  it('validates home links in the patch schema', () => {
+    expect(
+      siteSettingsPatchSchema.safeParse({
+        home_links: JSON.stringify([
+          {
+            label: 'GitHub',
+            href: 'https://github.com/x',
+            icon: 'ri:github-fill',
+          },
+        ]),
+      }).success,
+    ).toBe(true);
+    expect(
+      siteSettingsPatchSchema.safeParse({
+        home_links: JSON.stringify([
+          { label: 'x', href: 'javascript:alert(1)' },
+        ]),
+      }).success,
+    ).toBe(false);
+    expect(
+      siteSettingsPatchSchema.safeParse({
+        home_links: JSON.stringify(
+          Array.from({ length: 7 }, () => ({ label: 'x', href: '/' })),
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
+      siteSettingsPatchSchema.safeParse({
+        home_links: JSON.stringify([
+          { label: 'x', href: '/', icon: '<i class="x"></i>' },
+        ]),
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -113,135 +246,5 @@ describe('admin patch schemas', () => {
       totalEps: 0,
       watchedEps: 0,
     });
-  });
-});
-
-describe('home cover settings', () => {
-  it('normalizes seven page labels with defaults for blanks', () => {
-    const publicSettings = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_page_labels: JSON.stringify(['自定义 01', '', 'CH.03 四格']),
-    });
-    expect(publicSettings.home.pages).toHaveLength(7);
-    expect(publicSettings.home.pages[0]).toBe('自定义 01');
-    expect(publicSettings.home.pages[1]).toBe(defaultHomePageLabels[1]);
-    expect(publicSettings.home.pages[6]).toBe(defaultHomePageLabels[6]);
-  });
-
-  it('maps preset data blocks and keeps legacy label/value entries working', () => {
-    const modern = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_stats: JSON.stringify([
-        { preset: 'posts', accent: true },
-        { preset: 'words', label: '总字数' },
-      ]),
-    });
-    expect(modern.home.stats).toEqual([
-      { preset: 'posts', label: '文章', unit: '篇', accent: true },
-      { preset: 'words', label: '总字数', unit: '字', accent: false },
-    ]);
-
-    const legacy = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_stats: JSON.stringify([
-        { label: '在追', value: '3', unit: '部', accent: true },
-      ]),
-    });
-    expect(legacy.home.stats[0]?.preset).toBe('bangumi_watching');
-  });
-
-  it('drops legacy explanation values from home links', () => {
-    const publicSettings = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_links: JSON.stringify([
-        { label: 'GitHub', value: '@myon', href: 'https://github.com/myon' },
-        { label: 'RSS', href: '/articles' },
-      ]),
-    });
-    expect(publicSettings.home.links).toEqual([
-      { label: 'GitHub', href: 'https://github.com/myon' },
-      { label: 'RSS', href: '/articles' },
-    ]);
-    expect(
-      siteSettingsPatchSchema.safeParse({
-        home_links: JSON.stringify([
-          { label: 'RSS', value: '订阅', href: '/articles' },
-        ]),
-      }).success,
-    ).toBe(true);
-  });
-
-  it('keeps configured Iconify icons and omits invalid ones', () => {
-    const publicSettings = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_links: JSON.stringify([
-        { label: 'A', href: '#', icon: 'ri:rss-fill' },
-        { label: 'B', href: '#' },
-        { label: 'C', href: '#', icon: 'not-an-iconify-name' },
-      ]),
-    });
-    expect(publicSettings.home.links).toEqual([
-      { label: 'A', href: '#', icon: 'ri:rss-fill' },
-      { label: 'B', href: '#' },
-      { label: 'C', href: '#' },
-    ]);
-  });
-
-  it('treats a legacy icon-html value that is an Iconify name as the icon', () => {
-    const publicSettings = toPublicSiteSettings({
-      ...defaultSiteSettings,
-      home_links: JSON.stringify([
-        { label: 'A', href: '#', iconHtml: 'fa7-brands:github' },
-        {
-          label: 'B',
-          href: '#',
-          iconHtml: '<i class="fa-brands fa-github"></i>',
-        },
-      ]),
-    });
-    expect(publicSettings.home.links).toEqual([
-      { label: 'A', href: '#', icon: 'fa7-brands:github' },
-      { label: 'B', href: '#' },
-    ]);
-  });
-
-  it('validates Iconify names in the settings patch', () => {
-    const withIcon = (icon: string) =>
-      JSON.stringify([{ label: 'A', href: '#', icon }]);
-    expect(
-      siteSettingsPatchSchema.safeParse({ home_links: withIcon('ri:rss-fill') })
-        .success,
-    ).toBe(true);
-    expect(
-      siteSettingsPatchSchema.safeParse({
-        home_links: withIcon('FA7-brands:github'),
-      }).success,
-    ).toBe(true);
-    expect(
-      siteSettingsPatchSchema.safeParse({ home_links: withIcon('mail') })
-        .success,
-    ).toBe(false);
-    expect(
-      siteSettingsPatchSchema.safeParse({
-        home_links: withIcon('<i class="fa-brands fa-github"></i>'),
-      }).success,
-    ).toBe(false);
-  });
-
-  it('validates page labels and preset stats', () => {
-    expect(
-      siteSettingsPatchSchema.safeParse({
-        home_page_labels: JSON.stringify(['a', 'b']),
-      }).success,
-    ).toBe(true);
-    expect(
-      siteSettingsPatchSchema.safeParse({
-        home_stats: JSON.stringify([{ preset: 'not_a_preset' }]),
-      }).success,
-    ).toBe(false);
-    expect(
-      siteSettingsPatchSchema.safeParse({ footer_icp: '<a href="/x">备案</a>' })
-        .success,
-    ).toBe(true);
   });
 });

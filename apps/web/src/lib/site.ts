@@ -2,7 +2,11 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
 import type { PublicSiteSettings } from '@myon/shared';
-import { defaultSiteSettings, toPublicSiteSettings } from '@myon/shared';
+import {
+  apiBasePath,
+  defaultSiteSettings,
+  toPublicSiteSettings,
+} from '@myon/shared';
 
 /**
  * 读取前台需要的站点设置（主题色 + 页脚）。
@@ -12,7 +16,7 @@ import { defaultSiteSettings, toPublicSiteSettings } from '@myon/shared';
 export async function loadPublicSiteSettings(): Promise<PublicSiteSettings> {
   try {
     const res = await app.request(
-      '/api/v1/site',
+      `${apiBasePath}/site`,
       {},
       env as unknown as AppBindings,
     );

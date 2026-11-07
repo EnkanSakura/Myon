@@ -1,9 +1,4 @@
-import {
-  defaultHomePageNotes,
-  homePageNoteSlots,
-  siteSettingsPatchSchema,
-  toPublicSiteSettings,
-} from '@myon/shared';
+import { getMessages, toPublicSiteSettings } from '@myon/shared';
 import { describe, expect, it } from 'vitest';
 import {
   readSiteSettings,
@@ -193,55 +188,17 @@ describe('site settings in KV', () => {
     expect(publicSettings.home.figures.b).toBe('/media/figure-b.webp');
   });
 
-  it('defaults home page notes to five slots with the page-3 copy', async () => {
+  it('composes fixed home copy from static i18n config', async () => {
     const { kv } = createKv();
     const settings = await readSiteSettings(kv);
-    const notes = toPublicSiteSettings(settings).home.pageNotes;
-
-    // 顺序对应第 2/3/4/5/6 页，固定 5 项；只有第 3 页（index 1）默认有文案
-    expect(notes).toHaveLength(homePageNoteSlots);
-    expect(notes).toHaveLength(5);
-    expect(notes[1]).toBe(defaultHomePageNotes[1]);
-    expect(notes[0]).toBe('');
-    expect(notes[2]).toBe('');
-    expect(notes[3]).toBe('');
-    expect(notes[4]).toBe('');
-  });
-
-  it('trims custom home_page_notes and keeps exactly five slots', async () => {
-    const { kv } = createKv();
-    await writeSiteSettings(kv, {
-      home_page_notes: JSON.stringify([
-        '  第 2 页说明  ',
-        '  第 3 页说明  ',
-        '  ',
-      ]),
-    });
-
-    const settings = await readSiteSettings(kv);
-    const notes = toPublicSiteSettings(settings).home.pageNotes;
-    // 不足 5 项补空串，每项去首尾空白
-    expect(notes).toEqual(['第 2 页说明', '第 3 页说明', '', '', '']);
-  });
-});
-
-describe('home_page_notes patch schema', () => {
-  it('accepts a five-item string array', () => {
-    const input = { home_page_notes: JSON.stringify(['', '', '', '', '']) };
-    expect(siteSettingsPatchSchema.safeParse(input).success).toBe(true);
-  });
-
-  it('rejects a six-item array', () => {
-    const input = {
-      home_page_notes: JSON.stringify(['', '', '', '', '', '']),
-    };
-    expect(siteSettingsPatchSchema.safeParse(input).success).toBe(false);
-  });
-
-  it('rejects an item longer than 240 chars', () => {
-    const input = {
-      home_page_notes: JSON.stringify(['x'.repeat(241), '', '', '', '']),
-    };
-    expect(siteSettingsPatchSchema.safeParse(input).success).toBe(false);
+    const publicSettings = toPublicSiteSettings(settings);
+    const messages = getMessages();
+    expect(publicSettings.home.title).toBe(messages.home.title);
+    expect(publicSettings.home.pages).toHaveLength(7);
+    expect(publicSettings.home.pageNotes).toHaveLength(5);
+    expect(publicSettings.home.stats.length).toBeGreaterThan(0);
+    expect(publicSettings.end.title).toBe(messages.home.endTitle);
+    // 首页联系方式仍在 KV，默认值来自设置
+    expect(publicSettings.home.links.length).toBeGreaterThan(0);
   });
 });

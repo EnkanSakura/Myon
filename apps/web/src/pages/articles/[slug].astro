@@ -7,11 +7,17 @@
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { PostDetailResponse, PostListItem } from '@myon/shared';
+import {
+  defaultSiteSettings,
+  type PostDetailResponse,
+  type PostListItem,
+  toPublicSiteSettings,
+} from '@myon/shared';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 
 const { slug = '' } = Astro.params;
 const binding = env as unknown as AppBindings;
+const site = Astro.locals.site ?? toPublicSiteSettings(defaultSiteSettings);
 
 const detail = await app.request(
   `/api/v1/posts/${encodeURIComponent(slug)}`,
@@ -75,7 +81,7 @@ const charCount = post
             <h1>{post.title}</h1>
             {post.excerpt && <p class="dek">{post.excerpt}</p>}
             <div class="byline">
-              <span class="who">Myon</span>
+              <span class="who">{site.author}</span>
               <span class="sep">/</span>
               <span>写于 {formatDate(post.publishedAt)}</span>
               <span class="sep">/</span>
