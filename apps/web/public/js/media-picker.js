@@ -149,7 +149,13 @@
     refs.tabUpload.setAttribute("aria-selected", existing ? "false" : "true");
     refs.existingPane.hidden = !existing;
     refs.uploadPane.hidden = existing;
-    if (existing) refs.search.focus();
+    if (existing) {
+      // 懒加载：首次切到「现有图片」才请求媒体库，打开选择器不再预拉列表。
+      if (state && !state.libraryLoaded && !state.loading) loadMedia(true);
+      refs.search.focus();
+    } else if (state) {
+      refs.pickFile.focus();
+    }
   }
 
   function paintNotice() {
@@ -253,9 +259,12 @@
   function updateUploadHint() {
     if (!refs || !refs.uploadHint) return;
     var id = uploadCategoryId();
-    var name = id ? categoryNameById(id) : "未分类";
+    var prefix;
+    if (!id) prefix = "上传后归入「未分类」";
+    else if (state.catCountsReady) prefix = "上传后归入「" + categoryNameById(id) + "」";
+    else prefix = "上传后归入栏目默认分类";
     refs.uploadHint.textContent =
-      "上传后归入「" + name + "」分类 · JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 单张上限 8MB";
+      prefix + " · JPG / PNG 自动转 WebP · GIF 转 animated WebP · WebP / AVIF / SVG 直传 · 单张上限 8MB";
   }
 
   function paintSizes() {
@@ -421,6 +430,7 @@
         state.items = state.items.concat(items);
         state.total = Number(result.body.total) || state.items.length;
         state.offset += items.length;
+        state.libraryLoaded = true;
         refs.state.textContent = "已连接 · " + state.items.length + " / " + state.total;
       })
       .catch(function (error) {
@@ -588,6 +598,7 @@
       uncategorizedCount: 0,
       allCount: 0,
       catCountsReady: false,
+      libraryLoaded: false,
       sizes: sizes.length ? sizes : null,
       size: sizes.length ? wanted : "",
       onPick: typeof opts.onPick === "function" ? opts.onPick : null,
@@ -609,14 +620,13 @@
     updateUploadHint();
     paintNotice();
     paintSelected();
-    setTab("existing");
+    setTab("upload");
     if (dlg.open) dlg.close();
     if (typeof dlg.showModal === "function") {
       dlg.showModal();
     } else {
       dlg.setAttribute("open", "");
     }
-    loadMedia(true);
   }
 
   function bindEvents() {

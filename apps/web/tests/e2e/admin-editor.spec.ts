@@ -80,6 +80,16 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
   }) => {
     await initToken(page);
     await mockAdminChrome(page);
+    // 记录媒体库列表请求，验证选择器默认「上传新图」时不预拉媒体库
+    const mediaListRequests: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'GET' &&
+        request.url().includes('/api/v1/admin/media?')
+      ) {
+        mediaListRequests.push(request.url());
+      }
+    });
     await page.route('**/api/v1/admin/posts**', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
@@ -336,6 +346,15 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     // 媒体选择器：默认 720 档位，插入带转换参数的 Markdown 图片语法
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    // 默认「上传新图」，打开时不应该请求媒体库列表
+    await expect(page.locator('#mpTabUpload')).toHaveClass(/is-on/);
+    await expect(page.locator('#mpUploadPane')).toBeVisible();
+    await expect(page.locator('#mpTabExisting')).not.toHaveClass(/is-on/);
+    expect(mediaListRequests).toHaveLength(0);
+    // 切到「现有图片」时才懒加载媒体库
+    await page.locator('#mpTabExisting').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
+    await expect.poll(() => mediaListRequests.length).toBeGreaterThan(0);
     // 尺寸栏：五个档位、默认 720 高亮、角色是 radio
     const sizeBar = page.locator('#mpSize');
     await expect(sizeBar).toBeVisible();
@@ -377,6 +396,8 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     // 切到 1080：插入的地址跟着档位走
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpTabExisting').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
     await page.locator('#mpSize .mp-size-btn[data-size="1080"]').click();
     await expect(
       page.locator('#mpSize .mp-size-btn[data-size="1080"]'),
@@ -389,6 +410,8 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     // 切到「原图」：只带 size=orig（不带 q），和默认 720 区分
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpTabExisting').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
     await page.locator('#mpSize .mp-size-btn[data-size="orig"]').click();
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('原图');
     await page.locator('#mpGrid .mp-item').first().click();
@@ -507,6 +530,7 @@ test.describe('后台关于页 · 共享编辑器', () => {
     // 关于 / README 编辑器与文章编辑器一致：选择器带尺寸档位，默认长边 720
     await expect(page.locator('#mpSize')).toBeVisible();
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await page.locator('#mpTabExisting').click();
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#mdInput')).toHaveValue(
       /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=720&q=80\)/,
@@ -684,7 +708,9 @@ test.describe('后台关于页 · 共享编辑器', () => {
     await expect(page.locator('#mdInput')).toBeEnabled();
     await page.locator('.md-tool[data-md-act="image"]').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
-    await page.locator('#mpTabUpload').click();
+    // 选择器默认「上传新图」，直接走上传链路
+    await expect(page.locator('#mpTabUpload')).toHaveClass(/is-on/);
+    await expect(page.locator('#mpUploadPane')).toBeVisible();
     await page.locator('#mpFile').setInputFiles({
       name: 'e2e-upload.webp',
       mimeType: 'image/webp',
@@ -781,6 +807,7 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#mpSize')).toBeVisible();
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await page.locator('#mpTabExisting').click();
     await page.locator('#mpSize .mp-size-btn[data-size="1080"]').click();
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#attachBox')).toHaveClass(/is-on/);
@@ -899,6 +926,7 @@ test.describe('后台展柜 · 分类组合框', () => {
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#mpSize')).toBeVisible();
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
+    await page.locator('#mpTabExisting').click();
     await page.locator('#mpSize .mp-size-btn[data-size="1440"]').click();
     await page.locator('#mpGrid .mp-item').first().click();
     await expect(page.locator('#fMedia')).toHaveValue(
