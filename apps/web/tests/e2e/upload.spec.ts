@@ -457,23 +457,34 @@ test('媒体库网格缩略图用低清预览，不拉原图', async ({ page }) 
   );
 });
 
-// 分类 chips：动态渲染（全部 + 分类 + 未分类），点击后请求带 category=<id>。
+// 分类 chips：默认「未分类」并排第一，不再有「全部」；点击分类请求带 category=<id>。
 test('分类 chips 走服务端筛选并显示分类与别名', async ({ page }) => {
   await addToken(page);
   const api = await mockMediaApi(page);
   await page.goto('/admin/media', { waitUntil: 'networkidle' });
 
-  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(3);
-  await expect(page.locator('#catChips .chip')).toHaveCount(5);
+  // 默认只看未分类：只剩 legacy 这一张
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
+  await expect(page.locator('#catChips .chip')).toHaveCount(4);
+  await expect(page.locator('#catChips .chip').first()).toHaveAttribute(
+    'data-category',
+    'uncategorized',
+  );
+  await expect(
+    page.locator('#catChips [data-category="uncategorized"]'),
+  ).toHaveClass(/is-on/);
+  await expect(
+    page.locator('#catChips [data-category="uncategorized"]'),
+  ).toContainText('未分类');
+  await expect
+    .poll(() => api.listRequests[0]?.get('category'))
+    .toBe('uncategorized');
   await expect(
     page.locator('#catChips [data-category="cat_posts"]'),
   ).toContainText('文章');
   await expect(
     page.locator('#catChips [data-category="cat_posts"]'),
   ).toContainText('1');
-  await expect(
-    page.locator('#catChips [data-category="uncategorized"]'),
-  ).toContainText('未分类');
 
   await page.locator('#catChips [data-category="cat_posts"]').click();
   await expect
@@ -496,6 +507,11 @@ test('分类/别名弹窗 PATCH body 正确且卡片更新', async ({ page }) =>
   await addToken(page);
   await mockMediaApi(page);
   await page.goto('/admin/media', { waitUntil: 'networkidle' });
+  // 默认筛「未分类」；先切到文章分类再操作目标卡片
+  await page.locator('#catChips [data-category="cat_posts"]').click();
+  await expect(
+    page.locator('#catChips [data-category="cat_posts"]'),
+  ).toHaveClass(/is-on/);
 
   const card = page.locator(
     '#mediaGrid .mcard[data-key="uploads/202601/e2e-article.webp"]',
@@ -528,6 +544,8 @@ test('分类/别名弹窗 PATCH body 正确且卡片更新', async ({ page }) =>
   });
   await expect(page.locator('#metaDlg')).not.toHaveAttribute('open', '');
 
+  // 保存后图片被移到「展柜」，当前分类里看不到了；切过去再断言卡片更新
+  await page.locator('#catChips [data-category="cat_gallery"]').click();
   const updated = page.locator(
     '#mediaGrid .mcard[data-key="uploads/202601/e2e-article.webp"]',
   );
@@ -540,21 +558,21 @@ test('分类/别名弹窗 PATCH body 正确且卡片更新', async ({ page }) =>
   ]);
 });
 
-// 搜索走服务端全库检索：别名也能命中，请求带 q 参数。
+// 搜索走服务端检索：别名也能命中，请求带 q 参数。
 test('搜索按别名命中，请求带 q 参数', async ({ page }) => {
   await addToken(page);
   const api = await mockMediaApi(page);
   await page.goto('/admin/media', { waitUntil: 'networkidle' });
-  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(3);
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
 
-  await page.locator('#q').fill('头图');
+  await page.locator('#q').fill('旧图');
   await expect
-    .poll(() => api.listRequests.some((params) => params.get('q') === '头图'))
+    .poll(() => api.listRequests.some((params) => params.get('q') === '旧图'))
     .toBe(true);
   await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
   await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
     'data-key',
-    'uploads/202601/e2e-article.webp',
+    'uploads/202512/legacy.webp',
   );
   await expect(page.locator('#fbCount')).toContainText('全库筛选：1 个');
 });
@@ -564,7 +582,7 @@ test('管理分类弹窗可以新增 / 改名 / 排序 / 删除', async ({ page 
   await addToken(page);
   const api = await mockMediaApi(page);
   await page.goto('/admin/media', { waitUntil: 'networkidle' });
-  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(3);
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
 
   await page.locator('#btnCats').click();
   await expect(page.locator('#catDlg')).toHaveAttribute('open', '');

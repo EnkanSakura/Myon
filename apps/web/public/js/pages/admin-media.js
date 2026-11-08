@@ -124,8 +124,8 @@
     limit: 30,
     page: 1,
     pages: 1,
-    // 分类筛选："all" | 分类 id | "uncategorized"
-    category: "all",
+    // 分类筛选：分类 id 或 "uncategorized"；默认只看未分类，没有「全部」
+    category: UNCATEGORIZED,
     q: "",
     sort: "added",
     // 分类列表：来自列表接口的 categories（含 count）；CRUD 后本地更新再重拉
@@ -322,20 +322,16 @@
     }
   }
 
-  /** 筛选 chips：全部 + 动态分类（含计数）+ 未分类。 */
+  /** 筛选 chips：未分类（默认，排第一）+ 动态分类（含计数）。 */
   function renderCatChips() {
     if (!catChips) return;
     var entries = [];
-    var allCount = 0;
+    var unc = typeof state.uncategorizedCount === "number" ? state.uncategorizedCount : 0;
+    entries.push({ id: UNCATEGORIZED, name: "未分类", count: unc });
     each(state.categories, function (cat) {
       var count = typeof cat.count === "number" ? cat.count : 0;
-      allCount += count;
       entries.push({ id: cat.id, name: cat.name, count: count });
     });
-    var unc = typeof state.uncategorizedCount === "number" ? state.uncategorizedCount : 0;
-    allCount += unc;
-    entries.push({ id: UNCATEGORIZED, name: "未分类", count: unc });
-    entries.unshift({ id: "all", name: "全部", count: allCount });
 
     catChips.innerHTML = "";
     var frag = document.createDocumentFragment();
@@ -422,7 +418,7 @@
     if (state.total === 0) {
       empty.hidden = false;
       emptyReset.hidden = false;
-      var filtered = state.category !== "all" || !!state.q;
+      var filtered = state.category !== UNCATEGORIZED || !!state.q;
       if (filtered) {
         emptyText.textContent = "没有符合条件的文件。换个分类或关键词试试。";
         emptyReset.textContent = "清除筛选";
@@ -585,16 +581,14 @@
       .catch(function () {});
   }
 
-  /** 列表请求：分类 / 关键词 / 排序 / 分页都交给服务端（全库筛选）。 */
+  /** 列表请求：固定传分类（默认未分类），关键词 / 排序 / 分页交给服务端。 */
   function buildListUrl() {
     var params = [
       "limit=" + state.limit,
       "offset=" + (state.page - 1) * state.limit,
       "sort=" + encodeURIComponent(state.sort)
     ];
-    if (state.category && state.category !== "all") {
-      params.push("category=" + encodeURIComponent(state.category));
-    }
+    params.push("category=" + encodeURIComponent(state.category));
     if (state.q) params.push("q=" + encodeURIComponent(state.q));
     return API + "?" + params.join("&");
   }
@@ -910,7 +904,7 @@
           if (entry.id !== cat.id) kept.push(entry);
         });
         state.categories = kept;
-        if (state.category === cat.id) state.category = "all";
+        if (state.category === cat.id) state.category = UNCATEGORIZED;
         renderCatList();
         renderCatChips();
         renderCatSelects();
@@ -1257,7 +1251,7 @@
 
   /* ---------------- 筛选重置 ---------------- */
   function resetFilters() {
-    state.category = "all";
+    state.category = UNCATEGORIZED;
     state.q = "";
     state.sort = "added";
     state.page = 1;
@@ -1363,7 +1357,7 @@
   clearFilters.addEventListener("click", resetFilters);
 
   emptyReset.addEventListener("click", function () {
-    var filtered = state.category !== "all" || !!state.q;
+    var filtered = state.category !== UNCATEGORIZED || !!state.q;
     if (!filtered && !state.loading && state.total === 0) fileInput.click();
     else resetFilters();
   });
