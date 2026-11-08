@@ -143,8 +143,18 @@ test.describe('图片转换地址', () => {
       .first();
     const cardSrc = await card.locator('img').getAttribute('src');
     expect(cardSrc).toBeTruthy();
+    // 深色模式下遮罩也必须变暗，不能因为 --ink 翻成纸白色而发白。
+    await page.evaluate(() =>
+      document.documentElement.setAttribute('data-theme', 'dark'),
+    );
     await card.locator('.ex-open').click();
     await expect(page.locator('.lb')).toBeVisible();
     await expect(page.locator('#lbImg')).toHaveAttribute('src', cardSrc ?? '');
+    const backdrop = await page.locator('.lb').evaluate((element) => {
+      const style = getComputedStyle(element, '::backdrop');
+      return { color: style.backgroundColor, filter: style.backdropFilter };
+    });
+    expect(backdrop.color).toBe('rgba(0, 0, 0, 0.72)');
+    expect(backdrop.filter).toBe('none');
   });
 });

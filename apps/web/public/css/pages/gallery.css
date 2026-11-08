@@ -121,7 +121,8 @@
 /* ---------- 灯箱 ---------- */
 .lb{width:auto;max-width:min(1180px,94vw);max-height:92vh;padding:0;border:3px solid var(--pink);
   background:var(--ink);color:var(--paper);box-shadow:10px 10px 0 color-mix(in srgb, var(--pink) 32%, transparent);overflow:visible}
-.lb::backdrop{background:color-mix(in srgb, var(--ink) 84%, transparent)}
+/* 遮罩固定用黑色半透明：不跟随 --ink，避免深色模式 --ink 变亮后遮罩发白 */
+.lb::backdrop{background:rgba(0,0,0,.72)}
 .lb[open]{animation:pop .3s var(--ease) both}
 .lb-inner{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.8fr);max-height:calc(92vh - 6px)}
 .lb-fig{padding:22px;background:var(--ink);border-right:3px solid var(--pink);
