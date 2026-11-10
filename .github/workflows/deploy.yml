@@ -55,6 +55,25 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
           ENVIRONMENT: production
         run: pnpm wrangler:config
+      # Worker 的“Preview URL”（<version>-myon-blog.<workers.dev>）会公开暴露每个版本，
+      # 且不经过自定义域名与 Cloudflare Access；部署前强制关闭，避免线上出现绕过入口。
+      - name: Disable Worker preview URLs
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs = require('node:fs');
+          const configPath = 'apps/web/wrangler.jsonc';
+          // 生成文件是 JSONC（保留模板里的 // 整行注释），先按生成脚本同样规则去注释再解析。
+          const raw = fs.readFileSync(configPath, 'utf8');
+          const cleaned = raw
+            .split(/\r?\n/)
+            .filter((line) => !/^\s*\/\//.test(line))
+            .join('\n');
+          const config = JSON.parse(cleaned);
+          config.preview_urls = false;
+          fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+          console.log('✓ preview_urls=false：本次部署不生成 Workers 版本 Preview URL');
+          JS
       - name: Build
         run: pnpm build
       - name: Prepare Worker secrets file

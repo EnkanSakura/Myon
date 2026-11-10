@@ -280,7 +280,7 @@ push main
 
 | Workflow | 文件 | 做什么 | 触发 |
 | --- | --- | --- | --- |
-| Deploy | `.github/workflows/deploy.yml` | 生成配置、构建、同步 Worker secret、`wrangler deploy` | push `main` / 手动 |
+| Deploy | `.github/workflows/deploy.yml` | 生成配置（强制关闭 Worker Preview URL）、构建、同步 Worker secret、`wrangler deploy` | push `main` / 手动 |
 | Database Migrate | `.github/workflows/migrate.yml` | 应用 `packages/back/migrations/` 到生产 D1 | Deploy 成功后 / 手动 |
 
 `Database Migrate` 与 `Deploy` 使用 GitHub Environment `production`（可在仓库里配置审批人）。
@@ -295,10 +295,11 @@ Worker 回滚也不会回滚 D1，涉及表结构变更时仍要单独评估。
 1. `pnpm install --frozen-lockfile`；
 2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 与 `CLOUDFLARE_KV_SETTINGS_ID` 非空；
 3. `pnpm wrangler:config`（注入 `D1_DATABASE_ID`/`KV_SETTINGS_ID`，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
-4. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
-5. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`/`IMG2WEBP_TOKEN` 写成临时 JSON（未配置的项跳过，值不会打印）；
-6. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
-7. 删除临时密钥文件。
+4. 把生成配置里的 `preview_urls` 强制写为 `false`（禁用 Worker 版本 **Preview URL**：形如 `<version>-myon-blog.<workers.dev>`，这类地址会绕过自定义域名与 Cloudflare Access，只应按下需临时开启）；
+5. `pnpm build`（Astro + 打包 `@myon/back`，输出 `apps/web/dist`）；
+6. 把 Repository Secrets 里的 `ADMIN_TOKEN`/`ACCESS_*`/`BANGUMI_*`/`IMG2WEBP_TOKEN` 写成临时 JSON（未配置的项跳过，值不会打印）；
+7. `wrangler deploy --secrets-file <临时 JSON>`（单 Worker，含 Cron triggers，密钥随本次部署一起上传）；
+8. 删除临时密钥文件。
 
 ### 5.2 Database Migrate
 

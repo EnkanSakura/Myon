@@ -29,7 +29,7 @@ const DEFAULTS = {
   D1_DATABASE_ID: '00000000-0000-0000-0000-000000000000',
   R2_BUCKET: 'myon-media',
   KV_SETTINGS_ID: '00000000000000000000000000000000',
-  SITE_URL: 'https://myon.top',
+  SITE_URL: 'https://www.myon.top',
   ENVIRONMENT: 'development',
 };
 

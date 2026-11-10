@@ -4,6 +4,10 @@
   "main": "./src/worker.ts",
   "compatibility_date": "2026-10-12",
   "compatibility_flags": ["global_fetch_strictly_public"],
+  // 禁用 Worker 版本 Preview URL（<version>-myon-blog.<workers.dev>）：
+  // 这类地址可绕过自定义域名与 Cloudflare Access，只应按下需临时开启。
+  // deploy.yml 在生成配置后还会强制写回 false，避免被模板改动误开启。
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"

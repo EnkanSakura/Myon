@@ -46,18 +46,20 @@ const v1 = new Hono<{ Bindings: AppBindings }>();
 
 /** 文章与动态的分类统计，/categories 与 /stats 共用。 */
 async function readCategoryCounts(client: ReturnType<typeof getDb>) {
-  const postRows = await client
-    .select({ name: posts.category, count: sql<number>`count(*)` })
-    .from(posts)
-    .where(eq(posts.status, 'published'))
-    .groupBy(posts.category)
-    .orderBy(desc(sql`count(*)`));
-  const momentRows = await client
-    .select({ name: moments.category, count: sql<number>`count(*)` })
-    .from(moments)
-    .where(eq(moments.visibility, 'public'))
-    .groupBy(moments.category)
-    .orderBy(desc(sql`count(*)`));
+  const [postRows, momentRows] = await Promise.all([
+    client
+      .select({ name: posts.category, count: sql<number>`count(*)` })
+      .from(posts)
+      .where(eq(posts.status, 'published'))
+      .groupBy(posts.category)
+      .orderBy(desc(sql`count(*)`)),
+    client
+      .select({ name: moments.category, count: sql<number>`count(*)` })
+      .from(moments)
+      .where(eq(moments.visibility, 'public'))
+      .groupBy(moments.category)
+      .orderBy(desc(sql`count(*)`)),
+  ]);
 
   return { posts: postRows, moments: momentRows };
 }
@@ -407,57 +409,73 @@ v1.get('/bangumi', async (c) => {
 v1.get('/stats', async (c) => {
   const db = getDb(c.env.DB);
 
-  const postAgg = await db
-    .select({
-      published: sql<number>`coalesce(sum(case when status = 'published' then 1 else 0 end), 0)`,
-      draft: sql<number>`coalesce(sum(case when status = 'draft' then 1 else 0 end), 0)`,
-      words: sql<number>`coalesce(sum(case when status = 'published' then length(body_md) else 0 end), 0)`,
-    })
-    .from(posts);
-  const momentAgg = await db
-    .select({ total: sql<number>`count(*)` })
-    .from(moments)
-    .where(eq(moments.visibility, 'public'));
-  const galleryAgg = await db
-    .select({
-      total: sql<number>`count(*)`,
-      displayed: sql<number>`coalesce(sum(case when displayed = 1 then 1 else 0 end), 0)`,
-    })
-    .from(galleryItems);
-  const bangumiAgg = await db
-    .select({
-      subjectType: bangumiShows.subjectType,
-      status: bangumiShows.status,
-      count: sql<number>`count(*)`,
-    })
-    .from(bangumiShows)
-    .groupBy(bangumiShows.subjectType, bangumiShows.status);
-  const galleryCats = await db
-    .select({ name: galleryItems.category, count: sql<number>`count(*)` })
-    .from(galleryItems)
-    .where(eq(galleryItems.displayed, true))
-    .groupBy(galleryItems.category)
-    .orderBy(desc(sql`count(*)`));
-  const toolAgg = await db
-    .select({
-      total: sql<number>`count(*)`,
-      enabled: sql<number>`coalesce(sum(case when enabled = 1 then 1 else 0 end), 0)`,
-    })
-    .from(tools);
-  const mediaTotal = await readMediaCount(c.env);
+  // 这些查询互不依赖：并发展开，避免首页/后台为十几次串行 D1 往返等待。
+  const [
+    postAgg,
+    momentAgg,
+    galleryAgg,
+    bangumiAgg,
+    galleryCats,
+    toolAgg,
+    mediaTotal,
+    lastPostAt,
+    lastMomentAt,
+    lastGalleryAt,
+    categories,
+  ] = await Promise.all([
+    db
+      .select({
+        published: sql<number>`coalesce(sum(case when status = 'published' then 1 else 0 end), 0)`,
+        draft: sql<number>`coalesce(sum(case when status = 'draft' then 1 else 0 end), 0)`,
+        words: sql<number>`coalesce(sum(case when status = 'published' then length(body_md) else 0 end), 0)`,
+      })
+      .from(posts),
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(moments)
+      .where(eq(moments.visibility, 'public')),
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        displayed: sql<number>`coalesce(sum(case when displayed = 1 then 1 else 0 end), 0)`,
+      })
+      .from(galleryItems),
+    db
+      .select({
+        subjectType: bangumiShows.subjectType,
+        status: bangumiShows.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(bangumiShows)
+      .groupBy(bangumiShows.subjectType, bangumiShows.status),
+    db
+      .select({ name: galleryItems.category, count: sql<number>`count(*)` })
+      .from(galleryItems)
+      .where(eq(galleryItems.displayed, true))
+      .groupBy(galleryItems.category)
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        enabled: sql<number>`coalesce(sum(case when enabled = 1 then 1 else 0 end), 0)`,
+      })
+      .from(tools),
+    readMediaCount(c.env),
+    db
+      .select({ at: sql<string | null>`max(updated_at)` })
+      .from(posts)
+      .where(eq(posts.status, 'published')),
+    db
+      .select({ at: sql<string | null>`max(created_at)` })
+      .from(moments)
+      .where(eq(moments.visibility, 'public')),
+    db
+      .select({ at: sql<string | null>`max(created_at)` })
+      .from(galleryItems)
+      .where(eq(galleryItems.displayed, true)),
+    readCategoryCounts(db),
+  ]);
 
-  const lastPostAt = await db
-    .select({ at: sql<string | null>`max(updated_at)` })
-    .from(posts)
-    .where(eq(posts.status, 'published'));
-  const lastMomentAt = await db
-    .select({ at: sql<string | null>`max(created_at)` })
-    .from(moments)
-    .where(eq(moments.visibility, 'public'));
-  const lastGalleryAt = await db
-    .select({ at: sql<string | null>`max(created_at)` })
-    .from(galleryItems)
-    .where(eq(galleryItems.displayed, true));
   const lastUpdated =
     [lastPostAt[0]?.at, lastMomentAt[0]?.at, lastGalleryAt[0]?.at]
       .filter((value): value is string => Boolean(value))
@@ -517,7 +535,7 @@ v1.get('/stats', async (c) => {
       total: toolAgg[0]?.total ?? 0,
       enabled: toolAgg[0]?.enabled ?? 0,
     },
-    categories: await readCategoryCounts(db),
+    categories,
   });
 });
 
