@@ -14,14 +14,9 @@
 
   var TOKEN_KEY = "myon-admin-token";
   var BUILTIN_LABEL = {
-    ts: "时间戳转换",
-    img: "图片压缩",
-    md: "Markdown 预览",
-    color: "配色生成",
-    bgm: "追番时刻表",
-    json: "JSON 格式化",
-    redirect: "旧域名跳转",
-    short: "短链接"
+    "x-downloader": "X 视频 / GIF 下载器",
+    "lc-calculator": "LC 计算器",
+    "comic-downloader": "漫画下载"
   };
   var HREF_RE = /^(\/|https?:\/\/)/;
   var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

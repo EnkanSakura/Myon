@@ -6,6 +6,14 @@ import {
 } from '../src/index';
 
 describe('tool schemas', () => {
+  it('only exposes the ported old-site builtin keys', () => {
+    expect([...builtinToolKeys]).toEqual([
+      'x-downloader',
+      'lc-calculator',
+      'comic-downloader',
+    ]);
+  });
+
   it('applies defaults when creating a tool', () => {
     const parsed = toolInputSchema.parse({
       slug: 'timestamp',

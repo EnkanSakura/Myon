@@ -1,11 +1,16 @@
 ---
 // 单个工具页：/tools/<slug>。工具列表与索引同源（GET /api/v1/tools，只含启用项）。
-// 内置工具渲染对应工作台；自定义链接工具在服务端 302 到后台登记的 href。
-// 样式：public/css/pages/tools.css；脚本：public/js/pages/tool.js（只负责时间戳换算）
+// 按 toolKey 渲染内置工作台（X 媒体下载 / LC 计算器 / 漫画下载）；未识别的 key 给「未配置」空态；
+// 自定义链接工具在服务端 302 到后台登记的 href；找不到条目按 404 渲染空态。
+// 样式：public/css/pages/tools.css；工作台脚本在页面底部按 toolKey 条件加载。
 import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
-import type { BuiltinToolKey, ToolItem, ToolListResponse } from '@myon/shared';
+import {
+  apiBasePath,
+  type ToolItem,
+  type ToolListResponse,
+} from '@myon/shared';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 
 const { slug = '' } = Astro.params;
@@ -35,83 +40,8 @@ if (item && item.toolKey === null && item.href) {
 const index = item ? items.findIndex((tool) => tool.id === item.id) : -1;
 const no = index >= 0 ? String(index + 1).padStart(2, '0') : '—';
 const total = items.length;
-
-/** 内置工具页的“规格说明”，沿用旧 /tools 右侧抽屉的文案。 */
-interface ToolSpec {
-  rows: { key: string; value: string }[];
-  note?: string;
-  drawer: string;
-  link?: { href: string; label: string };
-}
-
-const specs: Partial<Record<BuiltinToolKey, ToolSpec>> = {
-  img: {
-    rows: [
-      { key: '输入 / IN', value: '一张图片（本机文件）' },
-      { key: '输出 / OUT', value: 'WebP 或 AVIF · 尺寸按原图压' },
-      { key: '去向 / PLACE', value: '直接写进 R2 · 原图不上传' },
-    ],
-    note: '「压完直接进 R2，中间不经过别人的服务器。」',
-    drawer: 'DRAWER 02',
-  },
-  md: {
-    rows: [
-      { key: '输入 / IN', value: '一段 Markdown 文本' },
-      { key: '输出 / OUT', value: '即时预览 · 标题 / 列表 / 引用 / 代码' },
-      { key: '运行 / RUN', value: '浏览器内 · 不联网' },
-    ],
-    note: '「写动态之前，先在这里过一眼错字。」',
-    drawer: 'DRAWER 03',
-  },
-  color: {
-    rows: [
-      { key: '输入 / IN', value: '一个源色 · HEX 六位' },
-      { key: '输出 / OUT', value: '五格色板 · 深浅按比例递进' },
-      { key: '运行 / RUN', value: '浏览器内 · 不联网' },
-    ],
-    note: '「从一张图里取五色，是它最初的用法。」',
-    drawer: 'DRAWER 04',
-  },
-  bgm: {
-    rows: [
-      { key: '输入 / IN', value: '本季放送表 · 来自 Bangumi' },
-      { key: '输出 / OUT', value: '七天时刻表 · 今天粉色' },
-      { key: '缓存 / CACHE', value: 'D1 里一份 · 每 6 小时同步' },
-    ],
-    drawer: 'DRAWER 05',
-    link: { href: '/bangumi', label: '去 05 追番看完整时刻表' },
-  },
-  json: {
-    rows: [
-      { key: '输入 / IN', value: '一段 JSON 文本' },
-      { key: '输出 / OUT', value: '两格缩进 · 键序不变' },
-      { key: '运行 / RUN', value: '浏览器内 · 不上传' },
-    ],
-    note: '「先备份，再按格式化。」',
-    drawer: 'DRAWER 06',
-  },
-  redirect: {
-    rows: [
-      { key: '输入 / IN', value: '旧域名地址 · 任意深链' },
-      { key: '输出 / OUT', value: '301 到 myon.studio 的对应路径' },
-      { key: '规则 / RULE', value: '保留路径与查询参数' },
-    ],
-    note: '「旧链接别断，访客会记得。」',
-    drawer: 'DRAWER 07',
-  },
-  short: {
-    rows: [
-      { key: '输入 / IN', value: '一条长链接' },
-      { key: '输出 / OUT', value: '四字短码 · myon.studio/s/····' },
-      { key: '记录 / LOG', value: '跳转存在 D1 · 同链复用一码' },
-    ],
-    note: '「分享之前先缩一下，看着清爽。」',
-    drawer: 'DRAWER 08',
-  },
-};
-
-const spec = item?.toolKey ? (specs[item.toolKey] ?? null) : null;
 const pageTitle = item ? item.name : '工具不存在';
+const toolKey = item?.toolKey ?? null;
 ---
 
 <SiteLayout title={pageTitle} sticker="PAGE 06 / 07 · 工具" active="tools">
@@ -144,74 +74,243 @@ const pageTitle = item ? item.name : '工具不存在';
               <span class="panel-tab">TOOL {no}</span>
               <div class="bench-in">
                 <div class="bench-cap">
-                  <span class="bk">{item.toolKey === 'ts' ? 'WORKBENCH / 工作台' : 'SPEC / 规格说明'}</span>
+                  <span class="bk">WORKBENCH / 工作台</span>
                   <span class="mono">/tools/{item.slug}</span>
                 </div>
 
-                <div class="bench-body">
-                  {item.toolKey === 'ts' ? (
-                    <div class="panel-ts" id="panel-ts">
-                      <div class="form-row">
-                        <label class="field">
-                          <span class="flabel">时间戳 / TIMESTAMP</span>
-                          <input class="input" id="tsInput" type="text" inputmode="numeric" value="1790856000" autocomplete="off" spellcheck="false" aria-label="Unix 时间戳" />
-                        </label>
-                        <div class="field">
-                          <span class="flabel" id="unitLabel">单位 / UNIT</span>
-                          <div class="seg" role="group" aria-labelledby="unitLabel">
-                            <button class="seg-btn is-on" type="button" data-unit="s" aria-pressed="true">秒</button>
-                            <button class="seg-btn" type="button" data-unit="ms" aria-pressed="false">毫秒</button>
-                          </div>
-                        </div>
-                        <div class="field">
-                          <label class="flabel" for="tzSel">时区 / ZONE</label>
-                          <div class="selwrap">
-                            <select id="tzSel">
-                              <option value="8" selected>UTC+8</option>
-                              <option value="0">UTC+0</option>
-                              <option value="9">UTC+9</option>
-                              <option value="-5">UTC−5</option>
-                            </select>
-                            <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
-                          </div>
-                        </div>
+                {toolKey === 'x-downloader' ? (
+                  <section class="bench-body x-tool" id="xTool" data-api={apiBasePath}>
+                    <div class="tool-form x-form">
+                      <label class="field field--grow">
+                        <span class="flabel">推文链接 / TWEET URL</span>
+                        <input
+                          class="input"
+                          id="xUrl"
+                          type="text"
+                          autocomplete="off"
+                          spellcheck="false"
+                          aria-label="推文链接"
+                        />
+                      </label>
+                      <div class="field field--action">
+                        <span class="flabel" aria-hidden="true">解析 / RESOLVE</span>
+                        <button class="btn btn--pink" type="button" id="xResolve">解析 <span class="ar" aria-hidden="true">→</span></button>
                       </div>
-
-                      <div class="result">
-                        <div class="res-cap"><span class="sticker">RESULT</span><span class="mono" id="resZone">本地时间 UTC+8</span></div>
-                        <div class="res-time" id="resTime">2026-10-01 20:00:00</div>
-                        <div class="res-foot"><span id="resWeek">星期四</span><span class="sep" aria-hidden="true">/</span><span id="resEpoch">Unix 1790856000</span></div>
-                      </div>
-
-                      <div class="bench-actions">
-                        <button class="btn btn--pink" type="button" id="copyBtn">复制结果 <span class="ar" aria-hidden="true">↗</span></button>
-                        <button class="btn" type="button" id="shuffleBtn">换一个 <span class="ar" aria-hidden="true">↻</span></button>
-                      </div>
-                      <div class="copy-note" id="copyNote" role="status" aria-live="polite"></div>
                     </div>
-                  ) : spec ? (
-                    <>
-                      <div class="spec">
-                        {spec.rows.map((row) => (
-                          <div class="sr"><span class="sk">{row.key}</span><span class="sv">{row.value}</span></div>
-                        ))}
+                    <p class="tool-hint">支持 x.com / twitter.com 的推文链接，也可直接输入推文 ID。</p>
+                    <div class="tool-error" id="xError" role="alert" hidden>
+                      <span class="te-k">ERR</span>
+                      <span id="xErrorText"></span>
+                    </div>
+                    <div class="x-result" id="xResult" hidden>
+                      <div class="x-author">
+                        <img class="x-avatar" id="xAvatar" alt="" hidden />
+                        <div class="x-author-body">
+                          <div class="x-author-line">
+                            <b id="xName"></b>
+                            <span class="x-handle" id="xHandle"></span>
+                            <span class="x-date" id="xDate" hidden></span>
+                          </div>
+                          <p class="x-text" id="xText"></p>
+                          <div class="x-meta">
+                            <a class="x-link" id="xLink" target="_blank" rel="noreferrer noopener"></a>
+                            <span id="xSource"></span>
+                          </div>
+                        </div>
                       </div>
-                      <div class="alt-foot">
-                        {spec.link && (
-                          <a class="arrow-link" href={spec.link.href}>{spec.link.label} <span class="ar" aria-hidden="true">→</span></a>
-                        )}
-                        <span class="sticker sticker--paper">{spec.drawer}</span>
+                      <div class="x-media" id="xMedia"></div>
+                      <div class="tool-empty" id="xEmpty" hidden>这条推文没有可下载的媒体</div>
+                    </div>
+                    <p class="tool-note"><b>NOTE</b> 解析与中转下载由服务端完成；若本地网络受限，请优先使用「服务器中转」。仅用于个人学习与备份，请尊重原作者版权。</p>
+                  </section>
+                ) : toolKey === 'lc-calculator' ? (
+                  <section class="bench-body lc-bench" id="lcTool" data-api={apiBasePath}>
+                    <div class="lc-card">
+                      <div class="lc-cap">
+                        <h2>谐振换算</h2>
+                        <p>填写 L、C、f 中的任意两个，下方自动显示第三个的计算结果。</p>
                       </div>
-                    </>
-                  ) : (
+                      <div class="tool-form lc-form">
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcL">电感 L</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcL" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="电感 L" />
+                            <div class="selwrap">
+                              <select id="lcLUnit" aria-label="电感单位">
+                                <option value="H">H</option>
+                                <option value="mH">mH</option>
+                                <option value="uH" selected>µH</option>
+                                <option value="nH">nH</option>
+                                <option value="pH">pH</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcC">电容 C</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcC" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="电容 C" />
+                            <div class="selwrap">
+                              <select id="lcCUnit" aria-label="电容单位">
+                                <option value="F">F</option>
+                                <option value="mF">mF</option>
+                                <option value="uF">µF</option>
+                                <option value="nF">nF</option>
+                                <option value="pF" selected>pF</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcF">频率 f</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcF" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="频率 f" />
+                            <div class="selwrap">
+                              <select id="lcFUnit" aria-label="频率单位">
+                                <option value="Hz">Hz</option>
+                                <option value="kHz">kHz</option>
+                                <option value="MHz" selected>MHz</option>
+                                <option value="GHz">GHz</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field field--action">
+                          <span class="flabel" aria-hidden="true">重算 / RECALC</span>
+                          <button class="btn btn--pink" type="button" id="lcRecalc" disabled title="将计算结果填回对应输入框，并清空另外两个量">重算</button>
+                        </div>
+                      </div>
+                      <div class="lc-result" id="lcResult" hidden>
+                        <div class="res-cap"><span class="mono" id="lcResultLabel"></span></div>
+                        <div class="res-time" id="lcResultText"></div>
+                      </div>
+                    </div>
+
+                    <div class="lc-card">
+                      <div class="lc-cap">
+                        <h2>频率匹配计算</h2>
+                        <p>保持电感不变，调整电容把谐振频率从 f₁ 调到 f₂。</p>
+                      </div>
+                      <div class="tool-form lc-form lc-form--match">
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcMatchC">当前电容 C₁</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcMatchC" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="当前电容 C₁" />
+                            <div class="selwrap">
+                              <select id="lcMatchCUnit" aria-label="电容单位">
+                                <option value="F">F</option>
+                                <option value="mF">mF</option>
+                                <option value="uF">µF</option>
+                                <option value="nF">nF</option>
+                                <option value="pF" selected>pF</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcMatchFrom">当前频率 f₁</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcMatchFrom" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="当前频率 f₁" />
+                            <div class="selwrap">
+                              <select id="lcMatchFromUnit" aria-label="当前频率单位">
+                                <option value="Hz">Hz</option>
+                                <option value="kHz">kHz</option>
+                                <option value="MHz" selected>MHz</option>
+                                <option value="GHz">GHz</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field field--grow">
+                          <label class="flabel" for="lcMatchTo">目标频率 f₂</label>
+                          <div class="input-unit">
+                            <input class="input" id="lcMatchTo" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="目标频率 f₂" />
+                            <div class="selwrap">
+                              <select id="lcMatchToUnit" aria-label="目标频率单位">
+                                <option value="Hz">Hz</option>
+                                <option value="kHz">kHz</option>
+                                <option value="MHz" selected>MHz</option>
+                                <option value="GHz">GHz</option>
+                              </select>
+                              <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="lc-result" id="lcMatchResult" hidden>
+                        <div class="res-cap"><span class="mono">目标电容 C₂</span></div>
+                        <div class="res-time" id="lcMatchText"></div>
+                      </div>
+                    </div>
+
+                    <p class="tool-note"><b>NOTE</b> 换算在浏览器内完成，不联网、不上传，也不写 D1 / R2。</p>
+                  </section>
+                ) : toolKey === 'comic-downloader' ? (
+                  <section class="bench-body comic-bench" id="comicTool" data-api={apiBasePath}>
+                    <div class="tool-form comic-form">
+                      <div class="field">
+                        <label class="flabel" for="comicPlatform">平台 / PLATFORM</label>
+                        <div class="selwrap">
+                          <select id="comicPlatform" aria-label="漫画平台"></select>
+                          <svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                        </div>
+                      </div>
+                      <label class="field field--grow">
+                        <span class="flabel">章节链接 / EPISODE URL</span>
+                        <input class="input" id="comicUrl" type="text" autocomplete="off" spellcheck="false" aria-label="章节链接" />
+                      </label>
+                      <div class="field field--action">
+                        <span class="flabel" aria-hidden="true">解析 / RESOLVE</span>
+                        <button class="btn btn--pink" type="button" id="comicResolve">解析 <span class="ar" aria-hidden="true">→</span></button>
+                      </div>
+                    </div>
+                    <p class="tool-hint">Champion Cross：请输入 /episodes/ 开头的章节页地址（不是作品目录页）。</p>
+                    <div class="tool-error" id="comicError" role="alert" hidden>
+                      <span class="te-k">ERR</span><span id="comicErrorText"></span>
+                    </div>
+                    <div class="comic-result" id="comicResult" hidden>
+                      <div class="comic-head">
+                        <h2 id="comicSeries"></h2>
+                        <p id="comicEpisode"></p>
+                      </div>
+                      <div class="comic-presets">
+                        <button class="comic-preset" type="button" data-preset="current">仅当前章节</button>
+                        <button class="comic-preset" type="button" data-preset="around">当前前后各 5 章</button>
+                        <button class="comic-preset" type="button" data-preset="all">全部免费章节</button>
+                        <button class="comic-preset" type="button" data-preset="none">清空选择</button>
+                        <span class="comic-selected" id="comicSelected"></span>
+                      </div>
+                      <ul class="comic-chapters" id="comicChapters"></ul>
+                      <div class="comic-actions">
+                        <label class="comic-check"><input type="checkbox" id="comicCombine" checked /> 合并为一个 ZIP</label>
+                        <button class="btn btn--pink" type="button" id="comicDownload">下载所选</button>
+                        <button class="btn" type="button" id="comicCancel" hidden>取消</button>
+                      </div>
+                      <div class="comic-progress" id="comicProgress" hidden>
+                        <div class="cp-cap"><span id="comicProgressLabel"></span><span id="comicProgressPages"></span></div>
+                        <div class="cp-bar"><span class="cp-fill" id="comicProgressFill"></span></div>
+                      </div>
+                      <div class="tool-ok" id="comicDone" role="status" hidden>
+                        <span class="te-k">DONE</span><span id="comicDoneText"></span>
+                      </div>
+                    </div>
+                    <p class="tool-note"><b>NOTE</b> 图片在浏览器中本地解密并打包，不会上传到服务器；仅支持当前可免费阅读的章节；请遵守目标网站服务条款，仅用于个人备份。</p>
+                  </section>
+                ) : (
+                  <div class="bench-body">
                     <div class="bench-empty">
-                      <span class="sticker sticker--paper">NO LINK / 未配置</span>
-                      <h2>这个工具还没有打开地址<span class="hl">。</span></h2>
-                      <p>在后台「工具」里填上链接后，打开这个地址会直接跳转过去。</p>
-                      <a class="arrow-link" href="/admin/tools">去后台补上 <span class="ar" aria-hidden="true">→</span></a>
+                      <span class="sticker sticker--paper">NO PANEL / 未配置</span>
+                      <h2>这个工具还没有工作台<span class="hl">。</span></h2>
+                      <p>后台登记的 toolKey 不是内置工作台；可以到后台「工具」里重新选择，或去工具索引看看其他抽屉。</p>
+                      <a class="arrow-link" href="/tools">返回工具索引 <span class="ar" aria-hidden="true">→</span></a>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -234,5 +333,9 @@ const pageTitle = item ? item.name : '工具不存在';
     </div>
   </main>
 
-  <script is:inline src="/js/pages/tool.js"></script>
+  {toolKey === 'x-downloader' && <script is:inline src="/js/pages/tool-x.js"></script>}
+  {toolKey === 'lc-calculator' && <script is:inline src="/js/pages/tool-lc.js"></script>}
+  {toolKey === 'comic-downloader' && <script is:inline src="/js/pages/tool-comic-zip.js"></script>}
+  {toolKey === 'comic-downloader' && <script is:inline src="/js/pages/tool-comic-unscramble.js"></script>}
+  {toolKey === 'comic-downloader' && <script is:inline src="/js/pages/tool-comic.js"></script>}
 </SiteLayout>

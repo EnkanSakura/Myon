@@ -25,7 +25,7 @@ const routes = [
   { path: '/gallery', heading: '展柜' },
   { path: '/bangumi', heading: '追番' },
   { path: '/tools', heading: '工具' },
-  { path: '/tools/timestamp', heading: '时间戳转换' },
+  { path: '/tools/x-downloader', heading: 'X 视频 / GIF 下载器' },
   { path: '/admin', heading: '总览' },
   { path: '/admin/articles', heading: '文章' },
   { path: '/admin/moments', heading: '动态' },

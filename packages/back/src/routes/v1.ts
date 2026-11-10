@@ -33,6 +33,7 @@ import { readSiteSettings, sanitizeFooterHtml } from '../site';
 import { readTraffic } from '../traffic';
 import type { AppBindings } from '../types';
 import admin from './v1/admin';
+import toolWorkbench from './v1/tools-workbench';
 
 /**
  * v1 契约。挂载在 `apiBasePath`（/api/v1）下。
@@ -175,6 +176,12 @@ v1.get('/tools', async (c) => {
     .orderBy(asc(tools.position), asc(tools.id));
   return c.json({ items });
 });
+
+/**
+ * 工具工作台（旧站移植）：X 媒体解析与中转下载、漫画下载器。
+ * 与 GET /tools 的列表接口共用 /tools 前缀，子路由见 tools-workbench.ts。
+ */
+v1.route('/tools', toolWorkbench);
 
 /**
  * 外部网站卡片元数据：给文章里的 `::link{url="…"}` 补标题/描述/favicon。

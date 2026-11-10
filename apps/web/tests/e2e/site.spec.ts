@@ -174,7 +174,7 @@ test.describe('视觉清理', () => {
       '/gallery',
       '/bangumi',
       '/tools',
-      '/tools/timestamp',
+      '/tools/x-downloader',
     ]) {
       await page.goto(path);
       expect(await page.locator('.sub').count(), path).toBe(0);
