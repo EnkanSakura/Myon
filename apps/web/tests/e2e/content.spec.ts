@@ -37,6 +37,36 @@ test.describe('动态流', () => {
     expect(visible).toBeGreaterThan(0);
     expect(visible).toBeLessThanOrEqual(total);
   });
+
+  test('正文保留换行，点击卡片打开详情对话框', async ({ page }) => {
+    await page.goto('/moments');
+    const card = page.locator('.moment').first();
+    await expect(card).toBeVisible();
+
+    const body = card.locator('.moment-body');
+    await expect(body).toBeVisible();
+    expect(
+      await body.evaluate((node) => getComputedStyle(node).whiteSpace),
+    ).toBe('pre-wrap');
+    const bodyText = await body.evaluate((node) => node.textContent);
+    const category = (await card.getAttribute('data-tag')) ?? '';
+
+    await card.locator('.moment-hit').click();
+    await expect(page.locator('#momentView')).toHaveAttribute('open', '');
+    expect(
+      await page.locator('#mvBody').evaluate((node) => node.textContent),
+    ).toBe(bodyText);
+    await expect(page.locator('#mvCat')).toHaveText(category);
+
+    await page.locator('#mvClose').click();
+    await expect(page.locator('#momentView')).not.toHaveAttribute('open', '');
+
+    // 点击弹窗外的背景也能关闭（closedby="any" 或坐标兜底）
+    await card.locator('.moment-hit').click();
+    await expect(page.locator('#momentView')).toHaveAttribute('open', '');
+    await page.mouse.click(5, 5);
+    await expect(page.locator('#momentView')).not.toHaveAttribute('open', '');
+  });
 });
 
 test.describe('展柜', () => {

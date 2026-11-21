@@ -42,6 +42,12 @@ import {
   updateMediaCategory,
   updateMediaMeta,
 } from '../../media';
+import {
+  momentMediaColumns,
+  momentResponse,
+  normalizeMomentMedia,
+  resolveMomentMedia,
+} from '../../moments';
 import { readSiteSettings, writeSiteSettings } from '../../site';
 import type { AppBindings } from '../../types';
 
@@ -280,7 +286,12 @@ admin.get('/moments', async (c) => {
     .select({ total: sql<number>`count(*)` })
     .from(moments);
 
-  return c.json({ items, total: totalRows[0]?.total ?? 0, limit, offset });
+  return c.json({
+    items: items.map(momentResponse),
+    total: totalRows[0]?.total ?? 0,
+    limit,
+    offset,
+  });
 });
 
 admin.post('/moments', async (c) => {
@@ -290,6 +301,14 @@ admin.post('/moments', async (c) => {
   const parsed = momentInputSchema.safeParse(payload);
   if (!parsed.success) return validationError(c, parsed.error);
   const input = parsed.data;
+  const media =
+    input.media !== undefined
+      ? normalizeMomentMedia(input.media)
+      : resolveMomentMedia(
+          null,
+          input.mediaKey ?? null,
+          input.mediaSize ?? null,
+        );
 
   const item = {
     id: `m_${crypto.randomUUID()}`,
@@ -297,13 +316,12 @@ admin.post('/moments', async (c) => {
     category: input.category,
     visibility: input.visibility,
     pinned: input.pinned,
-    mediaKey: input.mediaKey ?? null,
-    mediaSize: input.mediaSize ?? null,
+    ...momentMediaColumns(media),
     createdAt: new Date().toISOString(),
   };
 
   await getDb(c.env.DB).insert(moments).values(item);
-  return c.json({ item }, 201);
+  return c.json({ item: momentResponse(item) }, 201);
 });
 
 admin.patch('/moments/:id', async (c) => {
@@ -321,11 +339,52 @@ admin.patch('/moments/:id', async (c) => {
     .where(eq(moments.id, id))
     .get();
   if (!current) return c.json({ error: 'not_found' }, 404);
-  if (Object.keys(parsed.data).length === 0) return c.json({ item: current });
+  if (Object.keys(parsed.data).length === 0) {
+    return c.json({ item: momentResponse(current) });
+  }
 
-  const next = { ...current, ...parsed.data };
-  await db.update(moments).set(parsed.data).where(eq(moments.id, id));
-  return c.json({ item: next });
+  const patch = parsed.data;
+  // 兼容三种写入方式：新后台传 media 数组；旧后台只传 mediaKey / mediaSize。
+  let media = resolveMomentMedia(
+    current.media,
+    current.mediaKey,
+    current.mediaSize,
+  );
+  if (patch.media !== undefined) {
+    media = normalizeMomentMedia(patch.media);
+  } else if (patch.mediaKey !== undefined) {
+    if (!patch.mediaKey) {
+      media = [];
+    } else if (media.length) {
+      media = [
+        {
+          key: patch.mediaKey,
+          size:
+            patch.mediaSize !== undefined
+              ? patch.mediaSize
+              : (media[0]?.size ?? null),
+        },
+        ...media.slice(1),
+      ];
+    } else {
+      media = [{ key: patch.mediaKey, size: patch.mediaSize ?? null }];
+    }
+  } else if (patch.mediaSize !== undefined && media.length) {
+    // 只改第一张尺寸：同步进 media 数组，避免数组与旧字段打架。
+    media = media.map((entry, index) =>
+      index === 0 ? { ...entry, size: patch.mediaSize ?? null } : entry,
+    );
+  }
+
+  const values = {
+    ...(patch.body !== undefined ? { body: patch.body } : {}),
+    ...(patch.category !== undefined ? { category: patch.category } : {}),
+    ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
+    ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
+    ...momentMediaColumns(media),
+  };
+  await db.update(moments).set(values).where(eq(moments.id, id));
+  return c.json({ item: momentResponse({ ...current, ...values }) });
 });
 
 admin.delete('/moments/:id', async (c) => {

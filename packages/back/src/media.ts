@@ -43,6 +43,14 @@ const ID_DELETE_CHUNK = 90;
 const MEDIA_COUNT_TTL_SECONDS = 300;
 const MEDIA_COUNT_KV_KEY = 'media:count';
 
+/**
+ * R2 ↔ D1 对齐结果缓存：媒体库每次打开都扫 R2 会很慢。
+ * 第一次读取时对齐并写 KV，之后 10 分钟直接跳过 R2 扫描；上传/删除本来就写 D1，
+ * 不依赖这次对齐，只有老对象补录会延后到缓存过期。
+ */
+const MEDIA_RECONCILE_TTL_SECONDS = 600;
+const MEDIA_RECONCILED_KV_KEY = 'media:reconciled';
+
 const META_FILENAME = 'filename';
 const META_UPLOADED_AT = 'uploadedAt';
 
@@ -314,7 +322,26 @@ async function listAllObjects(env: AppBindings): Promise<R2ListResult> {
  * - D1 有行、R2 对象不存在 → 删行（别名级联清理）；
  * - R2 扫描被上限截断时不做删除，避免误删未扫描到的对象。
  */
+async function markMediaReconciled(env: AppBindings): Promise<void> {
+  try {
+    await env.SETTINGS.put(MEDIA_RECONCILED_KV_KEY, new Date().toISOString(), {
+      expirationTtl: MEDIA_RECONCILE_TTL_SECONDS,
+    });
+  } catch (error) {
+    // 缓存写失败只影响下次性能，不影响媒体列表正确性。
+    console.error('media reconcile cache write failed', error);
+  }
+}
+
 async function reconcileMedia(env: AppBindings): Promise<void> {
+  try {
+    const reconciled = await env.SETTINGS.get(MEDIA_RECONCILED_KV_KEY);
+    if (reconciled) return;
+  } catch (error) {
+    // KV 读失败时退回一次完整对齐，不阻断列表。
+    console.error('media reconcile cache read failed', error);
+  }
+
   const db = getDb(env.DB);
   const [listed, knownCategories, rows] = await Promise.all([
     listAllObjects(env),
@@ -349,7 +376,11 @@ async function reconcileMedia(env: AppBindings): Promise<void> {
     await db.insert(media).values(chunk).onConflictDoNothing();
   }
 
-  if (!listed.complete) return;
+  if (!listed.complete) {
+    // 扫描被上限截断时不做删除，但补录已完成，同样缓存这次对齐结果。
+    await markMediaReconciled(env);
+    return;
+  }
   const orphanIds = rows
     .filter((row) => !objectKeys.has(row.r2Key))
     .map((row) => row.id);
@@ -358,6 +389,7 @@ async function reconcileMedia(env: AppBindings): Promise<void> {
       .delete(media)
       .where(inArray(media.id, orphanIds.slice(i, i + ID_DELETE_CHUNK)));
   }
+  await markMediaReconciled(env);
 }
 
 export type MediaSort = 'added' | 'size' | 'name';

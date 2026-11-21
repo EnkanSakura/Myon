@@ -36,6 +36,11 @@ export const moments = sqliteTable('moments', {
   mediaSize: text('media_size', {
     enum: ['480', '720', '1080', '1440', 'orig'],
   }),
+  /**
+   * 多图配图：JSON 数组，元素 { key, size }；null / 空数组表示没有配图。
+   * media_key / media_size 仍写第一张，供旧客户端与首页只读第一张。
+   */
+  media: text('media'),
   createdAt: text('created_at').notNull(),
 });
 

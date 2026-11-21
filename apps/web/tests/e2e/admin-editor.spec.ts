@@ -385,6 +385,9 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     );
     await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
     await page.locator('#mpGrid .mp-item').first().click();
+    // 点图片只勾选，不应用；点「确定」后才写入 Markdown
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
       'open',
       '',
@@ -403,6 +406,7 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
       page.locator('#mpSize .mp-size-btn[data-size="1080"]'),
     ).toHaveAttribute('aria-checked', 'true');
     await page.locator('#mpGrid .mp-item').first().click();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#fBody')).toHaveValue(
       /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=1080&q=80\)/,
     );
@@ -415,6 +419,7 @@ test.describe('后台文章弹窗 · Markdown 编辑 + 预览', () => {
     await page.locator('#mpSize .mp-size-btn[data-size="orig"]').click();
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('原图');
     await page.locator('#mpGrid .mp-item').first().click();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#fBody')).toHaveValue(
       /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=orig\)/,
     );
@@ -532,6 +537,7 @@ test.describe('后台关于页 · 共享编辑器', () => {
     await expect(page.locator('#mpSize .mp-size-btn.is-on')).toHaveText('720');
     await page.locator('#mpTabExisting').click();
     await page.locator('#mpGrid .mp-item').first().click();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#mdInput')).toHaveValue(
       /!\[e2e-a\]\(\/media\/uploads\/202601\/e2e-a\.webp\?size=720&q=80\)/,
     );
@@ -716,7 +722,9 @@ test.describe('后台关于页 · 共享编辑器', () => {
       mimeType: 'image/webp',
       buffer: WEBP_1PX,
     });
-    // 复用媒体库上传链路：上传成功即写入 Markdown 图片并关闭选择器。
+    // 上传成功后选择器保留，切到现有图片并勾选新图；点「确定」才写入 Markdown。
+    await expect(page.locator('#mpConfirm')).toBeEnabled();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#mdInput')).toHaveValue(
       /!\[e2e-upload\]\(\/media\/uploads\/202601\/e2e-upload\.webp\?size=720&q=80\)/,
     );
@@ -791,8 +799,9 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     // 「标签」项目已彻底移除，只剩分类
     await expect(page.locator('#momentDlg #noteTag')).toHaveCount(0);
     await expect(page.locator('#momentDlg #tagQuick')).toHaveCount(0);
-    // 分类候选：自绘组合框（服务端 /api/v1/categories 数据）
+    // 分类组合框与文章编辑一致：只列真实存在的分类，不出现 datalist 或硬编码预设
     await expect(page.locator('#momentDlg datalist')).toHaveCount(0);
+    await expect(page.locator('#noteCategory')).toHaveValue('日常');
     await page.locator('#noteCategoryToggle').click();
     await expect(page.locator('#categoryList')).toBeVisible();
     await expect(
@@ -801,8 +810,17 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#categoryList')).toBeHidden();
     await page.locator('#noteText').fill('更新后的正文');
-    // 配图尺寸：默认 720，可在选择器里切换；预览地址跟着档位走
-    await expect(page.locator('#attachSize')).toHaveText('长边 720px');
+
+    // 编辑回填一张图、默认 720；选择器里追加第二张，点「确定」后才应用
+    const attachRows = page.locator('#attachList .moment-attach-row');
+    await expect(attachRows).toHaveCount(1);
+    await expect(
+      attachRows.first().locator('select.moment-size-select'),
+    ).toHaveValue('720');
+    await expect(attachRows.first().locator('img')).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-b\.webp\?size=720&q=80/,
+    );
     await page.locator('#btnPickImage').click();
     await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
     await expect(page.locator('#mpSize')).toBeVisible();
@@ -810,12 +828,45 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await page.locator('#mpTabExisting').click();
     await page.locator('#mpSize .mp-size-btn[data-size="1080"]').click();
     await page.locator('#mpGrid .mp-item').first().click();
-    await expect(page.locator('#attachBox')).toHaveClass(/is-on/);
-    await expect(page.locator('#attachSize')).toHaveText('长边 1080px');
-    await expect(page.locator('#attachImg')).toHaveAttribute(
+    // 选择器保持打开，确认前表单不变
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await expect(attachRows).toHaveCount(1);
+    await page.locator('#mpConfirm').click();
+    await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
+      'open',
+      '',
+    );
+
+    // 多图：已有 e2e-b 保留 720，新加的 e2e-a 用选择器里的 1080
+    await expect(attachRows).toHaveCount(2);
+    await expect(
+      attachRows.nth(0).locator('select.moment-size-select'),
+    ).toHaveValue('720');
+    await expect(
+      attachRows.nth(1).locator('select.moment-size-select'),
+    ).toHaveValue('1080');
+    await expect(attachRows.nth(1).locator('img')).toHaveAttribute(
       'src',
       /\/media\/uploads\/202601\/e2e-a\.webp\?size=1080&q=80/,
     );
+    // 每张图可单独改尺寸：只改第一张，第二张不动
+    const firstSizeCombo = attachRows
+      .nth(0)
+      .locator('input.moment-size-select');
+    await firstSizeCombo.click();
+    await attachRows
+      .nth(0)
+      .locator('.combo-list .combo-item')
+      .filter({ hasText: '原图' })
+      .click();
+    await expect(attachRows.nth(0).locator('img')).toHaveAttribute(
+      'src',
+      /\/media\/uploads\/202601\/e2e-b\.webp\?size=orig/,
+    );
+    await expect(
+      attachRows.nth(1).locator('select.moment-size-select'),
+    ).toHaveValue('1080');
+
     await page.locator('#btnPublish').click();
     await expect(page.locator('#momentDlg')).not.toHaveAttribute('open', '');
     expect(saved.at(-1)).toMatchObject({
@@ -823,8 +874,12 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
       payload: {
         body: '更新后的正文',
         category: '日常',
-        mediaKey: MEDIA_ITEMS[0].key,
-        mediaSize: '1080',
+        media: [
+          { key: MEDIA_ITEMS[1].key, size: 'orig' },
+          { key: MEDIA_ITEMS[0].key, size: '1080' },
+        ],
+        mediaKey: MEDIA_ITEMS[1].key,
+        mediaSize: 'orig',
       },
     });
 
@@ -834,6 +889,7 @@ test.describe('后台动态页 · 列表 + 呼出对话框', () => {
     await expect(page.locator('#noteText')).toHaveValue('');
     await expect(page.locator('#momentDlg #noteTag')).toHaveCount(0);
     await expect(page.locator('#momentDlg #tagQuick')).toHaveCount(0);
+    await expect(page.locator('#attachList .moment-attach-row')).toHaveCount(0);
     // 分类不再有默认值：新建时为空，要手动填写后才允许发布
     await expect(page.locator('#noteCategory')).toHaveValue('');
     await page.locator('#noteCategory').fill('日常');
@@ -929,6 +985,7 @@ test.describe('后台展柜 · 分类组合框', () => {
     await page.locator('#mpTabExisting').click();
     await page.locator('#mpSize .mp-size-btn[data-size="1440"]').click();
     await page.locator('#mpGrid .mp-item').first().click();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#fMedia')).toHaveValue(
       'uploads/202601/e2e-a.webp',
     );

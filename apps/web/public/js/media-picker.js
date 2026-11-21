@@ -6,16 +6,20 @@
 
      用法：
        MyonMediaPicker.open({
-         mode: "insert" | "pick",     // insert=插入 Markdown 图片语法；pick=取一张配图
+         mode: "insert" | "pick",     // insert=插入 Markdown 图片语法；pick=选择配图
          api: "/api/v1/admin/media",  // 媒体列表 / 上传接口
          gifApi: ".../media/gif-webp",// GIF 转码代理（可空）
          base: "/media/",             // 图片地址前缀，来自 mediaUrl()
-         selectedKey: "uploads/xx",   // pick 模式下的已选图
+         multiple: false,             // 可选；true 时网格可多选
+         selectedKey: "uploads/xx",   // 单选模式的已选图
+         selectedKeys: ["uploads/a"], // 多选模式的已选图
          categoryId: "cat_posts",     // 可选；入口默认分类（上传归类用，可为空=未分类）
          sizes: ["480", "720", "1080", "1440", "orig"], // 可选；传了才显示尺寸栏
          defaultSize: "720",          // 尺寸栏默认高亮档位
          size: "720",                 // 初始选中档位（优先于 defaultSize）
-         onPick: function (item, size) {} // item = MediaItem；size = 当前尺寸档位
+         // 选择 / 上传后只更新勾选，点「确定」才回调；取消 / 关闭不应用。
+         // 单选：onPick(item, size)；多选：onPick(items, size)。
+         onPick: function (itemOrItems, size) {}
        })
 
      分类筛选：现有图片顶部有「全部 + 动态分类 + 未分类」chips，列表与搜索都由服务端
@@ -112,7 +116,8 @@
       '<p class="mp-size-hint">长边像素 · 默认 720px</p>' +
       "</div>" +
       '<div class="dlg-f"><span class="mp-selected" id="mpSelected">—</span>' +
-      '<div class="dlg-a"><button class="p-btn" id="mpCancel" type="button">关闭</button></div></div>' +
+      '<div class="dlg-a"><button class="p-btn" id="mpCancel" type="button">取消</button>' +
+      '<button class="p-btn p-btn--pub" id="mpConfirm" type="button" disabled>确定</button></div></div>' +
       "</div>";
     document.body.appendChild(dlg);
     refs = {
@@ -136,7 +141,8 @@
       sizeBar: document.getElementById("mpSize"),
       sizeOpts: document.getElementById("mpSizeOpts"),
       selected: document.getElementById("mpSelected"),
-      cancel: document.getElementById("mpCancel")
+      cancel: document.getElementById("mpCancel"),
+      confirm: document.getElementById("mpConfirm")
     };
     bindEvents();
   }
@@ -162,19 +168,53 @@
     refs.notice.hidden = !!state.token;
   }
 
+  /** 按 key 找当前列表里的图；尚未加载到这一页时用 key 兜底，保证仍能确认。 */
+  function itemForKey(key) {
+    for (var i = 0; i < state.items.length; i += 1) {
+      if (state.items[i].key === key) return state.items[i];
+    }
+    return {
+      id: key,
+      key: key,
+      filename: String(key).split("/").pop() || key,
+      mime: "",
+      size: 0,
+      width: null,
+      height: null,
+      createdAt: "",
+      categoryId: null,
+      categoryName: null,
+      aliases: []
+    };
+  }
+
   function paintSelected() {
-    var label = "—";
-    if (state.selectedKey) {
-      var matched = null;
-      for (var i = 0; i < state.items.length; i += 1) {
-        if (state.items[i].key === state.selectedKey) {
-          matched = state.items[i];
-          break;
-        }
-      }
-      label = "已选：" + (matched ? imageName(matched) : state.selectedKey);
+    if (!refs || !refs.selected) return;
+    var keys = state.pickedKeys || [];
+    var label;
+    if (keys.length === 0) {
+      label = state.multiple ? "未选择图片（可多选）" : "未选择图片";
+    } else if (state.multiple) {
+      label = "已选 " + keys.length + " 张 · 点「确定」应用";
+    } else {
+      label = "已选：" + imageName(itemForKey(keys[0]));
     }
     refs.selected.textContent = label;
+    if (refs.confirm) refs.confirm.disabled = keys.length === 0 || state.busy;
+  }
+
+  /** 网格勾选态：只切换 class / aria，不重建节点，避免缩略图重新加载。 */
+  function paintGridSelection() {
+    if (!refs || !refs.grid) return;
+    var keys = state.pickedKeys || [];
+    Array.prototype.forEach.call(
+      refs.grid.querySelectorAll(".mp-item"),
+      function (btn) {
+        var on = keys.indexOf(btn.getAttribute("data-key")) >= 0;
+        btn.classList.toggle("is-on", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    );
   }
 
   function mediaSrc(item) {
@@ -319,12 +359,14 @@
       btn.setAttribute("data-key", item.key);
       btn.setAttribute("data-name", imageName(item));
       btn.setAttribute("data-category-id", item.categoryId || "");
+      var picked = state.pickedKeys.indexOf(item.key) >= 0;
+      btn.classList.toggle("is-on", picked);
+      btn.setAttribute("aria-pressed", picked ? "true" : "false");
       var aliases = Array.isArray(item.aliases) ? item.aliases : [];
       var catName = item.categoryName || "未分类";
       var title = imageName(item) + " · " + catName + " · " + formatSize(item.size);
       if (aliases.length) title += " · 别名：" + aliases.join("、");
       btn.title = title;
-      if (state.selectedKey && item.key === state.selectedKey) btn.classList.add("is-on");
       var img = document.createElement("img");
       img.src = previewSrc(item);
       img.alt = imageName(item);
@@ -337,7 +379,7 @@
         btn.appendChild(el("span", "mp-item-name", aliases.join(" · ")));
       }
       btn.addEventListener("click", function () {
-        pick(item);
+        togglePick(item);
       });
       frag.appendChild(btn);
     });
@@ -444,11 +486,32 @@
   }
 
   /* ---------------- 选择 / 上传 ---------------- */
-  function pick(item) {
-    if (!item || state.busy) return;
+  function togglePick(item) {
+    if (!item || !item.key || state.busy) return;
+    var index = state.pickedKeys.indexOf(item.key);
+    if (state.multiple) {
+      if (index >= 0) state.pickedKeys.splice(index, 1);
+      else state.pickedKeys.push(item.key);
+    } else {
+      state.pickedKeys = [item.key];
+    }
+    paintGridSelection();
+    paintSelected();
+  }
+
+  /** 只有点「确定」才回调并关闭；取消 / Esc / 点背景都不应用。 */
+  function confirmPick() {
+    if (!state || state.busy) return;
+    var keys = state.pickedKeys.slice();
+    if (!keys.length) return;
     var size = activeSize();
-    state.selectedKey = item.key;
-    if (typeof state.onPick === "function") state.onPick(item, size || undefined);
+    if (typeof state.onPick === "function") {
+      if (state.multiple) {
+        state.onPick(keys.map(itemForKey), size || undefined);
+      } else {
+        state.onPick(itemForKey(keys[0]), size || undefined);
+      }
+    }
     closeDialog();
   }
 
@@ -531,12 +594,20 @@
         state.busy = false;
         refs.pickFile.disabled = false;
         if (uploaded.length) {
-          var size = activeSize();
-          uploaded.forEach(function (item) {
-            if (typeof state.onPick === "function")
-              state.onPick(item, size || undefined);
-          });
-          closeDialog();
+          // 上传成功后只更新勾选，切回「现有图片」让用户确认尺寸再点「确定」。
+          if (state.multiple) {
+            uploaded.forEach(function (item) {
+              if (state.pickedKeys.indexOf(item.key) < 0)
+                state.pickedKeys.push(item.key);
+            });
+          } else {
+            state.pickedKeys = [uploaded[uploaded.length - 1].key];
+          }
+          paintSelected();
+          paintGridSelection();
+          setTab("existing");
+        } else {
+          paintSelected();
         }
         return;
       }
@@ -586,12 +657,23 @@
     var sizes = Array.isArray(opts.sizes) ? opts.sizes.slice() : [];
     var wanted = String(opts.size || opts.defaultSize || "720");
     if (sizes.length && sizes.indexOf(wanted) < 0) wanted = sizes[0];
+    var multiple = !!opts.multiple;
+    var pickedKeys = Array.isArray(opts.selectedKeys)
+      ? opts.selectedKeys.filter(function (key) {
+          return typeof key === "string" && key.length > 0;
+        })
+      : [];
+    if (!pickedKeys.length && opts.selectedKey) {
+      pickedKeys = [String(opts.selectedKey)];
+    }
+    pickedKeys = multiple ? pickedKeys : pickedKeys.slice(0, 1);
     state = {
       mode: opts.mode === "pick" ? "pick" : "insert",
+      multiple: multiple,
       api: opts.api || "",
       gifApi: opts.gifApi || "",
       base: opts.base || "/media/",
-      selectedKey: opts.selectedKey || null,
+      pickedKeys: pickedKeys,
       entryCategoryId: typeof opts.categoryId === "string" ? opts.categoryId : "",
       category: "all",
       categories: [],
@@ -610,7 +692,12 @@
       loading: false,
       busy: false
     };
-    refs.title.textContent = state.mode === "pick" ? "选择配图" : "插入图片";
+    refs.title.textContent =
+      state.mode === "pick"
+        ? state.multiple
+          ? "选择配图（可多选）"
+          : "选择配图"
+        : "插入图片";
     refs.search.value = "";
     refs.upList.innerHTML = "";
     refs.state.textContent = "—";
@@ -646,6 +733,7 @@
     });
     refs.more.addEventListener("click", function () { loadMedia(false); });
     refs.cancel.addEventListener("click", closeDialog);
+    refs.confirm.addEventListener("click", confirmPick);
     refs.pickFile.addEventListener("click", function () { refs.file.click(); });
     refs.file.addEventListener("change", function () {
       handleFiles(refs.file.files);

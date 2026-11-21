@@ -381,6 +381,7 @@ test.describe('后台设置 · 图片路径媒体选择器', () => {
     await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
 
     await page.locator('#mpGrid .mp-item').first().click();
+    await page.locator('#mpConfirm').click();
     await expect(page.locator('#homeCoverImage')).toHaveValue(
       '/media/uploads/202601/e2e-pick.webp',
     );

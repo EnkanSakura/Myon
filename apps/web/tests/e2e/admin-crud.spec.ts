@@ -40,6 +40,7 @@ interface MomentItem {
   pinned: boolean;
   mediaKey: string | null;
   mediaSize: string | null;
+  media?: Array<{ key: string; size: string | null }>;
 }
 
 interface GalleryItem {
@@ -466,6 +467,67 @@ test.describe('后台动态图片尺寸', () => {
       expect(afterBody.items.find((item) => item.id === id)?.mediaSize).toBe(
         'orig',
       );
+    } finally {
+      if (id) await deleteQuietly(request, `/api/v1/admin/moments/${id}`);
+    }
+  });
+});
+
+test.describe('后台动态多图', () => {
+  test('新建多图动态，公开列表返回 media 数组且旧字段指向第一张', async ({
+    request,
+  }) => {
+    const marker = uniqueSuffix();
+    let id: string | undefined;
+
+    try {
+      const media = [
+        { key: 'moments/w3-museum.jpg', size: '720' },
+        { key: 'moments/w3-museum-b.jpg', size: '1080' },
+      ];
+      const created = await request.post('/api/v1/admin/moments', {
+        headers: ADMIN_HEADERS,
+        data: {
+          body: `E2E 多图动态 ${marker}`,
+          category: '碎念',
+          media,
+        },
+      });
+      expect(created.status()).toBe(201);
+      const createdBody = (await created.json()) as { item: MomentItem };
+      id = createdBody.item.id;
+      expect(createdBody.item.media).toEqual(media);
+      expect(createdBody.item.mediaKey).toBe(media[0]?.key);
+      expect(createdBody.item.mediaSize).toBe('720');
+
+      const listed = await request.get('/api/v1/moments?limit=100');
+      const listedBody = (await listed.json()) as Paginated<MomentItem>;
+      const listedItem = listedBody.items.find((item) => item.id === id);
+      expect(listedItem?.media).toEqual(media);
+
+      // PATCH 传 media 时整体替换；旧字段同步第一张
+      const patched = await request.patch(`/api/v1/admin/moments/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { media: [{ key: 'moments/w3-museum.jpg', size: 'orig' }] },
+      });
+      expect(patched.status()).toBe(200);
+      const patchedBody = (await patched.json()) as { item: MomentItem };
+      expect(patchedBody.item.media).toEqual([
+        { key: 'moments/w3-museum.jpg', size: 'orig' },
+      ]);
+      expect(patchedBody.item.mediaKey).toBe('moments/w3-museum.jpg');
+      expect(patchedBody.item.mediaSize).toBe('orig');
+
+      // 旧客户端只传 mediaSize：改的是第一张，数组不丢
+      const legacy = await request.patch(`/api/v1/admin/moments/${id}`, {
+        headers: ADMIN_HEADERS,
+        data: { mediaSize: '480' },
+      });
+      expect(legacy.status()).toBe(200);
+      const legacyBody = (await legacy.json()) as { item: MomentItem };
+      expect(legacyBody.item.media).toEqual([
+        { key: 'moments/w3-museum.jpg', size: '480' },
+      ]);
     } finally {
       if (id) await deleteQuietly(request, `/api/v1/admin/moments/${id}`);
     }

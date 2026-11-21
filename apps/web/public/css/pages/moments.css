@@ -55,7 +55,7 @@
 }
 .mh .tm::before{content:"";display:inline-block;width:7px;height:7px;background:var(--pink);border:2px solid var(--ink);margin-right:7px;vertical-align:0}
 .mh .no{color:var(--ink-62);white-space:nowrap}
-.moment p{font-size:15px;line-height:1.75;font-weight:500;color:var(--ink);letter-spacing:.01em}
+.moment p{font-size:15px;line-height:1.75;font-weight:500;color:var(--ink);letter-spacing:.01em;white-space:pre-wrap;overflow-wrap:anywhere}
 .inlink{font-weight:700;border-bottom:2px solid var(--pink-deep);transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
 .inlink:hover{background:var(--pink);color:var(--ink);border-bottom-color:var(--ink)}
 .mline{
@@ -106,10 +106,23 @@
 /* 置顶贴纸：落在面板右上角，任何面板位置都能贴 */
 .moment .pin{position:absolute;z-index:6;right:-12px;top:-14px;left:auto;transform:rotate(4deg)}
 
-/* 图框：每条动态最多一张图，统一 4:3，图注叠在底边 */
+/* 点击卡片任一空白处都打开详情；底部标签按钮浮在热区上方 */
+.moment-hit{
+  position:absolute;inset:0;z-index:3;display:block;width:100%;height:100%;
+  padding:0;border:0;border-radius:0;background:transparent;cursor:pointer;
+}
+.moment-hit:focus-visible{outline:3px solid var(--pink-deep);outline-offset:-6px}
+.moment .panel-tab,.moment .pin{pointer-events:none}
+.moment .mf .tag{position:relative;z-index:4}
+
+/* 图框：单图 4:3；多图用两列缩略格，图注在详情里展开 */
 .moment .frame{margin:12px 0 4px;box-shadow:var(--hard-sm);rotate:var(--frot,0deg)}
 .moment .frame .cap{font-size:10px;padding:6px 8px;border-top-width:2px;letter-spacing:.08em}
 .moment .frame.f-photo{aspect-ratio:4/3;--frot:-.8deg;margin-top:12px}
+.moment-figs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 4px}
+.moment-figs .frame{margin:0;aspect-ratio:1/1;rotate:0deg;overflow:hidden}
+.moment-figs .frame img{display:block;width:100%;height:100%;object-fit:cover}
+.moment-figs .frame:last-child:nth-child(odd){grid-column:1 / -1;aspect-ratio:16/9}
 
 /* 空状态 */
 .empty{
@@ -144,6 +157,41 @@
 .foot .colophon{color:color-mix(in srgb, var(--paper) 60%, transparent)}
 .foot .col h4{color:var(--pink)}
 
+/* ---------- 动态详情 ---------- */
+.mv{
+  width:min(860px,calc(100vw - 32px));max-height:92vh;margin:auto;padding:0;
+  border:3px solid var(--ink);background:var(--paper);color:var(--ink);
+  box-shadow:10px 10px 0 var(--pink);
+}
+.mv:modal{overscroll-behavior:contain}
+.mv::backdrop{background:rgba(0,0,0,.68);overflow:hidden;overscroll-behavior:contain}
+.mv[open]{animation:mvIn .24s var(--ease) both}
+@keyframes mvIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.mv-box{max-height:calc(92vh - 6px);overflow:auto;padding:22px 24px 18px;overscroll-behavior:contain}
+.mv-head{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:2px solid var(--line-2)}
+.mv-meta{display:flex;align-items:baseline;gap:12px;min-width:0;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-62)}
+.mv-no{color:var(--ink);font-weight:700;white-space:nowrap}
+.mv-time{white-space:nowrap}
+.mv-cat{white-space:nowrap}
+.mv-close{
+  margin-left:auto;width:40px;height:40px;flex:none;display:grid;place-items:center;
+  border:2px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer;
+}
+.mv-close:hover{background:var(--pink)}
+.mv-close:focus-visible{outline:3px solid var(--pink-deep);outline-offset:2px}
+.mv-body{margin:16px 0 4px;font-size:17px;line-height:1.85;font-weight:500;letter-spacing:.01em;white-space:pre-wrap;overflow-wrap:anywhere}
+.mv-figs{display:grid;gap:14px;margin-top:16px}
+.mv-figs[hidden]{display:none}
+.mv-fig{margin:0;box-shadow:var(--hard-sm);rotate:0deg}
+.mv-fig img{display:block;width:100%;height:auto;max-height:58vh;object-fit:contain;background:var(--paper-2)}
+.mv-fig .cap{font-size:10px;padding:6px 8px;letter-spacing:.08em}
+.mv-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:18px;padding-top:10px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62);
+}
+.mv-hint{color:var(--ink-62)}
+
 /* ---------- 响应式 ---------- */
 @media (min-width:761px){
   /* 四格分镜：照片面板跨两行，文字面板在另一侧补齐，宽窄交替 */
@@ -172,6 +220,12 @@
   .moment{padding:12px 13px 10px}
   .moment.has-tab{padding-top:31px}
   .moment .pin{right:6px;top:-12px;left:auto}
+  .moment-figs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .mv{width:calc(100vw - 20px);max-height:94vh}
+  .mv-box{max-height:calc(94vh - 6px);padding:16px 16px 14px}
+  .mv-body{font-size:15px;line-height:1.8}
+  .mv-head{flex-wrap:wrap}
+  .mv-close{margin-left:auto}
   .empty{padding:20px 18px;gap:16px;align-items:flex-start}
   .empty .zero{font-size:84px}
   .empty-body h3{font-size:20px}

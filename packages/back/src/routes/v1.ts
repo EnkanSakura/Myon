@@ -29,6 +29,7 @@ import {
 import { fetchLinkPreview } from '../link-preview';
 import { renderArticle, renderMarkdown } from '../markdown';
 import { readMediaCount } from '../media';
+import { momentResponse } from '../moments';
 import { readSiteSettings, sanitizeFooterHtml } from '../site';
 import { readTraffic } from '../traffic';
 import type { AppBindings } from '../types';
@@ -222,6 +223,7 @@ v1.get('/moments', async (c) => {
       pinned: moments.pinned,
       mediaKey: moments.mediaKey,
       mediaSize: moments.mediaSize,
+      media: moments.media,
       createdAt: moments.createdAt,
     })
     .from(moments)
@@ -235,7 +237,7 @@ v1.get('/moments', async (c) => {
     .where(where);
 
   return c.json({
-    items: rows,
+    items: rows.map(momentResponse),
     total: totalRows[0]?.total ?? 0,
     limit,
     offset,

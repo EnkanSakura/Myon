@@ -8,7 +8,11 @@ import { env } from 'cloudflare:workers';
 import app from '@myon/back';
 import type { AppBindings } from '@myon/back/types';
 import type { CategoriesResponse } from '@myon/shared';
-import { apiBasePath, mediaImageSizes } from '@myon/shared';
+import {
+  apiBasePath,
+  mediaImageSizes,
+  momentMediaMaxCount,
+} from '@myon/shared';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { mediaUrl } from '../../lib/media';
 
@@ -19,8 +23,8 @@ const momentsApi = `${apiBasePath}/admin/moments`;
 const mediaApi = `${apiBasePath}/admin/media`;
 const gifWebpApi = `${mediaApi}/gif-webp`;
 
-// 分类建议来自公开的分类计数（/categories 不需要令牌）；取不到就用一组常见分类兜底。
-// categoryOptions 只用于对话框候选与筛选下拉，不再给新建动态预设分类。
+// 分类计数来自公开接口（/categories 不需要令牌）；接口失败时保持空列表，
+// 不再用硬编码分类兜底。分类组合框只显示真实存在的分类。
 let momentCategories: string[] = [];
 try {
   const categoriesRes = await app.request('/api/v1/categories', {}, binding);
@@ -31,10 +35,7 @@ try {
 } catch (error) {
   console.error('后台动态页读取分类失败', error);
 }
-const categoryOptions =
-  momentCategories.length > 0
-    ? momentCategories
-    : ['日常', '技术', '收藏', '看番', '碎念'];
+const categoryOptions = momentCategories;
 
 // 图片预览的 URL 规则来自 mediaUrl()，脚本只负责把 key 拼回去。
 const mediaSample = mediaUrl('__KEY__');
@@ -50,7 +51,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     <link rel="stylesheet" href="/css/pages/admin-moments.css" />
   </Fragment>
 
-<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase} data-cat-options={JSON.stringify(categoryOptions)} data-image-sizes={JSON.stringify(mediaImageSizes)}>
+<div class="page" data-api-moments={momentsApi} data-api-media={mediaApi} data-gif-api={gifWebpApi} data-media-base={mediaBase} data-cat-options={JSON.stringify(categoryOptions)} data-image-sizes={JSON.stringify(mediaImageSizes)} data-media-max={momentMediaMaxCount}>
 
     <!-- ---------- 页头 ---------- -->
     <header class="phead">
@@ -159,16 +160,13 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
     </div>
 
     <div class="moment-field moment-field--wide">
-      <span class="moment-label">配图 / IMAGE</span>
+      <span class="moment-label">配图 / IMAGE <em class="moment-label-hint">最多 9 张 · 每张可单独改尺寸</em></span>
       <div class="moment-media">
         <button class="moment-act" id="btnPickImage" type="button">选择图片 <span aria-hidden="true">＋</span></button>
-        <div class="moment-attach" id="attachBox">
-          <img id="attachImg" alt="已选配图">
-          <span class="moment-attach-name" id="attachName">未选图</span>
-          <button class="moment-act" id="btnRemoveImg" type="button">移除</button>
-        </div>
-        <span class="moment-size" id="attachSize" title="配图的长边像素">长边 720px</span>
+        <button class="moment-act" id="btnClearImages" type="button">移除全部</button>
       </div>
+      <div class="moment-attach-list" id="attachList" aria-live="polite"></div>
+      <p class="moment-media-empty" id="attachEmpty">未选配图 · 从媒体库选择或上传后点「确定」</p>
     </div>
 
     <div class="moment-fields">
@@ -179,6 +177,7 @@ const mediaBase = mediaSample ? mediaSample.replace('__KEY__', '') : '';
           <button class="combo-toggle" id="noteCategoryToggle" type="button" aria-label="展开已有分类" aria-expanded="false"></button>
           <span class="combo-list" id="categoryList" role="listbox" aria-label="已有分类" hidden></span>
         </span>
+        <p class="moment-field-hint">可从已有分类里选，也可以新建</p>
       </div>
 
       <div class="moment-field">

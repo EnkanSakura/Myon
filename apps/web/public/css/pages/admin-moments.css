@@ -30,11 +30,16 @@
   font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:0 5px;line-height:1.7;
 }
 .self-tag.is-private{background:var(--ppk);color:var(--ink);border-color:var(--ink)}
-.nr-body{font-size:15px;font-weight:500;line-height:1.65;letter-spacing:.01em;color:var(--pp-80);min-width:0;overflow-wrap:anywhere}
+.nr-body{font-size:15px;font-weight:500;line-height:1.65;letter-spacing:.01em;color:var(--pp-80);min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .nr-thumb{width:64px;height:48px;border:2px solid var(--pline);overflow:hidden;position:relative;background:var(--desk)}
 .nr-thumb.is-empty{display:grid;place-items:center;border-color:var(--pline-2);background:transparent}
 .nr-thumb.is-empty .nr-empty{font-size:14px;color:var(--pp-70)}
 .nr-thumb img{width:100%;height:100%;object-fit:cover}
+.nr-thumb-count{
+  position:absolute;right:0;bottom:0;padding:0 4px;
+  background:var(--ink);color:var(--pp);border-top:2px solid var(--pp);border-left:2px solid var(--pp);
+  font-family:var(--mono);font-size:10px;line-height:1.6;letter-spacing:.04em;
+}
 .nr-empty{font-family:var(--mono);font-size:12px;color:var(--pp-62)}
 .nr-tag{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
 .nr-tag .tag{font-size:11px;padding:1px 6px 2px;letter-spacing:.08em;background:transparent;border:2px solid color-mix(in srgb, var(--pp) 30%, transparent);color:var(--pp-62);box-shadow:none;line-height:1.5}
@@ -86,6 +91,8 @@
   font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--ink-62);
 }
 .moment-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-top:12px}
+.moment-field-hint{margin:4px 0 0;font-family:var(--mono);font-size:11px;line-height:1.6;letter-spacing:.02em;color:var(--ink-62)}
+.moment-label-hint{font-style:normal;font-weight:400;letter-spacing:.02em;color:var(--ink-62)}
 
 /* 正文：字数与纯文本说明 */
 .moment-count{
@@ -94,7 +101,7 @@
 }
 .moment-count b{font-family:var(--mono);font-weight:500;color:var(--ink-80)}
 
-/* 配图：选择按钮 + 已选预览行 */
+/* 配图：选择按钮 + 逐张尺寸 / 移除 */
 .moment-media{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .moment-act{
   border:2px solid var(--ink);background:transparent;border-radius:0;color:var(--ink-62);
@@ -104,19 +111,29 @@
 }
 .moment-act:hover{background:var(--pink);color:var(--ink)}
 .moment-act:focus-visible{outline:2px solid var(--pink-deep);outline-offset:2px}
-.moment-attach{display:none;align-items:center;gap:8px;min-width:0;padding:4px 8px;border:2px solid var(--ink);background:var(--paper-2)}
-.moment-attach.is-on{display:flex}
-.moment-attach img{display:block;width:56px;height:40px;object-fit:cover;border:2px solid var(--ink)}
+.moment-act[hidden]{display:none}
+.moment-attach-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.moment-attach-row{
+  display:grid;grid-template-columns:56px minmax(0,1fr) 126px auto;align-items:center;gap:8px;
+  padding:5px 8px;border:2px solid var(--pline);background:var(--paper-2);min-width:0;
+}
+.moment-attach-row img{display:block;width:56px;height:40px;object-fit:cover;border:2px solid var(--ink)}
+.moment-attach-meta{display:flex;flex-direction:column;gap:1px;min-width:0}
+.moment-attach-index{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-62);line-height:1.5}
 .moment-attach-name{
-  min-width:0;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-family:var(--mono);font-size:12px;letter-spacing:.03em;color:var(--ink-62);
 }
-/* 配图尺寸文案：硬边框 + 等宽小字，和后台其它元信息标签一致 */
-.moment-size{
-  display:inline-block;flex:none;padding:3px 7px;border:2px solid var(--pline);border-radius:0;
-  font-family:var(--mono);font-size:11px;letter-spacing:.04em;line-height:1.5;color:var(--ink-62);
-  white-space:nowrap;
+.moment-size-select{
+  width:100%;height:34px;padding:0 8px;border:2px solid var(--ink);border-radius:0;
+  background:var(--paper);color:var(--ink);font-family:var(--mono);font-size:11px;letter-spacing:.02em;
 }
+.moment-size-select:focus{outline:none;border-color:var(--pink-deep);box-shadow:2px 2px 0 var(--pink)}
+.moment-attach-remove{padding:3px 8px}
+.moment-media-empty{
+  margin:6px 0 0;font-family:var(--mono);font-size:11px;line-height:1.7;letter-spacing:.02em;color:var(--ink-62);
+}
+.moment-media-empty[hidden]{display:none}
 
 /* 单行输入 + 可见性 / 置顶开关 */
 .moment-input{
@@ -165,4 +182,7 @@
   .moment-foot{flex-wrap:wrap}
   .moment-actions{width:100%;justify-content:flex-end}
   .moment-attach-name{max-width:120px}
+  .moment-attach-row{grid-template-columns:48px minmax(0,1fr) 108px;gap:6px}
+  .moment-attach-row img{width:48px;height:36px}
+  .moment-attach-remove{grid-column:2 / -1;justify-self:end}
 }

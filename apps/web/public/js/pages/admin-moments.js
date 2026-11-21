@@ -68,6 +68,7 @@
   var MEDIA_API = pageEl ? pageEl.getAttribute("data-api-media") || "" : "";
   var GIF_API = pageEl ? pageEl.getAttribute("data-gif-api") || "" : "";
   var MEDIA_BASE = pageEl ? pageEl.getAttribute("data-media-base") || "" : "";
+  // 分类候选只来自服务端渲染的真实分类；没有数据时组合框提示直接输入。
   var CATEGORY_OPTIONS = (function () {
     try {
       var raw = pageEl ? pageEl.getAttribute("data-cat-options") : "";
@@ -77,6 +78,9 @@
       return [];
     }
   })();
+  // 动态最多配几张图：由页面渲染 @myon/shared 的 momentMediaMaxCount。
+  var MOMENT_MEDIA_MAX =
+    Number(pageEl ? pageEl.getAttribute("data-media-max") : "") || 9;
   // 配图尺寸档位：由页面用 @myon/shared 的 mediaImageSizes 渲染成 JSON。
   var IMAGE_SIZES = (function () {
     var raw = pageEl ? pageEl.getAttribute("data-image-sizes") : "";
@@ -108,6 +112,28 @@
     var image = window.MyonImage;
     if (image && typeof image.describe === "function") return image.describe(size);
     return String(size) === "orig" ? "原图" : "长边 " + size + "px";
+  }
+
+  /** 接口数据 → 表单可编辑的配图数组；兼容只有 mediaKey 的老动态。 */
+  function mediaOf(item) {
+    var list = Array.isArray(item && item.media) ? item.media : [];
+    var entries = list
+      .filter(function (entry) { return entry && entry.key; })
+      .map(function (entry) {
+        return {
+          key: entry.key,
+          size: entry.size || DEFAULT_MEDIA_SIZE,
+          name: entry.filename || fileName(entry.key)
+        };
+      });
+    if (!entries.length && item && item.mediaKey) {
+      entries = [{
+        key: item.mediaKey,
+        size: item.mediaSize || DEFAULT_MEDIA_SIZE,
+        name: fileName(item.mediaKey)
+      }];
+    }
+    return entries.slice(0, MOMENT_MEDIA_MAX);
   }
 
   /* ================= 元素 ================= */
@@ -158,10 +184,9 @@
   var btnPublish = $("btnPublish");
   var btnCancelMoment = $("btnCancelMoment");
   var btnPickImage = $("btnPickImage");
-  var attachBox = $("attachBox");
-  var attachImg = $("attachImg");
-  var attachName = $("attachName");
-  var btnRemoveImg = $("btnRemoveImg");
+  var attachList = $("attachList");
+  var attachEmpty = $("attachEmpty");
+  var btnClearImages = $("btnClearImages");
 
   // 删除确认
   var confirmDlg = $("confirmDlg");
@@ -182,9 +207,7 @@
     imgOnly: false,
     q: "",
     editingId: null,
-    mediaKey: null,
-    mediaSize: DEFAULT_MEDIA_SIZE,
-    mediaName: "",
+    media: [],
     visibility: "public",
     pinned: false,
     busy: false,
@@ -291,9 +314,10 @@
 
   function buildRow(item) {
     var row = el("div", "note-r" + (item.pinned ? " is-pinned" : ""));
+    var itemMedia = mediaOf(item);
     row.setAttribute("data-id", item.id);
     row.setAttribute("data-tag", item.category);
-    row.setAttribute("data-img", item.mediaKey ? "1" : "0");
+    row.setAttribute("data-img", itemMedia.length ? "1" : "0");
     row.setAttribute("data-pinned", item.pinned ? "1" : "0");
     row.setAttribute("data-vis", item.visibility);
     row.setAttribute("data-text", (item.body + " " + item.category).toLowerCase());
@@ -307,7 +331,8 @@
     var body = el("div", "nr-body", item.body);
 
     var thumb = el("div", "nr-thumb");
-    var src = mediaSrc(item.mediaKey);
+    var firstMedia = itemMedia[0];
+    var src = firstMedia ? mediaSrc(firstMedia.key) : "";
     if (src) {
       var img = document.createElement("img");
       // 列表缩略图走低清预览（长边 240px），不拉原图。
@@ -315,6 +340,9 @@
       img.alt = "动态配图缩略";
       img.loading = "lazy";
       thumb.appendChild(img);
+      if (itemMedia.length > 1) {
+        thumb.appendChild(el("span", "nr-thumb-count", "+" + (itemMedia.length - 1)));
+      }
     } else {
       thumb.classList.add("is-empty");
       thumb.appendChild(el("span", "nr-empty", "—"));
@@ -541,29 +569,54 @@
     pinPick.textContent = state.pinned ? "已置顶 · 点击取消" : "置顶这条";
   }
 
+  /** 配图列表：每张一行，可单独改尺寸 / 移除。 */
   function paintMedia() {
-    if (!attachBox) return;
-    if (state.mediaKey) {
-      attachBox.classList.add("is-on");
-      // 配图预览与写入正文的地址一致：按 mediaSize 取转换图。
-      attachImg.src = contentSrc(mediaSrc(state.mediaKey), state.mediaSize);
-      attachName.textContent = state.mediaName || fileName(state.mediaKey);
-      attachName.title = state.mediaKey;
-    } else {
-      attachBox.classList.remove("is-on");
-      attachImg.removeAttribute("src");
-      attachName.textContent = "未选图";
-      attachName.removeAttribute("title");
-    }
-    paintMediaSize();
-  }
+    if (!attachList) return;
+    attachList.innerHTML = "";
+    state.media.forEach(function (entry, index) {
+      var row = el("div", "moment-attach-row");
+      row.setAttribute("data-key", entry.key);
 
-  /** 配图尺寸文案：没选图时也展示当前档位，方便发布前确认。 */
-  function paintMediaSize() {
-    var label = $("attachSize");
-    if (!label) return;
-    label.textContent = sizeText(state.mediaSize || DEFAULT_MEDIA_SIZE);
-    label.title = "配图长边像素 · " + sizeText(state.mediaSize || DEFAULT_MEDIA_SIZE);
+      var img = document.createElement("img");
+      img.alt = "第 " + (index + 1) + " 张配图";
+      img.loading = "lazy";
+      img.src = contentSrc(mediaSrc(entry.key), entry.size || DEFAULT_MEDIA_SIZE);
+      row.appendChild(img);
+
+      var meta = el("div", "moment-attach-meta");
+      meta.appendChild(el("span", "moment-attach-index", "FIG." + pad2(index + 1)));
+      var name = el("span", "moment-attach-name", entry.name || fileName(entry.key));
+      name.title = entry.key;
+      meta.appendChild(name);
+      row.appendChild(meta);
+
+      var select = document.createElement("select");
+      select.className = "moment-size-select";
+      select.setAttribute("aria-label", "第 " + (index + 1) + " 张配图的长边像素");
+      IMAGE_SIZES.forEach(function (size) {
+        var option = document.createElement("option");
+        option.value = size;
+        option.textContent = sizeText(size);
+        if (size === (entry.size || DEFAULT_MEDIA_SIZE)) option.selected = true;
+        select.appendChild(option);
+      });
+      select.addEventListener("change", function () {
+        entry.size = select.value;
+        img.src = contentSrc(mediaSrc(entry.key), entry.size);
+      });
+      row.appendChild(select);
+
+      var remove = el("button", "moment-act moment-attach-remove", "移除");
+      remove.type = "button";
+      remove.addEventListener("click", function () {
+        state.media.splice(index, 1);
+        paintMedia();
+      });
+      row.appendChild(remove);
+      attachList.appendChild(row);
+    });
+    if (attachEmpty) attachEmpty.hidden = state.media.length > 0;
+    if (btnClearImages) btnClearImages.hidden = state.media.length === 0;
   }
 
   function paintPublishLabel() {
@@ -577,7 +630,7 @@
     if (momentDlgState) momentDlgState.textContent = text;
   }
 
-  /* 分类候选：共享组合框，候选来自服务端渲染的 /api/v1/categories 数据 */
+  /* 分类候选：与文章编辑共用的组合框，只读取真实存在的分类。 */
   function initCategoryCombo() {
     if (!window.MyonCombo || !noteCategory || !categoryList) return;
     categoryCombo = window.MyonCombo.attach({
@@ -596,10 +649,7 @@
     state.editingId = editing ? item.id : null;
     state.visibility = editing && item.visibility === "private" ? "private" : "public";
     state.pinned = editing ? !!item.pinned : false;
-    state.mediaKey = editing ? item.mediaKey || null : null;
-    // 老数据没有 mediaSize：编辑时回填默认 720，新建也默认 720。
-    state.mediaSize = editing && item.mediaSize ? item.mediaSize : DEFAULT_MEDIA_SIZE;
-    state.mediaName = state.mediaKey ? fileName(state.mediaKey) : "";
+    state.media = editing ? mediaOf(item) : [];
     noteText.value = editing ? item.body || "" : "";
     // 新建动态不预设分类；编辑时保留原分类（缺失才留空）。
     noteCategory.value = editing && item.category ? item.category : "";
@@ -658,18 +708,23 @@
       return null;
     }
     if (!category) {
-      showFormBanner("error", "分类不能为空", "填一个分类，或者从已有分类里选一个。");
+      showFormBanner("error", "分类不能为空", "填一个分类后再发布。");
       noteCategory.focus();
       return null;
     }
+    var media = state.media.map(function (entry) {
+      return { key: entry.key, size: entry.size || DEFAULT_MEDIA_SIZE };
+    });
+    var first = media[0] || null;
     return {
       body: body,
       category: category,
       visibility: state.visibility,
       pinned: state.pinned,
-      mediaKey: state.mediaKey,
-      // 没选图时不写尺寸，避免给空配图留一个无意义的档位。
-      mediaSize: state.mediaKey ? state.mediaSize || DEFAULT_MEDIA_SIZE : null
+      media: media,
+      // 旧字段同步第一张，兼容还没升级的客户端。
+      mediaKey: first ? first.key : null,
+      mediaSize: first ? first.size : null
     };
   }
 
@@ -769,6 +824,7 @@
     }
     picker.open({
       mode: "pick",
+      multiple: true,
       api: MEDIA_API,
       gifApi: GIF_API,
       base: MEDIA_BASE,
@@ -776,15 +832,26 @@
       categoryId: "cat_moments",
       sizes: IMAGE_SIZES,
       defaultSize: DEFAULT_MEDIA_SIZE,
-      size: state.mediaSize || DEFAULT_MEDIA_SIZE,
-      selectedKey: state.mediaKey,
-      onPick: function (item, size) {
-        if (!item || !item.key) return;
-        state.mediaKey = item.key;
-        if (size) state.mediaSize = size;
-        state.mediaName = item.filename || fileName(item.key);
+      size: state.media[0] ? state.media[0].size : DEFAULT_MEDIA_SIZE,
+      selectedKeys: state.media.map(function (entry) { return entry.key; }),
+      onPick: function (items, size) {
+        if (!Array.isArray(items)) return;
+        var previous = {};
+        state.media.forEach(function (entry) { previous[entry.key] = entry; });
+        // 选择器是配图的权威集合：确认后按它替换；已有图保留各自尺寸。
+        state.media = items
+          .filter(function (item) { return item && item.key; })
+          .slice(0, MOMENT_MEDIA_MAX)
+          .map(function (item) {
+            var old = previous[item.key];
+            return {
+              key: item.key,
+              size: old ? old.size : (size || DEFAULT_MEDIA_SIZE),
+              name: item.filename || fileName(item.key)
+            };
+          });
         paintMedia();
-        toast("已选配图 · " + (state.mediaName || "图片") + " · " + sizeText(state.mediaSize));
+        toast("已更新配图 · " + state.media.length + " 张");
       }
     });
   }
@@ -795,14 +862,19 @@
     state.busy = true;
     btn.disabled = true;
     // PATCH 的 zod schema 对缺省字段会套默认值（category 会变回「日常」），
-    // 所以这里显式带上整条动态，只改 pinned；mediaSize 也要带上，避免编辑尺寸被旧值覆盖。
+    // 所以这里显式带上整条动态，只改 pinned；多图与尺寸也要带上，避免被旧值覆盖。
+    var media = mediaOf(item).map(function (entry) {
+      return { key: entry.key, size: entry.size || DEFAULT_MEDIA_SIZE };
+    });
+    var first = media[0] || null;
     var payload = {
       body: item.body,
       category: item.category,
       visibility: item.visibility,
       pinned: !item.pinned,
-      mediaKey: item.mediaKey || null,
-      mediaSize: item.mediaSize || null
+      media: media,
+      mediaKey: first ? first.key : null,
+      mediaSize: first ? first.size : null
     };
     api("PATCH", MOMENTS_API + "/" + encodeURIComponent(item.id), payload).then(function (res) {
       if (handleAuth(res)) return;
@@ -897,14 +969,15 @@
 
   noteText.addEventListener("input", syncCounter);
 
-  // 配图：共享媒体选择器（现有 R2 图片 + 上传）
+  // 配图：共享媒体选择器（现有 R2 图片 + 上传，可多选）
   btnPickImage.addEventListener("click", openMediaPicker);
-  btnRemoveImg.addEventListener("click", function () {
-    state.mediaKey = null;
-    state.mediaName = "";
-    paintMedia();
-    toast("已移除配图");
-  });
+  if (btnClearImages) {
+    btnClearImages.addEventListener("click", function () {
+      state.media = [];
+      paintMedia();
+      toast("已移除全部配图");
+    });
+  }
 
   // 列表操作（事件委托）
   noteList.addEventListener("click", function (e) {

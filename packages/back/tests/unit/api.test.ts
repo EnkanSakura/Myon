@@ -1092,7 +1092,7 @@ describe('bangumi cover proxy', () => {
     try {
       const src = 'https://lain.bgm.tv/pic/cover/l/aa/bb/cache-test-1.jpg';
       const res = await app.request(
-        '/api/v1/bangumi/cover?src=' + encodeURIComponent(src),
+        `/api/v1/bangumi/cover?src=${encodeURIComponent(src)}`,
         {},
         createEnv('test'),
       );
@@ -1214,8 +1214,8 @@ describe('mediaSize on moments and gallery', () => {
     return entry.params[columns.indexOf(column)];
   }
 
-  // 后台读取单条动态：moments 全列顺序。
-  function momentRow(mediaSize: string | null) {
+  // 后台读取单条动态：moments 全列顺序（media 在 media_size 之后）。
+  function momentRow(mediaSize: string | null, media: string | null = null) {
     return [
       'm_1',
       '一条动态',
@@ -1224,12 +1224,16 @@ describe('mediaSize on moments and gallery', () => {
       0,
       'uploads/moment.webp',
       mediaSize,
+      media,
       '2026-10-20T00:00:00.000Z',
     ];
   }
 
-  // 公开 /moments 的字段顺序：id、body、category、pinned、media_key、media_size、created_at。
-  function publicMomentRow(mediaSize: string | null) {
+  // 公开 /moments 的字段顺序：id、body、category、pinned、media_key、media_size、media、created_at。
+  function publicMomentRow(
+    mediaSize: string | null,
+    media: string | null = null,
+  ) {
     return [
       'm_1',
       '一条动态',
@@ -1237,6 +1241,7 @@ describe('mediaSize on moments and gallery', () => {
       0,
       'uploads/moment.webp',
       mediaSize,
+      media,
       '2026-10-20T00:00:00.000Z',
     ];
   }
@@ -1257,6 +1262,51 @@ describe('mediaSize on moments and gallery', () => {
       '2026-10-20T00:00:00.000Z',
     ];
   }
+
+  it('stores a multi-image media array and keeps legacy first-image fields', async () => {
+    const writeEnv = createEnv('test', 'secret-token');
+    const media = [
+      { key: 'uploads/a.webp', size: '720' },
+      { key: 'uploads/b.webp', size: '1080' },
+    ];
+
+    const res = await app.request(
+      '/api/v1/admin/moments',
+      {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({
+          body: '多图动态',
+          category: '日常',
+          media,
+        }),
+      },
+      writeEnv,
+    );
+    expect(res.status).toBe(201);
+    const item = (
+      (await res.json()) as {
+        item: {
+          media: typeof media;
+          mediaKey: string | null;
+          mediaSize: string | null;
+        };
+      }
+    ).item;
+    expect(item.media).toEqual(media);
+    expect(item.mediaKey).toBe('uploads/a.webp');
+    expect(item.mediaSize).toBe('720');
+
+    const inserts = findStatements(writeEnv, 'insert into "moments"');
+    expect(inserts).toHaveLength(1);
+    expect(insertedValue(inserts[0], 'moments', 'media')).toBe(
+      JSON.stringify(media),
+    );
+    expect(insertedValue(inserts[0], 'moments', 'media_key')).toBe(
+      'uploads/a.webp',
+    );
+    expect(insertedValue(inserts[0], 'moments', 'media_size')).toBe('720');
+  });
 
   it('stores mediaSize when creating a moment, null when omitted', async () => {
     const writeEnv = createEnv('test', 'secret-token');
@@ -1341,12 +1391,23 @@ describe('mediaSize on moments and gallery', () => {
     expect(res.status).toBe(200);
     const items = (
       (await res.json()) as {
-        items: Array<{ mediaSize: string | null; mediaKey: string | null }>;
+        items: Array<{
+          mediaSize: string | null;
+          mediaKey: string | null;
+          media: Array<{ key: string; size: string | null }>;
+        }>;
       }
     ).items;
     expect(items[0]?.mediaSize).toBe('1080');
     expect(items[0]?.mediaKey).toBe('uploads/moment.webp');
     expect(items[1]?.mediaSize).toBeNull();
+    // 老数据没有 media 数组时，接口按 mediaKey / mediaSize 回退成一张图。
+    expect(items[0]?.media).toEqual([
+      { key: 'uploads/moment.webp', size: '1080' },
+    ]);
+    expect(items[1]?.media).toEqual([
+      { key: 'uploads/moment.webp', size: null },
+    ]);
 
     // 公开接口的 select 真的把 media_size 查出来了（老数据是 NULL）。
     const selects = readEnv.statements

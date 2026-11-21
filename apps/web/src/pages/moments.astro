@@ -122,7 +122,17 @@ function cutNo(value: number): string {
 
     <div class="stream" id="stream">
       {items.map((item, index) => {
-        const photo = contentImageUrl(item.mediaKey, item.mediaSize);
+        // 新数据读 media 数组；老数据（只有 mediaKey）按单图兼容。
+        const media = Array.isArray(item.media) && item.media.length
+          ? item.media
+          : item.mediaKey
+            ? [{ key: item.mediaKey, size: item.mediaSize }]
+            : [];
+        const first = media[0];
+        const photo = first
+          ? contentImageUrl(first.key, first.size ?? item.mediaSize)
+          : null;
+        const figNo = cutNo(offset + index + 1);
         return (
           <article
             class:list={[
@@ -134,30 +144,53 @@ function cutNo(value: number): string {
             ]}
             data-tag={item.category}
             data-photo={photo ? '1' : '0'}
+            data-figs={media.length}
           >
             {photo && <span class="panel-tab">FIGURE</span>}
             {item.pinned && <span class="sticker pin">置顶 / PINNED</span>}
             <div class="mh">
               <span class="tm">{formatDateTime(item.createdAt)}</span>
-              <span class="no">N° {cutNo(offset + index + 1)}</span>
+              <span class="no">N° {figNo}</span>
             </div>
-            <p>{item.body}</p>
-            {photo && (
+            <p class="moment-body">{item.body}</p>
+            {media.length === 1 && photo && (
               <figure class="frame f-photo">
                 <img src={photo} alt={`动态配图 · ${item.category}`} loading="lazy" decoding="async" />
                 <figcaption class="cap">
-                  <span>FIGURE {cutNo(offset + index + 1)} · {item.category}</span>
+                  <span>FIGURE {figNo} · {item.category}</span>
                   <span>P.03</span>
                 </figcaption>
               </figure>
             )}
+            {media.length > 1 && (
+              <div class="moment-figs" aria-label={`配图 ${media.length} 张`}>
+                {media.map((entry, figIndex) => (
+                  <figure class="frame f-thumb">
+                    <img
+                      src={contentImageUrl(entry.key, entry.size ?? item.mediaSize) ?? ''}
+                      alt={`动态配图 ${figIndex + 1} · ${item.category}`}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </figure>
+                ))}
+              </div>
+            )}
             <div class="mline">
               分类 · {item.category}
+              {media.length > 1 && <span> · FIGURE × {media.length}</span>}
             </div>
             <div class="mf">
-              <span>{photo ? 'FIGURE · 带图' : 'NOTE · 手记'}</span>
+              <span>
+                {media.length
+                  ? media.length > 1
+                    ? `FIGURE · ${media.length} 张`
+                    : 'FIGURE · 带图'
+                  : 'NOTE · 手记'}
+              </span>
               <button type="button" class="tag" data-tag={item.category} aria-pressed="false">#{item.category}</button>
             </div>
+            <button class="moment-hit" type="button" aria-label="查看动态详情"></button>
           </article>
         );
       })}
@@ -207,6 +240,28 @@ function cutNo(value: number): string {
 
   
 </main>
+
+<!-- ---------- 动态详情（点击卡片打开） ---------- -->
+<dialog class="mv" id="momentView" aria-label="动态详情" closedby="any">
+  <div class="mv-box">
+    <div class="mv-head">
+      <div class="mv-meta">
+        <span class="mv-no" id="mvNo">N° —</span>
+        <span class="mv-time" id="mvTime">—</span>
+      </div>
+      <span class="sticker sticker--paper mv-cat" id="mvCat">—</span>
+      <button class="mv-close" id="mvClose" type="button" aria-label="关闭详情">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <p class="mv-body" id="mvBody"></p>
+    <div class="mv-figs" id="mvFigs"></div>
+    <div class="mv-foot">
+      <span id="mvKind">NOTE · 手记</span>
+      <span class="mv-hint">ESC 关闭 · 点击背景关闭</span>
+    </div>
+  </div>
+</dialog>
 
   <script is:inline src="/js/pages/moments.js"></script>
 </SiteLayout>

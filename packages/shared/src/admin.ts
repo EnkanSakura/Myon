@@ -4,6 +4,7 @@ import {
   mediaAliasesSchema,
   mediaCategoryNameMaxLength,
   mediaImageSizeSchema,
+  momentMediaMaxCount,
 } from './media';
 
 /**
@@ -48,14 +49,25 @@ export type PostInput = z.infer<typeof postInputSchema>;
 // 动态
 // ---------------------------------------------------------------------------
 
+const momentMediaItemFields = {
+  key: z.string().min(1).max(300),
+  /** 单张配图的尺寸档位；不传按默认 720 处理。 */
+  size: mediaImageSizeSchema.nullable().optional(),
+};
+
 const momentFields = {
   body: z.string().min(1).max(2000),
   category: z.string().min(1).max(40),
   visibility: z.enum(['public', 'private']),
   pinned: z.boolean(),
   mediaKey: z.string().max(300).nullable().optional(),
-  /** 配图尺寸：不传时保持旧行为（不写库，前台按默认 720 显示）。 */
+  /** 第一张配图尺寸：不传时保持旧行为（不写库，前台按默认 720 显示）。 */
   mediaSize: mediaImageSizeSchema.nullable().optional(),
+  /** 多图配图；不传时回退到 mediaKey / mediaSize（兼容旧后台与移动端）。 */
+  media: z
+    .array(z.object(momentMediaItemFields))
+    .max(momentMediaMaxCount, `配图最多 ${momentMediaMaxCount} 张`)
+    .optional(),
 };
 
 export const momentInputSchema = z.object({

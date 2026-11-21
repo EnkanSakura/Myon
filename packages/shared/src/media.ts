@@ -16,6 +16,9 @@ export const defaultMediaImageSize: MediaImageSize = '720';
 /** 内容图片导出质量（WebP）；后台缩略图用更低质量，由前端各自决定。 */
 export const mediaImageQuality = 80;
 
+/** 动态最多配几张图；前台卡片与后台表单共用这个上限。 */
+export const momentMediaMaxCount = 9;
+
 /** 尺寸档位对应的长边像素；`orig` 返回 null（不转换）。 */
 export function mediaImageEdge(size: MediaImageSize): number | null {
   return size === 'orig' ? null : Number(size);

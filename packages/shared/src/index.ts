@@ -53,15 +53,24 @@ export interface PostDetailResponse extends PostListItem {
   toc: TocEntry[];
 }
 
+/** 动态的一张配图；size 为 null 时前台按默认 720 显示。 */
+export interface MomentMediaItem {
+  key: string;
+  size: MediaImageSize | null;
+}
+
 export interface MomentListItem {
   id: string;
   body: string;
   /** 分类，例如「日常」「技术」。 */
   category: string;
   pinned: boolean;
+  /** 第一张配图的 key；旧客户端继续读这里，新代码读 media。 */
   mediaKey: string | null;
-  /** 配图尺寸档位；老数据为 null，前台按默认 720 显示。 */
+  /** 第一张配图的尺寸档位；老数据为 null，前台按默认 720 显示。 */
   mediaSize: MediaImageSize | null;
+  /** 多图配图；空数组表示没有配图。 */
+  media: MomentMediaItem[];
   createdAt: string;
 }
 

@@ -138,7 +138,7 @@ export function parseLinkPreviewHtml(
   const description = cleanText(
     metas['og:description'] ??
       metas['twitter:description'] ??
-      metas['description'] ??
+      metas.description ??
       '',
     300,
   );

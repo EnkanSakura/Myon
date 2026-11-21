@@ -86,7 +86,7 @@ test.describe('图片转换地址', () => {
   test('动态配图按记录尺寸取图，老数据默认 720', async ({ page, request }) => {
     await page.goto('/moments');
     const srcs = await page
-      .locator('.stream .frame.f-photo img')
+      .locator('.stream .frame img')
       .evaluateAll((nodes) =>
         nodes.map((node) => node.getAttribute('src') ?? ''),
       );
@@ -96,10 +96,23 @@ test.describe('图片转换地址', () => {
     const body = (await (
       await request.get('/api/v1/moments?limit=12')
     ).json()) as {
-      items: { mediaKey: string | null; mediaSize?: string | null }[];
+      items: {
+        mediaKey: string | null;
+        mediaSize?: string | null;
+        media?: { key: string; size: string | null }[];
+      }[];
     };
     const expected = new Set(
-      body.items.filter((item) => item.mediaKey).map(contentSrc),
+      body.items.flatMap((item) => {
+        const media = item.media?.length
+          ? item.media
+          : item.mediaKey
+            ? [{ key: item.mediaKey, size: item.mediaSize ?? null }]
+            : [];
+        return media.map((entry) =>
+          contentSrc({ mediaKey: entry.key, mediaSize: entry.size }),
+        );
+      }),
     );
     for (const src of srcs) expect(expected.has(src)).toBe(true);
     // 种子里有没记录尺寸档位的旧动态，必须落到默认 720。
