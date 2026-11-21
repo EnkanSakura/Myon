@@ -3,17 +3,61 @@
   var root = document.documentElement;
   var KEY = 'myon-theme';
 
-  function current(){ return root.dataset.theme === 'dark' ? 'dark' : 'light'; }
-  function setTheme(t){
+  var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  var forced = null; /* ?theme= 预览用，不写 localStorage */
+
+  function systemTheme(){ return mq && mq.matches ? 'dark' : 'light'; }
+
+  /* 三态：system（跟随系统）/ light / dark；没有存储值就是 system。 */
+  function storedMode(){
+    var v = null;
+    try { v = localStorage.getItem(KEY); } catch(e){}
+    return v === 'dark' || v === 'light' ? v : 'system';
+  }
+  function effectiveMode(){ return forced || storedMode(); }
+  function modeLabel(mode){ return mode === 'system' ? '系统' : mode === 'dark' ? '深色' : '浅色'; }
+
+  /* 顺序：系统 → 系统偏好的反面 → 系统偏好 → 系统，保证第一次点击一定有视觉变化。 */
+  function nextMode(mode){
+    var sys = systemTheme();
+    var opp = sys === 'dark' ? 'light' : 'dark';
+    if(mode === 'system') return opp;
+    if(mode === opp) return sys;
+    return 'system';
+  }
+
+  function syncMeta(mode){
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if(!meta) return;
+    meta.content = mode === 'system' ? 'light dark' : mode;
+  }
+
+  function paint(){
+    var mode = effectiveMode();
+    var t = mode === 'system' ? systemTheme() : mode;
     root.dataset.theme = t;
-    try { localStorage.setItem(KEY, t); } catch(e){}
+    syncMeta(mode);
+    var next = nextMode(mode);
+    var action = next === 'system' ? '跟随系统' : modeLabel(next);
+    var state = mode === 'system' ? '跟随系统（当前' + modeLabel(t) + '）' : modeLabel(mode);
     document.querySelectorAll('.theme-btn').forEach(function(b){
-      b.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
-      b.setAttribute('aria-label', t === 'dark' ? '当前深色，切换到浅色' : '当前浅色，切换到深色');
+      b.removeAttribute('aria-pressed');
+      b.setAttribute('aria-label', '主题：' + state + '，点击切换到' + action);
+      b.setAttribute('title', '主题：' + state + ' → ' + action);
       var lab = b.querySelector('.tb-label');
-      if(lab) lab.textContent = t === 'dark' ? '浅色' : '深色';
+      if(lab) lab.textContent = modeLabel(mode);
       b.classList.toggle('is-dark', t === 'dark');
+      b.classList.toggle('is-system', mode === 'system');
     });
+  }
+
+  function setMode(mode){
+    forced = null;
+    try {
+      if(mode === 'system') localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, mode);
+    } catch(e) {}
+    paint();
   }
 
   function icon(){
@@ -29,11 +73,10 @@
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'theme-btn';
-    btn.setAttribute('aria-pressed', 'false');
-    btn.innerHTML = icon() + '<span class="tb-label">深色</span>';
-    btn.addEventListener('click', function(){ setTheme(current() === 'dark' ? 'light' : 'dark'); });
+    btn.innerHTML = icon() + '<span class="tb-label">系统</span>';
+    btn.addEventListener('click', function(){ setMode(nextMode(effectiveMode())); });
     anchor.insertAdjacentElement('afterend', btn);
-    setTheme(current());
+    paint();
   }
 
   /* 首页封面「关于」纸卡由服务端渲染成 HTML，这里只补入场动画的序号。 */
@@ -46,14 +89,14 @@
   function initTheme(){
     var q = null;
     try { q = new URLSearchParams(location.search).get('theme'); } catch(e){}
-    if(q === 'dark' || q === 'light'){ root.dataset.theme = q; }
-    if(!root.dataset.theme){
-      var stored = null;
-      try { stored = localStorage.getItem(KEY); } catch(e){}
-      if(stored === 'dark' || stored === 'light') root.dataset.theme = stored;
-      else if(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) root.dataset.theme = 'dark';
+    if(q === 'dark' || q === 'light') forced = q;
+    // 跟随系统时，系统配色变化要实时生效。
+    if(mq){
+      var onSchemeChange = function(){ if(storedMode() === 'system') paint(); };
+      if(mq.addEventListener) mq.addEventListener('change', onSchemeChange);
+      else if(mq.addListener) mq.addListener(onSchemeChange);
     }
-    setTheme(current());
+    paint();
   }
 
   /* 剧透：点击或键盘展开；CSS 也支持 hover / focus 临时查看。 */
@@ -142,5 +185,5 @@
     if (target && target.tagName === 'IMG') target.classList.add('is-missing');
   }, true);
 
-  window.MyonTheme = { set: setTheme, current: current };
+  window.MyonTheme = { set: setMode, mode: effectiveMode };
 })();

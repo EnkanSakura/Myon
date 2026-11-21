@@ -194,7 +194,7 @@
   }
 
   function fillIssueList(listEl, issues) {
-    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    listEl.replaceChildren();
     if (!issues || !issues.length) {
       listEl.hidden = true;
       return;
@@ -315,7 +315,7 @@
       tblWrap.hidden = true;
       emptyEl.hidden = true;
       pager.hidden = true;
-      while (pgNums.firstChild) pgNums.removeChild(pgNums.firstChild);
+      pgNums.replaceChildren();
     }
   }
 
@@ -453,7 +453,7 @@
       return a.localeCompare(b, "zh-Hans-CN");
     });
     var keep = state.category;
-    while (catSel.firstChild) catSel.removeChild(catSel.firstChild);
+    catSel.replaceChildren();
     catSel.appendChild(new Option("全部分类", "all"));
     each(cats, function (cat) {
       catSel.appendChild(new Option(cat, cat));
@@ -615,7 +615,7 @@
   }
 
   function renderRows(list) {
-    while (rowsEl.firstChild) rowsEl.removeChild(rowsEl.firstChild);
+    rowsEl.replaceChildren();
     var frag = document.createDocumentFragment();
     each(list, function (post) {
       frag.appendChild(buildRow(post));
@@ -640,7 +640,7 @@
     pgNow.textContent = String(state.page);
     pgCount.textContent = String(pages);
     pgTotal.textContent = String(state.total);
-    while (pgNums.firstChild) pgNums.removeChild(pgNums.firstChild);
+    pgNums.replaceChildren();
     each(pageNumbers(state.page, pages), function (num) {
       if (num === "…") {
         pgNums.appendChild(el("span", "pager-gap", "…"));

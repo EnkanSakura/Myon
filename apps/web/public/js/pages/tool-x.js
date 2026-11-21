@@ -274,7 +274,7 @@
     }
 
     // 媒体列表全部用 DOM 创建，先清掉上一次的结果。
-    while (els.media.firstChild) els.media.removeChild(els.media.firstChild);
+    els.media.replaceChildren();
     var media = Array.isArray(data.media) ? data.media : [];
     if (media.length === 0) {
       els.empty.hidden = false;
@@ -333,9 +333,10 @@
 
   els.resolve.addEventListener('click', resolve);
   els.url.addEventListener('keydown', function (event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      resolve();
-    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    // 输入法正在选词时 Enter 用来确认候选，不能当成提交。
+    if (event.isComposing || event.keyCode === 229) return;
+    resolve();
   });
 })();

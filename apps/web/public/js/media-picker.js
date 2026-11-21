@@ -253,7 +253,7 @@
   /** 分类 chips：全部 + 动态分类（含计数）+ 未分类；浅色弹窗专用样式 .mp-cat。 */
   function paintCats() {
     if (!refs || !refs.cats) return;
-    refs.cats.innerHTML = "";
+    refs.cats.replaceChildren();
     var entries = [{ id: "all", name: "全部", count: state.allCount }];
     for (var i = 0; i < state.categories.length; i += 1) {
       entries.push({
@@ -311,11 +311,11 @@
     if (!refs || !refs.sizeBar || !refs.sizeOpts) return;
     if (!state.sizes || !state.sizes.length) {
       refs.sizeBar.hidden = true;
-      refs.sizeOpts.innerHTML = "";
+      refs.sizeOpts.replaceChildren();
       return;
     }
     refs.sizeBar.hidden = false;
-    refs.sizeOpts.innerHTML = "";
+    refs.sizeOpts.replaceChildren();
     var frag = document.createDocumentFragment();
     state.sizes.forEach(function (size) {
       var btn = el(
@@ -351,7 +351,7 @@
   }
 
   function renderGrid() {
-    refs.grid.innerHTML = "";
+    refs.grid.replaceChildren();
     var frag = document.createDocumentFragment();
     state.items.forEach(function (item) {
       var btn = el("button", "mp-item");
@@ -453,7 +453,7 @@
         var items = Array.isArray(result.body.items) ? result.body.items : [];
         // 分类列表随列表接口一起返回（含计数），首屏用它渲染 chips
         if (Array.isArray(result.body.categories)) {
-          state.categories = result.body.categories.slice().sort(function (a, b) {
+          state.categories = result.body.categories.toSorted(function (a, b) {
             return (a.position || 0) - (b.position || 0);
           });
           state.uncategorizedCount =
@@ -699,9 +699,9 @@
           : "选择配图"
         : "插入图片";
     refs.search.value = "";
-    refs.upList.innerHTML = "";
+    refs.upList.replaceChildren();
     refs.state.textContent = "—";
-    refs.grid.innerHTML = "";
+    refs.grid.replaceChildren();
     paintSizes();
     paintCats();
     updateUploadHint();

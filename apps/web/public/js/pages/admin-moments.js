@@ -258,7 +258,7 @@
     momentBannerText.textContent = text || "";
     momentBannerText.hidden = !text;
     if (!momentIssues) return;
-    momentIssues.innerHTML = "";
+    momentIssues.replaceChildren();
     var lines = issues || [];
     lines.forEach(function (line) {
       momentIssues.appendChild(el("li", null, line));
@@ -572,7 +572,7 @@
   /** 配图列表：每张一行，可单独改尺寸 / 移除。 */
   function paintMedia() {
     if (!attachList) return;
-    attachList.innerHTML = "";
+    attachList.replaceChildren();
     state.media.forEach(function (entry, index) {
       var row = el("div", "moment-attach-row");
       row.setAttribute("data-key", entry.key);

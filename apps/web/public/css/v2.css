@@ -317,6 +317,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pink-dee
 .contacts a:hover .contact-ic{color:var(--on-pink)}
 
 /* ---------- 深色模式 ---------- */
+/* 显式主题也让原生控件/滚动条跟上；不写 :root 固定值，避免盖掉 <meta name="color-scheme"> 的提示。 */
+[data-theme="light"]{
+  color-scheme:light;
+}
 [data-theme="dark"]{
   color-scheme:dark;
   --paper:#15121A;

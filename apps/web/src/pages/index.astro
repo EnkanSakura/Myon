@@ -130,8 +130,7 @@ const animeWatchingCount =
   siteStats?.bangumi.byType.anime.watching ?? animeShows.length;
 const bangumiWatchingCount = siteStats?.bangumi.watching ?? animeWatchingCount;
 const watchedShows = animeShows
-  .slice()
-  .sort((a, b) => {
+  .toSorted((a, b) => {
     // 有放送日期的排在前面（更有可能是正在更新的一季），其次按最近更新。
     if (!!a.nextAirAt !== !!b.nextAirAt) return a.nextAirAt ? -1 : 1;
     if (a.nextAirAt && b.nextAirAt) {
@@ -379,7 +378,20 @@ function presetValue(preset: HomeStatPreset): string {
 <meta name="description" content={site.description}>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate" type="application/rss+xml" title={`${site.name} · RSS`} href="/rss.xml">
-<script is:inline>try{var t=localStorage.getItem('myon-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;else if(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='dark';}catch(e){}</script>
+<meta name="color-scheme" content="light dark">
+<script is:inline>
+try {
+  var t = localStorage.getItem('myon-theme');
+  var meta = document.querySelector('meta[name="color-scheme"]');
+  if (t === 'dark' || t === 'light') {
+    document.documentElement.dataset.theme = t;
+    // 显式覆盖时把首选配色同步给浏览器，深色首屏不留白闪。
+    if (meta) meta.content = t;
+  } else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.dataset.theme = 'dark';
+  }
+} catch (e) {}
+</script>
 <link rel="stylesheet" href="/css/v2.css">
 <link rel="stylesheet" href="/css/markdown-extras.css">
 <ThemeTokens themeColor={site.themeColor} metaColor={site.themeColor} />

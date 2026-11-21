@@ -184,6 +184,52 @@ test.describe('视觉清理', () => {
     }
   });
 
+  test('三态主题：系统 → 深色 → 浅色 → 系统，并实时跟随系统变化', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const meta = page.locator('meta[name="color-scheme"]');
+    const btn = page.locator('.theme-btn');
+    const stored = () =>
+      page.evaluate(() => localStorage.getItem('myon-theme'));
+
+    // 默认：跟随系统（Playwright 默认浅色），不写偏好
+    await expect(meta).toHaveAttribute('content', 'light dark');
+    await expect(btn.locator('.tb-label')).toHaveText('系统');
+    expect(await stored()).toBeNull();
+
+    // 第一次点击：显式深色
+    await btn.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(meta).toHaveAttribute('content', 'dark');
+    await expect(btn.locator('.tb-label')).toHaveText('深色');
+    expect(await stored()).toBe('dark');
+
+    // 第二次：显式浅色
+    await btn.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(meta).toHaveAttribute('content', 'light');
+    await expect(btn.locator('.tb-label')).toHaveText('浅色');
+    expect(await stored()).toBe('light');
+
+    // 第三次：回到跟随系统
+    await btn.click();
+    await expect(meta).toHaveAttribute('content', 'light dark');
+    await expect(btn.locator('.tb-label')).toHaveText('系统');
+    expect(await stored()).toBeNull();
+
+    // 跟随系统时，系统配色变化会实时生效
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    // 刷新后仍是跟随系统
+    await page.reload();
+    expect(await stored()).toBeNull();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
   test('深色模式投影使用纸白色', async ({ page }) => {
     await page.goto('/articles?theme=dark');
     const shadow = await page

@@ -124,7 +124,7 @@
     }
 
     function render(filter) {
-      while (list.firstChild) list.removeChild(list.firstChild);
+      list.replaceChildren();
       var typed = filterable
         ? filter === undefined
           ? String(input.value || "").trim()
@@ -238,6 +238,8 @@
       if (event.key === "Enter") {
         if (list.hidden) return;
         event.preventDefault();
+        // 输入法正在选词时 Enter 用来确认候选，不能当成选中列表项。
+        if (event.isComposing || event.keyCode === 229) return;
         var all = items();
         if (activeIndex >= 0 && all[activeIndex]) all[activeIndex].click();
         else close();

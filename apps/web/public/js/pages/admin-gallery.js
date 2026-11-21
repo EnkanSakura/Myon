@@ -152,7 +152,7 @@
   function authFailed() {
     state.locked = true;
     setLoading(false);
-    grid.innerHTML = "";
+    grid.replaceChildren();
     showAuth("error", "管理令牌无效", "令牌被拒绝，请在右上角「管理令牌」里更新后重新读取。");
     authToken.hidden = false;
     showState("LOCK", "未授权", "令牌无效，重新填写后再读取展柜。", true);
@@ -161,7 +161,7 @@
   function adminMissing() {
     state.locked = true;
     setLoading(false);
-    grid.innerHTML = "";
+    grid.replaceChildren();
     showAuth("warn", "服务端未配置管理令牌", "后台写接口暂时关闭，联系站点管理员配置后重新加载页面。");
     showState("LOCK", "接口未开放", "服务端没有配置管理令牌，后台写接口暂时关闭。", true);
     toast("服务端未配置管理令牌");
@@ -294,7 +294,7 @@
     loadingEl.hidden = !on;
     grid.setAttribute("aria-busy", on ? "true" : "false");
     if (on) {
-      grid.innerHTML = "";
+      grid.replaceChildren();
       hideState();
     }
     paintHeader();
@@ -327,7 +327,7 @@
     return btn;
   }
   function renderCats() {
-    catBtns.innerHTML = "";
+    catBtns.replaceChildren();
     var counts = {};
     state.items.forEach(function (item) {
       counts[item.category] = (counts[item.category] || 0) + 1;
@@ -406,7 +406,7 @@
   }
 
   function renderGrid() {
-    grid.innerHTML = "";
+    grid.replaceChildren();
     var list = visibleItems();
     list.forEach(function (item) { grid.appendChild(itemCard(item)); });
     grid.setAttribute("aria-busy", state.loading ? "true" : "false");
@@ -466,7 +466,7 @@
 
   /* ---------------- 柜位图 / 最近入藏 ---------------- */
   function renderSlots() {
-    slotMap.innerHTML = "";
+    slotMap.replaceChildren();
     var selected = findItem(state.selectedId);
     var occupied = 0;
     for (var n = 1; n <= 9; n++) {
@@ -491,8 +491,8 @@
   }
 
   function renderRecent() {
-    recentList.innerHTML = "";
-    var list = state.items.slice().sort(function (a, b) {
+    recentList.replaceChildren();
+    var list = state.items.toSorted(function (a, b) {
       return String(b.createdAt).localeCompare(String(a.createdAt));
     }).slice(0, 3);
     if (!list.length) {
@@ -539,7 +539,7 @@
       state.total = 0;
       state.pages = 1;
       state.selectedId = null;
-      grid.innerHTML = "";
+      grid.replaceChildren();
       showAuth("info", "尚未连接后台", "展柜列表需要管理令牌才能读取。点右上角「管理令牌」填入令牌后保存，页面会自动刷新。");
       authToken.hidden = false;
       showState("LOCK", "需要管理令牌", "填好令牌后会自动读取展柜数据。", false);
@@ -579,7 +579,7 @@
       })
       .catch(function (err) {
         setLoading(false);
-        grid.innerHTML = "";
+        grid.replaceChildren();
         showState("ERR", "读取失败", (err && err.message ? err.message : "网络异常") + " · 检查 Worker 与本地数据库是否在运行。", true);
         toast("读取失败 · 请稍后重试");
       });

@@ -175,7 +175,7 @@
   }
 
   function fillIssueList(listEl, issues) {
-    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    listEl.replaceChildren();
     if (!issues || !issues.length) {
       listEl.hidden = true;
       return;
@@ -508,7 +508,7 @@
   }
 
   function renderRows() {
-    while (rowsEl.firstChild) rowsEl.removeChild(rowsEl.firstChild);
+    rowsEl.replaceChildren();
     var frag = document.createDocumentFragment();
     each(state.items, function (item, index) {
       frag.appendChild(buildRow(item, index));

@@ -107,6 +107,18 @@ test.describe('展柜', () => {
     await expect(page.locator('.lb')).toBeVisible();
     await page.locator('.lb-close').click();
     await expect(page.locator('.lb')).toBeHidden();
+
+    // 点背景关闭：closedby="any" 或坐标兜底
+    await visible.first().locator('.ex-open').click();
+    await expect(page.locator('.lb')).toBeVisible();
+    // 不再用 overflow:hidden 锁 html，避免滚动条消失造成横向抖动
+    expect(
+      await page.evaluate(
+        () => getComputedStyle(document.documentElement).overflowY,
+      ),
+    ).not.toBe('hidden');
+    await page.mouse.click(5, 5);
+    await expect(page.locator('.lb')).toBeHidden();
   });
 });
 

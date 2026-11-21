@@ -142,7 +142,7 @@
     bannerTitle.textContent = title;
     bannerText.textContent = text || "";
     bannerText.hidden = !text;
-    while (issuesEl.firstChild) issuesEl.removeChild(issuesEl.firstChild);
+    issuesEl.replaceChildren();
     if (issues && issues.length) {
       each(issues, function (issue) {
         var li = document.createElement("li");
@@ -541,7 +541,7 @@
     var links = parseJsonArray(raw);
     if (!links.length && raw === undefined) links = DEFAULT_LINKS;
     links = links.slice(0, HOME_LINKS_MAX).map(normalizeLink);
-    while (homeLinksRows.firstChild) homeLinksRows.removeChild(homeLinksRows.firstChild);
+    homeLinksRows.replaceChildren();
     each(links, function (link, index) {
       homeLinksRows.appendChild(buildLinkRow(link, index));
     });

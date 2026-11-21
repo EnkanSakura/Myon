@@ -180,7 +180,7 @@
       .catch(function (error) {
         console.error("[admin-bangumi] 读取失败", error);
         if (listEl) {
-          listEl.innerHTML = "";
+          listEl.replaceChildren();
           var empty = el("div", "empty");
           var content = el("div", "empty-c");
           content.appendChild(el("p", "empty-t", "追番记录读取失败"));
@@ -270,7 +270,7 @@
     var filtered = state.items.filter(function (item) {
       return state.typeFilter === "all" || (item.subjectType || "anime") === state.typeFilter;
     });
-    listEl.innerHTML = "";
+    listEl.replaceChildren();
     if (filtered.length === 0) {
       var empty = el("div", "empty");
       var content = el("div", "empty-c");

@@ -305,7 +305,7 @@
       option.textContent = cat.name;
       frag.appendChild(option);
     });
-    select.innerHTML = "";
+    select.replaceChildren();
     select.appendChild(frag);
     var found = false;
     for (var i = 0; i < select.options.length; i++) {
@@ -333,7 +333,7 @@
       entries.push({ id: cat.id, name: cat.name, count: count });
     });
 
-    catChips.innerHTML = "";
+    catChips.replaceChildren();
     var frag = document.createDocumentFragment();
     each(entries, function (entry) {
       var on = state.category === entry.id;
@@ -388,7 +388,7 @@
     pgTotal.textContent = String(state.total);
     pgPrev.disabled = state.loading || state.busy || state.page <= 1;
     pgNext.disabled = state.loading || state.busy || state.page >= state.pages;
-    pgNums.innerHTML = "";
+    pgNums.replaceChildren();
     var start = Math.max(1, Math.min(state.page - 2, state.pages - 4));
     var end = Math.min(state.pages, start + 4);
     for (var i = start; i <= end; i++) {
@@ -405,7 +405,7 @@
     loadingEl.hidden = !on;
     grid.setAttribute("aria-busy", on ? "true" : "false");
     if (on) {
-      grid.innerHTML = "";
+      grid.replaceChildren();
       empty.hidden = true;
     }
     paintSummary();
@@ -521,7 +521,7 @@
   }
 
   function renderGrid() {
-    grid.innerHTML = "";
+    grid.replaceChildren();
     each(state.items, function (item) { grid.appendChild(cardFor(item)); });
     grid.setAttribute("aria-busy", state.loading ? "true" : "false");
     syncBatch();
@@ -559,7 +559,7 @@
     state.selected = {};
     state.loading = false;
     loadingEl.hidden = true;
-    grid.innerHTML = "";
+    grid.replaceChildren();
     grid.setAttribute("aria-busy", "false");
     renderCatChips();
     renderCatSelects();
@@ -641,7 +641,7 @@
       })
       .catch(function (err) {
         setLoading(false);
-        grid.innerHTML = "";
+        grid.replaceChildren();
         empty.hidden = false;
         emptyReset.hidden = false;
         emptyReset.textContent = "重新读取";
@@ -664,7 +664,7 @@
   function renderCatList() {
     if (!catList) return;
     var cats = state.categories || [];
-    catList.innerHTML = "";
+    catList.replaceChildren();
     if (catEmpty) catEmpty.hidden = !state.catReady || cats.length > 0;
     var frag = document.createDocumentFragment();
     each(cats, function (cat, index) {
@@ -1161,7 +1161,7 @@
     state.busy = true;
     setUploading(true);
     upList.hidden = false;
-    upList.innerHTML = "";
+    upList.replaceChildren();
     // 上传分类：下拉框选择；空值 = 未分类
     var categoryId = uploadCategory && uploadCategory.value ? uploadCategory.value : "";
     var queue = files.slice();
@@ -1267,10 +1267,11 @@
   catClose.addEventListener("click", closeCatDlg);
   catAdd.addEventListener("click", addCategory);
   catName.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addCategory();
-    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    // 输入法正在选词时 Enter 用来确认候选，不能当成提交。
+    if (event.isComposing || event.keyCode === 229) return;
+    addCategory();
   });
   catList.addEventListener("click", function (event) {
     var btn = event.target.closest(".cat-act");
@@ -1285,6 +1286,8 @@
   });
   catList.addEventListener("keydown", function (event) {
     if (event.key !== "Enter") return;
+    // 输入法正在选词时 Enter 用来确认候选，不能当成提交。
+    if (event.isComposing || event.keyCode === 229) return;
     var row = event.target.closest(".cat-row");
     if (!row || !event.target.classList.contains("cat-name")) return;
     event.preventDefault();

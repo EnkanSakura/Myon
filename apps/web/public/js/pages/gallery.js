@@ -113,7 +113,6 @@
     if (cur < 0) cur = 0;
     last = btn;
     paint();
-    document.documentElement.classList.add('lb-lock');
     dlg.showModal();
   }
 
@@ -124,13 +123,31 @@
   prevBtn.addEventListener('click', function () { go(-1); });
   nextBtn.addEventListener('click', function () { go(1); });
   closeBtn.addEventListener('click', function () { dlg.close(); });
-  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  // closedby="any" 负责点击背景关闭；不支持该属性的浏览器用坐标兜底，
+  // 不能用 event.target === dialog 判断，否则点 dialog 自身留白也会误关。
+  if (!('closedBy' in HTMLDialogElement.prototype)) {
+    var pressedOutside = false;
+    function outside(event) {
+      var rect = dlg.getBoundingClientRect();
+      return (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      );
+    }
+    dlg.addEventListener('pointerdown', function (event) {
+      pressedOutside = outside(event);
+    });
+    dlg.addEventListener('pointerup', function (event) {
+      if (pressedOutside && outside(event)) dlg.close();
+    });
+  }
   dlg.addEventListener('keydown', function (e) {
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
   });
   dlg.addEventListener('close', function () {
-    document.documentElement.classList.remove('lb-lock');
     if (last) last.focus();
   });
 })();

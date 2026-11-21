@@ -152,7 +152,7 @@
         : 'FIGURE · 带图'
       : 'NOTE · 手记';
 
-    mvFigs.innerHTML = '';
+    mvFigs.replaceChildren();
     figs.forEach(function (img, index) {
       var figure = document.createElement('figure');
       figure.className = 'mv-fig frame';
