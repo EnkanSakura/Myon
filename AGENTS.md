@@ -3,137 +3,55 @@
 本文件约束在本仓库里工作的自动化代理（编码助手、子代理、CI 里的机器人）。
 它写的是**规则**，不是建议。与 README 冲突时以本文件为准：README 面向人，本文件面向代理。
 
----
-
-## 1. 事实前提（不要猜）
-
-- **部署单元只有一个 Worker**。仓库是 monorepo，但 `@myon/web` 在构建时把 `@myon/back` 打进同一个 Worker，没有第二个部署单元。
-- **两个分支是两套东西**：`main` 是业务代码；`design` 是孤儿分支，只放设计稿（`design/site`、`design/v1`）。`main` 上不存在 `design/` 目录。
-- **运行时绑定**：D1（`DB`）、R2（`MEDIA`）、KV（`SETTINGS`，站点设置）、静态资产（`ASSETS`）。部署配置由 `apps/web/wrangler.template.jsonc` + 环境变量生成到 `apps/web/wrangler.jsonc`，**生成文件不入库**；CI 与本地都用 `pnpm wrangler:config` 生成。
-- **静态资源缓存与 cache tag**：`public/_headers` 把静态资源分成几组缓存配置，并给每组打 `Cache-Tag`：`/assets/*`（一年 `immutable`，标签 `myon-assets`）、`/css/*`（1 小时，`myon-css`）、`/js/*`（1 小时，`myon-js`）、`/_astro/*`（`immutable`，`myon-astro`），外加 `/*` 兜底标签 `myon-static`。Cache-Tag 会在到达访客前被 Cloudflare 移除；部署后要立刻换线上样式/脚本，用 Dashboard 的 Custom Purge → Tag 清 `myon-css,myon-js`（或对应组），不必清整站。注意：访客浏览器里已缓存的旧文件不会被服务端 purge，最多等 1 小时或让访客硬刷新；要“部署即生效”必须改成无缓存或给文件名加内容 hash。不要把这套 `Cache-Control` / `Cache-Tag` 规则删掉。
-- **API 已版本化**：内容接口在 `/api/v1/*`，探针 `/api/health` 不版本化。后台写接口在 `/api/v1/admin/*`。
-- **站点配置存在 Workers KV**：只放运行时/低频运营配置——站点名/副标题/描述/作者、主题色、页脚（技术支持/备案号/RSS/邮箱）、首页联系方式（`home_links`）、首页封面图与第 2 页装饰图、尾页后记正文（`home_afterword_*`）与维护开关；都在 KV 键 `site-settings:v1`（一份 JSON），键名与默认值定义在 `@myon/shared` 的 `siteSettingKeys`；**D1 里没有 `settings` 表**。首页固定文案、页头标签/说明、统计块、尾页标题/导语不在 KV：文案在 `packages/shared/src/i18n/zh-CN.json`，结构在 `packages/shared/src/site.config.json`；`/api/v1/site` 的 `home` / `end` 形状不变，由静态配置 + KV 组装。前台通过 `GET /api/v1/site` 读取，后台设置页通过 `/api/v1/admin/settings` 读写。每页 head-title 统一为 `页面名 · 站点名 副标题`（`formatPageTitle`），head-description 统一取站点描述。页脚版权不再单独配置，由「© 当前年份 + `site_author`」生成。
-- **维护模式**：`maintenance_enabled` 存 KV；`apps/web/src/worker.ts` 对前台 HTML GET 返回 503 维护页，`/admin`、`/api`、静态资源与 RSS 放行；后台总览的开关写同一个设置。
-- **后台写接口的临时门禁**是环境变量 `ADMIN_TOKEN`（请求头 `x-admin-token`）：未配置时返回 503，配置后不匹配返回 401。Cloudflare Access 接入后改为校验 Access JWT：**只用一个 Access 应用保护 `/admin*`**，Worker 同时接受 Access 注入的 `Cf-Access-Jwt-Assertion` 头与同源请求的 `CF_Authorization` cookie（`/api/v1/admin/*` 不在应用路径内，靠 cookie 校验）；只认 `type: "app"` 的令牌——登录跳转 URL 里的 `meta` 令牌没有 `iss`/`sub`、未登录也能拿到，必须拒绝；后台响应统一 `Cache-Control: no-store`，防止 CDN 按 URL 缓存把 200 发给未登录访客。不要为 API 再建第二个 Access 应用——同一域名下两个应用的 AUD 不同却共用一个 cookie，后台 fetch 会被 302 到登录域并被 CORS 拦截。
-- **文章与动态有分类**：`posts.category`、`moments.category`，接口返回 `category`。
-- **列表页数据来自 D1**：文章目次、动态、展柜、追番都在服务端经 `/api/v1/*` 取数渲染；`GET /api/v1/stats` 是公开只读的内容统计，后台总览与前台页头共用。
-- **追番分五类**：`bangumi_shows.subject_type` 为 `anime/book/music/game/real`；`syncBangumi` 一次请求拉全部收藏（超过 100 条才分页），再按响应里的 `subject_type` 分类写入，书籍优先 `vol_status`/`volumes`，并保存我的评分 `score`、简评 `comment` 与封面源 URL `cover_source`。封面不在同步时下载或转存：前台把 `images.large`（回退 common/medium）经站内 `GET /api/v1/bangumi/cover?src=` 代理，Worker 只放行 bgm.tv/bangumi.tv、限制 8MB，并用 Cloudflare 边缘缓存保存一年。`next_air_at` 由同步额外请求 Bangumi 放送日历（`/calendar`，失败不影响其余字段）补写，只有「星期几」粒度：记当天 00:00（UTC+8），前端只显示星期、不显示时刻；没有日历数据时保留旧值。`GET /api/v1/bangumi?type=&sort=recent` 支持筛选与按更新时间排序；`/api/v1/stats.bangumi` 提供 `byType` 与 `byStatus` 全量聚合。前台 `/bangumi` 默认简化总览，分类页用 `?type=`。
-- **列表接口分页**：四个列表都返回 `{ items, total, limit, offset }`，页面用 `?page=` 服务端分页（默认每页 20，最大 100），不要一次性全量拉取。
-- **后台写接口**：`/api/v1/admin/{posts,moments,gallery,tools}` 提供 CRUD，`/api/v1/admin/media` 上传/列表/删除（R2），`/api/v1/admin/bangumi/sync` 手动同步，`PUT /api/v1/admin/about` 保存关于页 Markdown。**追番没有后台写接口**：条目只由同步维护，后台页只读展示（用公开 `GET /api/v1/bangumi`），不要恢复 `/admin/bangumi` 的 CRUD。
-- **工具存 D1**：`tools` 表（`slug` / `tool_key` / 名称 / 说明 / 类型 / 关键词 / `href` / `enabled` / `position`）是前台 `/tools` 与后台 `/admin/tools` 的唯一数据源；前台只读 `GET /api/v1/tools`（只返回启用项），后台用 `/api/v1/admin/tools` 增删改。每个工具页地址是 `/tools/<slug>`（页面在 `src/pages/tools/`），自定义链接工具用 `href` 跳转。不要再把工具列表、调用次数、平均耗时写死在页面里。内置工作台只有三个，全部移植自旧站（`@myon/shared` 的 `builtinToolKeys`：`x-downloader` / `lc-calculator` / `comic-downloader`）；迁移 `0021_old_site_tools.sql` 会清掉旧的时间戳/占位工具，不要把 `ts/img/md/color/bgm/json/redirect/short` 加回来。X 解析、X 媒体中转与漫画解析是新增的公开只读接口 `/api/v1/tools/*`（`x/media`、`x/proxy`、`comics/platforms`、`comics/:platform/resolve|pages|image`）：只放行白名单域名（`*.twimg.com`、`championcross.jp` / `comici.jp`），30s 超时、200MB 上限、流式中转，不写 D1 / R2；漫画下载因 Champion Cross 限制数据中心网络访问，**生产默认停用**（该 migration 里 `enabled=0`，本地 seed 为启用供 e2e），恢复可访问后在后台启用即可，不要在页面里硬编码开关。
-- **访问统计写 D1**：`apps/web/src/worker.ts` 对前台 HTML GET 请求写 `page_views`（Asia/Shanghai 天 / 访客指纹 / path），后台总览只用 `GET /api/v1/traffic`（最近 30 天聚合）显示访问数据；后台总览不再展示 D1/R2 资源用量，也不要写设计稿假 PV/UV、假存储额度、假部署哈希。
-- **图片文件只存 R2，媒体元数据存 D1**：`GET /media/<key>` 只从 R2 读；**图片文件本身不存 D1**，但媒体库的分类/别名/文件名等元数据在 D1 的 `media_categories` / `media` / `media_aliases` 三张表（仓库里唯一的媒体元数据来源）。R2 key 不含分类（`uploads/<yyyymm>/<uuid>-<name>`），后台改分类/别名不会改变图片 URL；分类可自定义、单归属，未分类用 `category_id = NULL`；别名每图最多 8 个、每个 ≤30 字，搜索匹配文件名 + R2 key + 别名。首次读媒体库（`GET /api/v1/admin/media`）会做一次 R2 ↔ D1 对齐：R2 有对象无行 → 补录（老 key 前缀 `gallery/`、`moments/`、`about/`、`posts/` 推断分类，其他归未分类），D1 有行无对象 → 删行；R2 扫描到 20000 上限时不做删除。上传先写 R2 再写 D1（D1 失败删 R2 回滚），删除先删 R2 再删 D1；`/api/v1/stats` 的媒体数量仍按 R2 对象数统计。上传前浏览器统一处理：WebP / AVIF / SVG 直传，JPEG / PNG 用 Canvas 转 WebP（q85、最长边 2560px），GIF 先经 Worker 代理 `POST /api/v1/admin/media/gif-webp` 调 `img2webp` 换 animated WebP；后端 `POST /api/v1/admin/media` 只接受 WebP / AVIF / SVG，gif 转码 Secret 是 `IMG2WEBP_TOKEN`，不能下发到浏览器。Bangumi 封面走站内代理与边缘缓存，不再写入 R2，也不会出现在媒体库。
-- **定时任务**：`apps/web/src/worker.ts` 是自定义 Worker 入口（Astro fetch + Bangumi Cron），`wrangler.jsonc` 的 `main` 指向它，`triggers.crons` 每 6 小时同步一次。
-- **发布流程拆成两个 workflow**：push `main` 后按 `Deploy`（只构建 + 部署）→ `Database Migrate`（D1 迁移）串联，**先部署后迁移**：新 Worker 必须能容忍旧表结构（不再读写待删除的列/表），迁移延后或失败时线上不会因为缺列/多列 500；`deploy.yml` 不做迁移，也不再跑 smoke。
-- **媒体地址用 `mediaUrl()`**（`apps/web/src/lib/media.ts`）把 `mediaKey` 换算成 `/media/<key>`，不要在页面里手拼 `/assets/`；旧设置里的 `/assets/` 前缀会被自动改写。
-- **图片转换走 `/media/<key>?size=`**：`GET /media/<key>?size=<480|720|1080|1440|orig>&q=<1-100>` 由 Worker 用 `env.IMAGES`（Cloudflare Images binding，在 `wrangler.template.jsonc` 的 `images.binding` 声明）生成低分辨率 WebP；`size=orig`、原图本来小于目标、绑定缺失或转换失败时直接回退原图（短缓存 5 分钟），不会破图。**不要用 `/cdn-cgi/image/` URL**：整站由 Worker 接管（`/*`）时 Resizing 会报 9524。前端用 `contentImageUrl()`（内容图，缺省长边 720）/ `mediaImageUrl()`（固定宽高的封面、装饰图）生成地址；后台用 `public/js/image-transform.js` 的 `MyonImage`（媒体库、选择器、后台列表缩略图一律低清预览，如 `?size=360&q=70`）；文章、动态、展柜与关于/README 编辑器的图片选择器都带尺寸档位（默认长边 720，关于页插入的 Markdown 也会带 `?size=`）。文章正文里的老图片由 `packages/back/src/markdown.ts` 的 sanitize 自动补默认 `?size=720&q=80`，客户端预览 `public/js/markdown.js` 同步实现。档位与默认值以 `@myon/shared` 的 `mediaImageSizes` / `defaultMediaImageSize` 为准；`moments` / `gallery_items` 各有一列 `media_size`（历史数据为空 → 前台按 720 显示），后台编辑时写入。账户需要有可用的 Cloudflare Images（免费档每月 5,000 次唯一变换，超出按量计费，旧版 Image Resizing 订阅会报 9432 需在 Dashboard 切换）；本地/CI 用 Miniflare 的离线 Images 实现，同样能转换。图片选择器打开时默认「上传新图」，切到「现有图片」才请求媒体库列表，不要在打开时预取。
-- **首页图片/联系方式可配置、固定文案是静态资源**：首页的 KV 配置只有封面图、第 2 页两张装饰图（`home_cover_image` / `home_p2_figure_a` / `home_p2_figure_b`，装饰图留空时前台沿用封面图）与联系方式（`home_links`，最多 6 条，每条 `label` / `href` / 可选 `icon`，icon 只存 Iconify 名称如 `ri:rss-fill`；后台「设置 → 首页」编辑，行首可拖拽或 ↑↓ 排序，移动端隐藏把手）。标题、导语、七页主标签、第 2–6 页页头说明、封面贴纸/便签、尾页标题/导语、数据块（展示哪些统计预设）都是静态配置：文案在 `packages/shared/src/i18n/zh-CN.json`（按 locale 取，空串不渲染），结构在 `packages/shared/src/site.config.json`；改这些文案要改代码并发布，不要重新加回 KV。副层标 `VOL. <年份>` 与封面图右下角年份由页面按当前年份自动生成，不配置。首页第 2 页的「最近写的」在服务端读取 `/api/v1/posts?limit=3`，不要写死文章。首页第 2–6 页的数据都来自服务端 `/api/v1/*`（posts / moments / gallery / bangumi / tools / stats）：第 3/4 页的图位只展示真实条目自带的图片（动态 `mediaKey`、藏品 `media_key`），不要再用封面图冒充内容图；第 5 页的「本周放送表」只在同步数据带回 `nextAirAt` 时渲染，不要自行推算放送日。任一页条目为空时统一显示「暂无内容 + 入口」空态，不渲染任何内容图或封面装饰图。
-- **图标用 Iconify 名称**：设置里只存 `前缀:名称`（icones.js.org 的写法），不要在数据库里存图标 HTML / 外链脚本；`GET /api/v1/icons?names=...` 批量取 SVG（最多 12 个），上游失败时返回空数组，前台退回内置线稿图标。
-- **页脚支持链接**：`footer_tech` / `footer_icp` 允许写多个 `<a>`，后端 `sanitizeFooterHtml` 白名单过滤（a/br/span/strong/em，http/https/mailto）后输出，前台用 `set:html` 渲染。
-- **首页窄屏交互**：面板内容高于一屏时先内部滚动，滚到底/顶才翻页，并显示「本页还有内容」提示；不要改回“滚轮直接翻页”。
-- **本地 Bangumi 同步**用 `pnpm bangumi:sync:local`（默认走 `127.0.0.1:7890` 代理，`BANGUMI_PROXY` 可覆盖）；生产 Worker 的 Cron 与后台按钮是直连。本地脚本只写 D1 元数据（含 `cover_source`），不下载封面；封面由前台代理路由按需获取。
-- **手机端原生 App** 将来在仓库的另一条分支开发，通过 HTTP 消费 `/api/v1`，不共享 TS 类型。
-- **后台页面身份验证是可选的**：未接 Cloudflare Access 时 `/admin*` 本身没有登录，只有写接口有令牌门禁；接入后 `/admin*` 由单个 Access 应用保护（见上）。**令牌入口只有一个**：`AdminLayout` 顶栏的「管理令牌」按钮/弹窗（`public/js/admin-token.js`），页面里不要再放第二个令牌输入框。
+本文只约束**怎么干活**。功能怎么实现、接口有哪些字段、页面长什么样，去读代码、`README.md` 与 `design-spec.md`，本文不复述。
 
 ---
 
-## 2. 硬性约束（违反即回滚，不要“顺手优化”）
+## 1. 工作方式
 
-1. 不新增部署单元：不新增 Worker、Pages、第二个 `wrangler` 配置，也不把 API 拆成独立服务。
-2. 不改已发布的 API 契约：`/api/v1` 的任何字段/语义变更都必须是新增字段或新增版本；破坏性改动一律新增 `/api/v2` 并同时挂载。
-3. 始终保持 `/api/health` 不版本化、路径不变（监控与部署验收依赖它）。
-4. TypeScript 固定在 6.x，不要升级到 7。
-5. 包管理器只用 pnpm（版本见 `packageManager` 字段），Node ≥ 22.22。不要引入 `package-lock.json`、`yarn.lock`、npm/pnpm 混用。
-6. 视觉基线不可动摇：主题色默认 `#EC88C2`、无圆角、硬边框 + 硬阴影的「同人志」风格、中文界面。主题色可由后台配置，页面一律用 `--pink` / `--pink-soft` / `--pink-wash` / `--pink-deep` / `--on-pink` 变量，不写死色值。**照片一律按原色显示**：不加 `grayscale` 等颜色滤镜，也不在照片上叠粉色 multiply / 网点纹理（`.frame` 只保留边框、阴影与说明条）。
-7. 不引入前端框架（React/Vue/Svelte）替换现有 Astro + 原生 CSS/JS 页面；组件化用 `.astro`。
-8. 不改写 git 历史（不 `rebase`/`amend`/`force push` 已推送的提交）。
-9. 不触碰 `design` 分支；不从 `main` 引用 `design/` 下的任何文件。
-10. 不提交生成物与本地状态：`node_modules/`、`dist/`、`.astro/`、`.wrangler/`、`test-results/`、`playwright-report/`、`.dev.vars`。
-11. 不写任何密钥、token、账号 ID 到仓库；`database_id` 等占位符保持占位（`ADMIN_TOKEN` 只放 `.dev.vars` 或 `wrangler secret`）。
-12. 不修改 `apps/web/worker-configuration.d.ts`（生成文件）。改绑定或变量时改模板后运行 `pnpm wrangler:config && pnpm types`。
-13. 数据库变更只新增 `packages/back/migrations/` 下的 SQL 文件；已应用的 migration 不修改、不删除、不改名。
-14. 页脚文案、备案号、RSS/邮箱、主题色、站点名/副标题/描述只能来自 KV 站点设置；页面里不得硬编码这些内容，也不得绕过 `/api/v1/site` 另起数据源。
-15. 后台写接口必须挂在 `/api/v1/admin/*` 并经过 `requireAdmin`；不要新增无鉴权的写端点。
-16. 上传图片只走 `storeMedia()`（类型白名单 + 8MB 上限），不要自己拼 R2 key。
-17. 不改回模板里的 `main`（必须指向 `./src/worker.ts`），也不删 `triggers.crons`，否则 Bangumi 同步会失效。
-18. 不提交 `apps/web/wrangler.jsonc`（生成物）；部署配置只改 `wrangler.template.jsonc` 与 `scripts/generate-wrangler.mjs`，真实 database_id 只放环境变量/CI Secret。
-19. 新增站点设置项要三处同步：`@myon/shared`（键名 / 默认值 / 校验）、后台设置页对应字段、`GET /api/v1/site` 需要的字段（`PublicSiteSettings`）；不再往 D1/seed 里写设置默认行，旧 KV 缺失的键由默认值补齐；首页相关用 `home_` 前缀。
+1. **先问，再动手。** 需求含糊、验收标准不明，或存在多种合理取舍（分层、路由、API 契约、视觉方向、数据归属）时，先向维护者提问确认；不要自行补全业务规则，也不要替维护者做决定。
+2. **只做被要求的事。** 不顺手重构、不扩大范围、不实现「以后可能用得上」的功能、不新增依赖。发现无关问题就报告，不要顺手改。
+3. **先找现成的。** 动手前先确认仓库里已有的工具、插件、脚本、Skill 和共享模块能不能直接用；能用就复用，不要重复造一套。
+4. **不确定就查，不要猜。** 事实以代码、`README.md`、`design-spec.md`、`packages/shared` 为准；没验证过的接口、表结构、页面行为一律不要写成结论。
+5. **小步可验证。** 一次只做一件事，改完按第 5 节跑完验证再交付。
 
----
+### 1.1 工具、插件与技能
 
-## 3. 提交与协作
+- 优先使用宿主提供的 tools / plugins / skills：设计类任务交给 UI 设计 Skill，前端实现交给前端 Skill，Office 与文档交给对应 Skill；不要用 shell 或临时脚本绕开它们。
+- 仓库自带的脚本、生成器、测试与样式/脚本文件就是既有实现：`pnpm` 脚本、`public/css`、`public/js`、`scripts/`、`packages/shared` 能覆盖的，不要另写一份。
+- 新增工具、脚本、配置或依赖前，先在仓库里搜一遍等价物，并在回复里说明为什么必须新增。
+- 当前会话实际可用的 Skill 以会话给出的清单为准，本文不维护常驻名单。
 
-- **提交前先询问维护者。** 没有明确同意，不要 `git add` 之后直接 `commit`，也不要 push。
-- 一次提交只做一件事；消息用中文，前缀用 `feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`，简略描述动机与影响。
-- 提交前必须逐条跑完第 5 节验证清单，并在回复里贴出结果。
-- 遇到分层、路由、API 契约、视觉方向这类有取舍的问题，**先问**，不要自行发明规范。
+## 2. 项目边界
+
+- **一个部署单元**：`@myon/web` 构建时把 `@myon/back` 打进同一个 Worker。不新增 Worker / Pages / 第二个 wrangler 配置，不把 API 拆成独立服务。
+- **分层**：`apps/web/src/pages` 只做路由、取数、渲染，不写 SQL、不 import drizzle；`layouts` / `components` 不放业务逻辑与数据查询；`packages/back` 不依赖 Astro 与浏览器 API；`packages/shared` 不依赖 Cloudflare 运行时与 Node 内置模块。页面取数走 `/api/v1`，服务端渲染时进程内 `app.request()`。
+- **API 契约**：已发布的 `/api/v1` 只增不改，破坏性改动新增 `/api/v2` 并同时挂载；`/api/health` 永远不版本化、路径不变。
+- **绑定与部署配置**：只改 `apps/web/wrangler.template.jsonc` 与 `scripts/generate-wrangler.mjs`；`apps/web/wrangler.jsonc` 与 `worker-configuration.d.ts` 都是生成物，不入库、不手改；改绑定后跑 `pnpm wrangler:config && pnpm types`。Worker 入口 `main` 必须指向 `./src/worker.ts`，`triggers.crons` 不能删。
+- **数据库**：schema 先改 `packages/back/src/db/schema.ts`，再新增 `packages/back/migrations/` 下的 SQL，两者同一个提交；已应用的 migration 不改、不删、不改名；查询用 Drizzle 表达式，不拼字符串 SQL。
+- **站点设置**：只走 KV `site-settings:v1`，键名与默认值在 `@myon/shared` 的 `siteSettingKeys`；不往 D1 / seed 写设置默认行，不在页面硬编码站点文案、主题色、备案号。
+- **媒体**：文件只存 R2、元数据在 D1；上传只走 `storeMedia()`，地址只用 `mediaUrl()` / `contentImageUrl()`，不手拼 `/assets/`、`/media/`，也不用 `/cdn-cgi/image/`。
+- **后台**：写接口必须挂 `/api/v1/admin/*` 并经过 `requireAdmin`，不新增无鉴权写端点。
+- **密钥**：不写任何 token、账号 ID、`database_id` 到仓库，占位符保持占位。
+- **分支**：不碰 `design` 分支，也不从 `main` 引用 `design/`；不改写已推送的 git 历史（不 rebase / amend / force push）。
+- **不入库**：`node_modules/`、`dist/`、`.astro/`、`.wrangler/`、`test-results/`、`playwright-report/`、`.dev.vars`。
+
+## 3. 技术约束
+
+- TypeScript 固定 6.x，不升级到 7；包管理器只用 pnpm（版本见 `packageManager`），Node ≥ 22.22；不引入 `package-lock.json` / `yarn.lock`。
+- 不引入前端框架替换 Astro + 原生 CSS/JS；组件化用 `.astro`。
+- 视觉基线不可动摇：主题色默认 `#EC88C2`、无圆角、硬边框 + 硬阴影、中文界面；颜色只用 `--pink` / `--pink-soft` / `--pink-wash` / `--pink-deep` / `--on-pink` 变量，不写死色值；照片按原色显示，不加滤镜、不叠色。
+- 样式归属：设计令牌与共享组件在 `public/css/v2.css`，规范见 `design-spec.md`；页面样式放 `public/css/pages/`、页面脚本放 `public/js/pages/`；页面样式在 `v2.css` 之后加载，只覆盖布局，不覆盖共享组件的字体 / 字号 / 颜色 / 边框 / 内边距。
+- 页面壳体：前台内页一律 `SiteLayout.astro`，后台一律 `AdminLayout.astro`；页脚只由 `SiteBar.astro` 渲染，主题色只由 `ThemeTokens.astro` 注入；链接一律用路由，不出现 `.html`。
+- 文案：用户可见文案与代码注释用中文，路由 / 类名 / 变量 / 数据库字段用英文；不改写设计稿的标题、栏目名与编号体系。
+- 测试：新增或修改 API 行为补 `packages/back/tests/unit`，新增页面、路由、交互补 `apps/web/tests/e2e`；不为通过测试删断言、跳过用例或放宽超时。
+
+## 4. 提交与协作
+
+- **提交或 push 前必须先征得维护者同意**，没有明确同意不要 `git add` 后直接 commit，也不要 push。
+- 一次提交只做一件事；消息用中文，前缀 `feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`，说明动机与影响。
 - 需要看设计稿时用 `git worktree add ../myon-design design`，不要切分支打乱工作区。
-
----
-
-## 4. 代码约定
-
-### 4.1 分层
-
-| 位置 | 允许做 | 禁止做 |
-| --- | --- | --- |
-| `apps/web/src/pages` | 路由、取数、渲染、页面交互 | 直接写 SQL、直接 import drizzle、import `cloudflare:workers` 以外的 Worker 内部模块 |
-| `apps/web/src/layouts`、`src/components` | 页面壳体、跨页共享片段 | 放业务逻辑、放数据查询 |
-| `packages/back` | Hono 路由、数据访问、Markdown 渲染 | 依赖 Astro、依赖浏览器 API |
-| `packages/shared` | 纯类型、zod schema、常量 | 依赖 Cloudflare 运行时或 Node 内置模块 |
-
-页面取数走 API，不直连数据库：服务端渲染时在进程内调用 `app.request()`，不要自己拼 SQL。
-
-### 4.2 路由与页面
-
-- 前台内页一律用 `src/layouts/SiteLayout.astro`；后台页面一律用 `src/layouts/AdminLayout.astro`；首页 `src/pages/index.astro` 是七页翻页结构，独立写。
-- 页脚统一由 `src/components/SiteBar.astro` 渲染（浮动底栏），主题色统一由 `src/components/ThemeTokens.astro` 注入；页面不要自写 footer，也不要硬编码主题色。
-- 顶栏与底栏都是 fixed 浮动层，内容区必须用 `--topbar-h` / `--bottombar-h` 预留高度，不要让内容被遮住且滚不到。
-- 页面专属样式放 `public/css/pages/<name>.css`，页面专属脚本放 `public/js/pages/<name>.js`，通过 `is:inline` 的 `<link>` / `<script src>` 引入（`public/` 下的资源不参与打包）。
-- 筛选栏统一用共享 `.filterbar` / `.filterbar-tab` / `.filterbar-search` / `.filterbar-sort` / `.filterbar-count` / `.filterbar-clear`（前台样式在 `v2.css`，后台在 `admin.css`）；顺序固定为「chips → 搜索 → 排序 → 计数 → 清除」，不要在页面里另造 `.toolbar` / `.tabs2` / `.ftabs` / `.cats` 一套。
-- 页面样式必须在 `v2.css` 之后加载，不要写进 `v2.css`。
-- 不出现指向 `.html` 的链接；一律用路由（如 `/articles`、`/admin/about`）。
-- 不在页面里硬编码 API 路径，用 `@myon/shared` 的 `API_VERSION` / `apiBasePath`；站点设置从 `Astro.locals.site` 取（middleware 已注入）。
-- 列表页在 frontmatter 里进程内 `app.request('/api/v1/...')` 取数后直接渲染，不要客户端二次请求首屏数据；内容图片用 `contentImageUrl()`（默认长边 720，需要原图时才用 `mediaUrl()`），数量统计用 `/api/v1/stats`，不要在页面里自己数字段。
-- 工具页一律放 `src/pages/tools/`：索引用 `index.astro`，单工具用 `[slug].astro`（按 `toolKey` 条件渲染工作台，脚本按 `toolKey` 条件加载 `public/js/pages/tool-*.js`，样式统一进 `public/css/pages/tools.css`）；新增内置工具时同步 `@myon/shared` 的 `builtinToolKeys`、后台表单与页面，不要在 `/tools` 单页里堆工作台。
-- 列表页分页用 `Astro.url.searchParams.get('page')` 算 `offset`，把 `total` 写进“共 N 条”，用 `?page=N` 链接翻页；筛选只在当页数据上做，计数用 `total`。
-- 新增前台路由必须同时在 `apps/web/tests/e2e/pages.spec.ts` 里加一条覆盖；每个工具页（`/tools/<slug>`）由工具索引与 `tools.spec.ts` 覆盖；底栏、主题色、RSS 这类全站行为写到 `tests/e2e/site.spec.ts`。
-- 后台弹窗统一由 `public/js/admin-dialog.js` 接管关闭：点击空白 / 按 Esc 时，表单没改过直接关，改过则弹页面内「放弃修改？」确认框；页面脚本不要再写 backdrop click 关闭逻辑，也不要加第二套未保存确认。动态创建的 dialog（如媒体选择器）会被 MutationObserver 自动接管；确实不需要守卫的 dialog 加 `data-dismiss-guard="off"`。
-
-### 4.3 样式
-
-- 设计令牌与基础组件在 `public/css/v2.css`；颜色、字号、间距优先用既有 CSS 变量，不要硬编码十六进制颜色。
-- 视觉规范（字号档位、组件归属、暗色与状态规则）见仓库根目录 `design-spec.md`；页面 CSS 只允许覆盖布局属性，**不得覆盖共享组件的字体 / 字号 / 颜色 / 边框 / 内边距**。
-- 强调色只用 `--pink` / `--pink-soft` / `--pink-wash` / `--pink-deep` / `--on-pink`；后台配置主题色时这组变量会被整体覆盖，写死色值的元素会跟不上。
-- 浮动底栏样式在 `v2.css` 的 `.sitebar` 段；各页只负责左格内容，中格与右格不要绕开组件自己拼。
-- 装饰性元素（编号、贴纸、色块）沿用现有类名体系，不要另造一套。
-- 响应式断点：前台沿用 `1100px` 与 `760px`；后台控制台另用 `1100px` / `900px` / `600px`（900 折叠侧栏）。
-- 除设计稿里已有的圆形元素（光晕、头像、图标）外，不使用 `border-radius`。
-- 文字字号下限：顶栏、底栏、贴纸与各页小标签不低于 `10px`；字号只用整数档，共享组件用 `v2.css` 的 `--fs-1`…`--fs-6`。
-- 删除页面里的 `.sub` 页面副标题、`.narration` 便签与 `.kai-note` 引文；不要再新增这三类装饰性说明。展柜展品上不再放 sticker / NEW / 固定展签，展签只在 hover / focus 时浮出编号、分类、名称与 note。
-- 深色模式投影使用纸白色（`[data-theme="dark"]` 的 `--shade`），浅色保持墨黑；不要写死黑色 `box-shadow`。
-- 首页面板高度不可假设等于一屏：新增内容必须能在面板内滚动，并保证底部留出 `--bottombar-h`。
-
-### 4.4 文案
-
-- 用户可见文案用中文；代码注释用中文。
-- 路由、类名、变量名、数据库字段用英文。
-- 不改写设计稿里的标题、栏目名与编号体系（`PAGE 0X / 07`、`CH.0X`）。
-
-### 4.5 数据与内容
-
-- schema 改动：先改 `packages/back/src/db/schema.ts`，再新增 migration，两者同一个提交。
-- 查询用 Drizzle 的表达式构建，不拼字符串 SQL。
-- `packages/back/scripts/seed.sql` 只放本地演示数据，不写生产内容。
-- Markdown 渲染统一走 `packages/back/src/markdown.ts`；新增 HTML 输出必须经过白名单过滤，不要绕过 `sanitizeHtml`。扩展语法（KaTeX 公式、GitHub 提醒框、剧透、图片网格、GitHub 卡片、外部网站卡片 `::link{url="…"}`）也由该模块输出，后台预览用的 `public/js/markdown.js` 要同步实现；组件样式放 `public/css/markdown-extras.css`（公式样式与字体来自 npm `katex`），不要把用户的原始 HTML 直接放行。外部网站卡片的元数据由 `GET /api/v1/link-preview?url=` 抓取（只允许 http(s)、拦截私网/回环地址、5 秒超时、KV 缓存 7 天），前端 `public/js/link-preview.js` 负责把基础卡补成标题/描述/favicon 卡，失败保持基础链接卡。
-
-### 4.6 测试
-
-- 新增或修改 API 行为 → 在 `packages/back/tests/unit` 补单测。
-- 新增页面、路由、交互 → 在 `apps/web/tests/e2e` 补用例。
-- 不为通过测试删断言、跳过用例、放宽超时；测试确实不该存在时说明理由再删。
-
----
+- 遇到分层、路由、API 契约、视觉方向这类有取舍的问题，**先问**，不要自行发明规范。
 
 ## 5. 验证清单（提交前必须全部通过）
 
@@ -146,13 +64,9 @@ pnpm deploy:dry  # 打包 + 绑定检查，不上线
 pnpm test:e2e    # Playwright（Chromium）
 ```
 
-- 首次跑前先 `pnpm wrangler:config`（生成 `apps/web/wrangler.jsonc`；默认值即可跑本地 D1）。
-- 首次跑 e2e 前：`pnpm exec playwright install chromium`
-- 需要本地 D1 时：`pnpm db:migrate:local && pnpm db:seed:local`
-- e2e 里的后台用例依赖 `apps/web/.dev.vars` 的 `ADMIN_TOKEN`（可用环境变量覆盖）；CI 会写一份临时 `.dev.vars`。
+- 首次跑前先 `pnpm wrangler:config`；首次跑 e2e 前 `pnpm exec playwright install chromium`；需要本地 D1 时 `pnpm db:migrate:local && pnpm db:seed:local`。
+- e2e 后台用例依赖 `apps/web/.dev.vars` 的 `ADMIN_TOKEN`。
 - 任何一步失败就修到通过，不要注释掉检查项。
-
----
 
 ## 6. 常用命令
 
@@ -160,21 +74,18 @@ pnpm test:e2e    # Playwright（Chromium）
 | --- | --- |
 | `pnpm install` | 安装依赖 |
 | `pnpm dev` | 本地开发（`http://localhost:4321`） |
-| `pnpm types` | 按 `wrangler.jsonc` 重新生成绑定类型 |
-| `pnpm db:migrate:local` / `db:seed:local` | 本地 D1 迁移 / 种子 |
+| `pnpm types` | 按 wrangler 配置重新生成绑定类型 |
 | `pnpm wrangler:config` | 由模板 + 环境变量生成 `apps/web/wrangler.jsonc` |
-| `pnpm bangumi:sync:local` | 本地走代理同步 Bangumi 收藏到本地 D1 |
+| `pnpm db:migrate:local` / `db:seed:local` | 本地 D1 迁移 / 种子 |
 | `pnpm deploy` | 生产部署，**只在 CI 或维护者明确要求时执行** |
-
----
 
 ## 7. 交付说明
 
-回复维护者时，按这个顺序写：
+回复维护者时按顺序写：
 
 1. 改了哪些文件、各自的作用；
 2. 跑了哪些验证、结果如何（贴关键输出）；
-3. 还有哪些没做、哪里是占位、下一步建议；
+3. 哪些没做、哪里是占位、下一步建议；
 4. 需要维护者决定的分歧点。
 
-不要用“应该可以”“大概没问题”这类无法验证的表述；没跑过就写没跑过。
+不用「应该可以」「大概没问题」这类无法验证的表述；没跑过就写没跑过。
