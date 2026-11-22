@@ -5,7 +5,7 @@
 Images（`IMAGES`，图片转换）与静态资产（`ASSETS`）。
 
 > 站点设置（主题色、页脚、首页文案等）存在 **Workers KV**，D1 里没有 `settings` 表；
-> 媒体库直接读 **R2 对象**，D1 里没有 `media` 表。仓库内不保存任何图片资源。
+> 图片文件只存 **R2**，媒体元数据在 D1 的 `media_categories` / `media` / `media_aliases` 三张表。仓库内不保存任何图片资源。
 >
 > 图片转换用 Cloudflare Images：`/media/<key>?size=…` 由 Worker 通过 `IMAGES` 绑定生成
 > 低分辨率 WebP，账户未开通或转换失败时自动回退原图。**不要用 `/cdn-cgi/image/` URL**：
@@ -185,7 +185,7 @@ D1、R2、KV 都只创建一次；以后换账号/换环境再重复本节。
 
 | 名称 | 必填 | 用途 |
 | --- | --- | --- |
-| `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://myon.top`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
+| `SITE_URL` | 否 | 写入 Worker 的 `SITE_URL` 变量（默认 `https://www.myon.top`）；注意：当前代码没有读取它，RSS 与站点绝对链接来自 `apps/web/astro.config.mjs` 的 `site` |
 | `R2_BUCKET` | 否 | 写入 R2 binding 的 bucket 名称（默认 `myon-media`） |
 
 ### 3.3 Worker 的运行时密钥（Deploy workflow 自动同步）
@@ -238,7 +238,7 @@ pnpm wrangler:config
 
 ```bash
 D1_DATABASE_ID=xxxx-xxxx pnpm wrangler:config
-R2_BUCKET=myon-media SITE_URL=https://myon.top ENVIRONMENT=development pnpm wrangler:config
+R2_BUCKET=myon-media SITE_URL=https://www.myon.top ENVIRONMENT=development pnpm wrangler:config
 ```
 
 脚本会：
@@ -307,7 +307,7 @@ Worker 回滚也不会回滚 D1，涉及表结构变更时仍要单独评估。
 2. 校验 Secret `CLOUDFLARE_D1_DATABASE_ID` 非空；
 3. `pnpm wrangler:config` 生成生产配置（`D1_DATABASE_ID` 来自 Secret，`R2_BUCKET`/`SITE_URL` 来自 Variables，`ENVIRONMENT=production`）；
 4. `wrangler d1 migrations apply myon-blog --remote`（按 migration 编号顺序应用 `packages/back/migrations/`：
-   0013/0014 删 `media`/`settings` 表，0015 给 `bangumi_shows` 加 `subject_type`，0016 加 `comment`，0017 加 `cover_source`，0018 删 `moments.tag`）。
+   0013/0014 删 `media`/`settings` 表，0015 给 `bangumi_shows` 加 `subject_type`，0016 加 `comment`，0017 加 `cover_source`，0018 删 `moments.tag`，0019/0020 加媒体尺寸与元数据表）。
 
 ### 5.3 旧站点设置迁移（仅从 D1 settings 版本升级时需要）
 
@@ -441,7 +441,7 @@ pnpm exec wrangler rollback <version-id>   # 不传时自动回滚到上一个 1
 | 后台接口 401 | Access 模式：`ACCESS_TEAM_DOMAIN`/`ACCESS_AUD` 必须成对且 AUD 来自 API 应用；令牌模式：`x-admin-token` 与 Worker 的 `ADMIN_TOKEN` 一致 |
 | 后台接口 503 | Worker 既没配 Access 也没配 `ADMIN_TOKEN`：把 `ADMIN_TOKEN` 配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
 | Bangumi 同步提示 `not_configured` | Worker secrets 缺 `BANGUMI_ACCESS_TOKEN`/`BANGUMI_USERNAME`：配到 Repository Secrets 后重新跑 Deploy（或按 3.3 手动 secret put） |
-| 图片 404 / 上传后看不到 | 媒体只从 R2 读：检查 `R2_BUCKET` 变量与真实 bucket 名一致、对象 key 是否正确；仓库里没有 `public/assets` 图片回退。管理后台 `/admin/media` 只列出 R2 对象 |
+| 图片 404 / 上传后看不到 | 媒体只从 R2 读：检查 `R2_BUCKET` 变量与真实 bucket 名一致、对象 key 是否正确；仓库里没有 `public/assets` 图片回退。管理后台 `/admin/media` 读 D1 元数据（首次打开会与 R2 对齐一次） |
 | RSS/绝对链接域名不对 | 改 `apps/web/astro.config.mjs` 的 `site` 后重新构建部署；RSS 标题/描述取自 KV 里的站点设置 |
 | 本地 `wrangler` 命令报配置缺失 | 先 `pnpm wrangler:config`；`wrangler.jsonc` 是生成文件，不入库 |
 | wrangler 版本不一致/命令找不到 | 用仓库脚本（`pnpm ...`）而不是全局 `npx wrangler`；先 `pnpm install`，版本由 `pnpm-lock.yaml` 固定 |
