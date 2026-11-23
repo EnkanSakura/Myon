@@ -30,7 +30,9 @@
 .st-legend b{color:var(--pp-80);font-weight:500}
 
 /* ---------- 媒体网格 ---------- */
-.media-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.media-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px;transition:opacity .14s var(--ease)}
+/* 刷新中：保留旧快照，只把网格压暗，不铺整片 loading */
+.media-grid[aria-busy="true"]{opacity:.55}
 .mcard{position:relative;background:var(--panel);border:2px solid var(--pline);padding:7px;
   transition:border-color .14s var(--ease),box-shadow .14s var(--ease),transform .14s var(--ease),background .14s var(--ease)}
 .mcard:hover{border-color:var(--ppk);box-shadow:4px 4px 0 var(--ppk-deep);transform:translate(-1px,-1px);z-index:2}

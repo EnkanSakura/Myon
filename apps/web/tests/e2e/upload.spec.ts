@@ -671,3 +671,134 @@ test('媒体转换接口：size=240 生成 WebP，size=orig 返回原图', async
   expect(originalSized.headers()['content-type']).toBe(originalType);
   expect(originalSized.headers()['x-image-size']).toBeUndefined();
 });
+
+// 列表缓存：同一组筛选 / 搜索参数来回切换直接用缓存，不重复请求后端
+// （后端列表每次都要做一次 R2 ↔ D1 对齐，重复请求很贵）。
+test('列表筛选来回切换命中缓存，不重复请求', async ({ page }) => {
+  await addToken(page);
+  const api = await mockMediaApi(page);
+  await page.goto('/admin/media', { waitUntil: 'networkidle' });
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
+  expect(api.listRequests).toHaveLength(1);
+
+  // 切到「文章」：这组参数没缓存过，请求一次
+  await page.locator('#catChips [data-category="cat_posts"]').click();
+  await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
+    'data-category-id',
+    'cat_posts',
+  );
+  expect(api.listRequests).toHaveLength(2);
+
+  // 切回「未分类」：命中缓存，请求数不变
+  await page.locator('#catChips [data-category="uncategorized"]').click();
+  await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
+    'data-key',
+    'uploads/202512/legacy.webp',
+  );
+  expect(api.listRequests).toHaveLength(2);
+
+  // 搜索「e2e-article」：未命中缓存，请求一次；未分类里没有它 → filtered-empty
+  await page.locator('#q').fill('e2e-article');
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(0);
+  await expect(page.locator('#empty')).toBeVisible();
+  expect(api.listRequests).toHaveLength(3);
+
+  // 清空关键词：回到已缓存的那组参数，不再请求
+  await page.locator('#q').fill('');
+  await expect(page.locator('#mediaGrid .mcard')).toHaveCount(1);
+  await expect(page.locator('#fbCount')).toContainText('全库筛选：1 个');
+  expect(api.listRequests).toHaveLength(3);
+});
+
+// 刷新中：保留已提交的查询快照，只在筛选计数与网格上表达 refreshing。
+test('刷新分类时保留旧快照并显示刷新中', async ({ page }) => {
+  await addToken(page);
+  const categories = [{ id: 'cat_posts', name: '文章', position: 0 }];
+  const items = [
+    {
+      id: 'm-legacy',
+      key: 'uploads/202512/legacy.webp',
+      filename: 'legacy.webp',
+      mime: 'image/webp',
+      size: 1024,
+      width: 480,
+      height: 360,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      categoryId: null,
+      categoryName: null,
+      aliases: [],
+    },
+    {
+      id: 'm-post',
+      key: 'uploads/202601/post.webp',
+      filename: 'post.webp',
+      mime: 'image/webp',
+      size: 2048,
+      width: 640,
+      height: 480,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      categoryId: 'cat_posts',
+      categoryName: '文章',
+      aliases: [],
+    },
+  ];
+
+  let hold = false;
+  // 用对象持有放行函数：闭包里赋值时 let 变量会被 TS 窄化成 never
+  const gate: { release: null | (() => void) } = { release: null };
+  await page.route('**/api/v1/admin/media?*', async (route) => {
+    if (hold) {
+      await new Promise<void>((resolve) => {
+        gate.release = resolve;
+      });
+    }
+    const category = new URL(route.request().url()).searchParams.get(
+      'category',
+    );
+    const filtered = items.filter((item) =>
+      category === 'uncategorized'
+        ? item.categoryId === null
+        : item.categoryId === category,
+    );
+    await route.fulfill({
+      json: {
+        items: filtered,
+        total: filtered.length,
+        limit: 30,
+        offset: 0,
+        categories,
+        uncategorizedCount: 1,
+      },
+    });
+  });
+
+  await page.goto('/admin/media', { waitUntil: 'networkidle' });
+  await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
+    'data-key',
+    'uploads/202512/legacy.webp',
+  );
+
+  // 挂起下一次列表请求：切换分类后旧卡片必须还在，计数表达刷新中
+  hold = true;
+  await page.locator('#catChips [data-category="cat_posts"]').click();
+  await expect(page.locator('#fbCount')).toHaveText('刷新中…');
+  await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
+    'data-key',
+    'uploads/202512/legacy.webp',
+  );
+  await expect(page.locator('#mediaGrid')).toHaveAttribute('aria-busy', 'true');
+
+  // 放行后换成新分类的卡片，计数与 busy 状态一起复位
+  await expect.poll(() => gate.release !== null).toBe(true);
+  hold = false;
+  gate.release?.();
+  await expect(page.locator('#mediaGrid .mcard').first()).toHaveAttribute(
+    'data-key',
+    'uploads/202601/post.webp',
+  );
+  await expect(page.locator('#fbCount')).toHaveText('全库筛选：1 个');
+  await expect(page.locator('#mediaGrid')).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+});

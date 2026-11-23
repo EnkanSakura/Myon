@@ -55,13 +55,19 @@ import type { AppBindings } from '../../types';
 const admin = new Hono<{ Bindings: AppBindings }>();
 
 /**
- * 后台响应一律不缓存。后台接口靠 Access cookie 鉴权，但边缘缓存/CDN 按 URL
+ * 后台响应默认不缓存。后台接口靠 Access cookie 鉴权，但边缘缓存/CDN 按 URL
  * 命中、不区分请求头：一条 200 被缓存后会原样发给未登录访客，401 也会被缓存
- * 住挡掉真正的管理员。后台读写都是实时数据，没有任何缓存价值。
+ * 住挡掉真正的管理员。后台读写都是实时数据，默认没有缓存价值。
+ *
+ * 例外：路由自己声明了 Cache-Control 时以路由为准（目前只有媒体库列表用
+ * `private, max-age` 让浏览器少查几次 D1）。`private` 只落在当前浏览器、
+ * 不进边缘缓存，上面「不能发给未登录访客」的前提仍然成立。
  */
 admin.use('*', async (c, next) => {
   await next();
-  c.header('Cache-Control', 'no-store');
+  if (!c.res.headers.has('Cache-Control')) {
+    c.header('Cache-Control', 'no-store');
+  }
 });
 
 admin.use('*', requireAdmin);
@@ -635,6 +641,9 @@ admin.delete('/media/categories/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+/** 媒体库列表允许浏览器缓存 60 秒；`private` 不进边缘缓存，写操作后由前端强刷。 */
+const MEDIA_LIST_CACHE_SECONDS = 60;
+
 admin.get('/media', async (c) => {
   const query = mediaListQuerySchema.parse(c.req.query());
   const result = await listMedia(c.env, {
@@ -644,11 +653,18 @@ admin.get('/media', async (c) => {
     q: query.q,
     sort: query.sort,
   });
-  return c.json({
-    ...result,
-    limit: query.limit,
-    offset: query.offset,
-  });
+  return c.json(
+    {
+      ...result,
+      limit: query.limit,
+      offset: query.offset,
+    },
+    200,
+    {
+      'Cache-Control': `private, max-age=${MEDIA_LIST_CACHE_SECONDS}`,
+      Vary: 'x-admin-token',
+    },
+  );
 });
 
 admin.post('/media', async (c) => {

@@ -165,16 +165,21 @@
   }
   function hideAuth() { authBanner.hidden = true; authToken.hidden = true; }
 
-  function request(method, url, body) {
+  /** cacheMode：列表 GET 走 "default" 吃 HTTP 缓存，写操作后传 "reload" 强制重新验证。 */
+  function request(method, url, body, cacheMode) {
     var headers = { accept: "application/json" };
     var token = tokenValue();
     if (token) headers["x-admin-token"] = token;
-    var init = { method: method, headers: headers, cache: "no-store" };
+    var init = { method: method, headers: headers, cache: cacheMode || "no-store" };
     if (body !== undefined) {
       headers["content-type"] = "application/json";
       init.body = JSON.stringify(body);
     }
-    return fetch(url, init);
+    return fetch(url, init).then(function (res) {
+      // 写接口（上传 / 删除 / 改分类或别名）返回后列表缓存一律失效，下一次读取回服务端
+      if (method !== "GET") invalidateList();
+      return res;
+    });
   }
   function readJson(res) { return res.json().catch(function () { return {}; }); }
 
@@ -375,9 +380,13 @@
     paintPager();
   }
 
-  /** 筛选栏计数：服务端过滤后的全库命中数（不是本页数量）。 */
+  /** 筛选栏计数：服务端过滤后的全库命中数（不是本页数量）；刷新中先表达状态。 */
   function paintFilterCount() {
     if (!fbCount) return;
+    if (refreshing) {
+      fbCount.textContent = "刷新中…";
+      return;
+    }
     fbCount.textContent = "全库筛选：" + state.total + " 个";
   }
 
@@ -400,14 +409,27 @@
   }
 
   /* ---------------- 加载 / 空态 ---------------- */
+  // refreshing：已有可保留的查询快照，正在取新结果（不清空网格）
+  var refreshing = false;
+
+  /** 首次加载：没有可保留内容，清空网格并显示整片 loading。 */
   function setLoading(on) {
     state.loading = on;
+    refreshing = false;
     loadingEl.hidden = !on;
     grid.setAttribute("aria-busy", on ? "true" : "false");
     if (on) {
       grid.replaceChildren();
       empty.hidden = true;
     }
+    paintSummary();
+  }
+
+  /** 刷新：保留已提交的查询快照，只在筛选计数与容器上表达 refreshing。 */
+  function setRefreshing(on) {
+    refreshing = on;
+    loadingEl.hidden = true;
+    grid.setAttribute("aria-busy", on ? "true" : "false");
     paintSummary();
   }
   function paintEmpty() {
@@ -569,6 +591,47 @@
     emptyText.textContent = title + "：" + text;
   }
 
+  /* ---------------- 列表查询缓存 ---------------- */
+  // 筛选 / 排序 / 页码仍由服务端完成；同一组参数在 TTL 内再次查看直接用缓存，
+  // 不再重扫 D1（后端列表还要做一次 R2 ↔ D1 对齐）。
+  var LIST_CACHE_TTL_MS = 5 * 60 * 1000;
+  var LIST_CACHE_MAX = 40;
+  var listCache = new Map();
+  var listSeq = 0;
+  // 写操作后置位：下一次列表读取用 cache: "reload" 绕过浏览器缓存，成功后复位。
+  var listStale = false;
+
+  function listCacheGet(key) {
+    var entry = listCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.fetchedAt > LIST_CACHE_TTL_MS) {
+      listCache.delete(key);
+      return null;
+    }
+    return entry.body;
+  }
+
+  function listCacheSet(key, body) {
+    if (!listCache.has(key) && listCache.size >= LIST_CACHE_MAX) {
+      var oldestKey = null;
+      var oldestAt = Infinity;
+      listCache.forEach(function (entry, name) {
+        if (entry.fetchedAt < oldestAt) {
+          oldestAt = entry.fetchedAt;
+          oldestKey = name;
+        }
+      });
+      if (oldestKey !== null) listCache.delete(oldestKey);
+    }
+    listCache.set(key, { body: body, fetchedAt: Date.now() });
+  }
+
+  /** 上传 / 删除 / 改分类或别名后，所有列表缓存都失效，下一次读取被迫回服务端。 */
+  function invalidateList() {
+    listCache.clear();
+    listStale = true;
+  }
+
   /* ---------------- 读取数据 ---------------- */
   function loadStats() {
     if (!STATS_API) return;
@@ -593,6 +656,30 @@
     return API + "?" + params.join("&");
   }
 
+  /** 把一次列表响应装进页面状态并绘制；refreshStats 只在真正走网络时刷新全库统计。 */
+  function applyListBody(body, refreshStats) {
+    state.items = body.items.slice();
+    state.total = typeof body.total === "number" ? body.total : body.items.length;
+    state.limit = typeof body.limit === "number" ? body.limit : state.limit;
+    state.pages = Math.max(1, Math.ceil(state.total / state.limit));
+    state.categories = normalizeCategoryList(body.categories);
+    state.uncategorizedCount =
+      typeof body.uncategorizedCount === "number" ? body.uncategorizedCount : 0;
+    state.catReady = true;
+    state.selected = {};
+    if (state.page > state.pages) {
+      state.page = state.pages;
+      loadData();
+      return;
+    }
+    setLoading(false);
+    renderCatChips();
+    renderCatSelects();
+    if (catDlg && catDlg.open) renderCatList();
+    renderGrid();
+    if (refreshStats) loadStats();
+  }
+
   function loadData() {
     if (!tokenValue()) {
       setLoading(false);
@@ -603,44 +690,44 @@
       return;
     }
 
-    setLoading(true);
-    hideAuth();
     var url = buildListUrl();
+    var seq = ++listSeq;
+    hideAuth();
+    // 同一筛选 / 排序 / 页码再次查看：直接用缓存，不再请求后端
+    var cached = listCacheGet(url);
+    if (cached) {
+      applyListBody(cached, false);
+      return;
+    }
 
-    request("GET", url)
+    // 已有快照：保留旧内容并标记刷新中；没有内容才整片 loading。
+    if (state.items.length > 0) setRefreshing(true);
+    else setLoading(true);
+    request("GET", url, undefined, listStale ? "reload" : "default")
       .then(function (res) {
         return readJson(res).then(function (body) { return { res: res, body: body }; });
       })
       .then(function (result) {
+        // 已经有更新的查询：过期响应不覆盖新的查询上下文
+        if (seq !== listSeq) return;
         var res = result.res;
         var body = result.body;
         if (res.status === 401) { authFailed(); lockView("未授权", "令牌无效"); return; }
         if (res.status === 503) { adminMissing(); lockView("接口未开放", "服务端没有配置管理令牌"); return; }
         if (!res.ok) throw new Error("HTTP " + res.status);
         if (!body || !Array.isArray(body.items)) throw new Error("接口响应缺少 items");
-        state.items = body.items;
-        state.total = typeof body.total === "number" ? body.total : body.items.length;
-        state.limit = typeof body.limit === "number" ? body.limit : state.limit;
-        state.pages = Math.max(1, Math.ceil(state.total / state.limit));
-        state.categories = normalizeCategoryList(body.categories);
-        state.uncategorizedCount =
-          typeof body.uncategorizedCount === "number" ? body.uncategorizedCount : 0;
-        state.catReady = true;
-        state.selected = {};
-        if (state.page > state.pages) {
-          state.page = state.pages;
-          loadData();
-          return;
-        }
-        setLoading(false);
-        renderCatChips();
-        renderCatSelects();
-        if (catDlg && catDlg.open) renderCatList();
-        renderGrid();
-        loadStats();
+        listCacheSet(url, body);
+        listStale = false;
+        applyListBody(body, true);
       })
       .catch(function (err) {
+        if (seq !== listSeq) return;
         setLoading(false);
+        if (state.items.length > 0) {
+          // 失败时保留旧快照和查询上下文，只就近提示，不把可用结果换成空态
+          toast("读取失败 · 已保留上次结果，稍后重试");
+          return;
+        }
         grid.replaceChildren();
         empty.hidden = false;
         emptyReset.hidden = false;
@@ -1176,6 +1263,8 @@
       if (authStopped) return;
       toast("上传结束 · 成功 " + ok + " 张，失败 " + failed + " 张");
       if (ok > 0) {
+        // 新文件只在服务端：列表缓存失效后重读第一页
+        invalidateList();
         state.page = 1;
         loadData();
       }

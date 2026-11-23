@@ -1535,3 +1535,41 @@ describe('mediaSize on moments and gallery', () => {
     expect(invalid.status).toBe(400);
   });
 });
+
+// 媒体库列表是目前唯一允许浏览器缓存的在台接口：private 不进边缘缓存，
+// 其它后台响应（含未授权）仍然 no-store。
+describe('admin media list cache headers', () => {
+  const auth = { 'x-admin-token': 'secret-token' };
+
+  it('lets the browser cache the media list and keeps the rest no-store', async () => {
+    const list = await app.request(
+      '/api/v1/admin/media?limit=30&offset=0&category=uncategorized',
+      { headers: auth },
+      adminEnv,
+    );
+    expect(list.status).toBe(200);
+    const cacheControl = list.headers.get('cache-control') ?? '';
+    expect(cacheControl).toContain('private');
+    expect(cacheControl).toMatch(/max-age=\d+/);
+    expect(cacheControl).not.toContain('public');
+    expect((list.headers.get('vary') ?? '').toLowerCase()).toContain(
+      'x-admin-token',
+    );
+
+    const categories = await app.request(
+      '/api/v1/admin/media/categories',
+      { headers: auth },
+      adminEnv,
+    );
+    expect(categories.status).toBe(200);
+    expect(categories.headers.get('cache-control')).toBe('no-store');
+
+    const unauthorized = await app.request(
+      '/api/v1/admin/media?limit=30&offset=0',
+      {},
+      adminEnv,
+    );
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('cache-control')).toBe('no-store');
+  });
+});

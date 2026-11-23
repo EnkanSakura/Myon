@@ -22,8 +22,14 @@
          onPick: function (itemOrItems, size) {}
        })
 
-     分类筛选：现有图片顶部有「全部 + 动态分类 + 未分类」chips，列表与搜索都由服务端
-     （文件名 / R2 key / 别名）完成。上传时归入「当前选中的具体分类 > 调用方 categoryId > 未分类」。
+     分类筛选：现有图片顶部有「全部 + 动态分类 + 未分类」chips。搜索语义与服务端一致
+     （文件名 / R2 key / 别名），但请求按「分类 + 关键词」缓存 5 分钟：
+       · 首次进入「现有图片」请求一次；
+       · 同一筛选再访问、重复打开选择器直接用缓存，不再重复请求；
+       · 首页已覆盖整库时，分类与搜索完全在本地筛选，零请求；
+       · 库超过一页（PAGE_SIZE）时回退到服务端查询，保证筛选仍覆盖全库。
+     上传成功或令牌失效会清空缓存；并发查询只应用最后一次的结果。
+     上传时归入「当前选中的具体分类 > 调用方 categoryId > 未分类」。
      分类/别名只存 D1，不改图片 URL。
      尺寸档位来自页面 data-image-sizes（@myon/shared 的 mediaImageSizes），
      不传 sizes 时整条尺寸栏隐藏，行为与旧版一致（设置页 / 关于页）。
@@ -42,6 +48,10 @@
     empty_file: "文件为空",
     upload_failed: "服务端上传失败"
   };
+
+  // 现有图片的查询缓存：选择器每次打开都会重建 state，但列表不必重新请求。
+  var CACHE_TTL_MS = 5 * 60 * 1000;
+  var CACHE_MAX_ENTRIES = 20;
 
   function readToken() {
     try {
@@ -72,6 +82,10 @@
   var dlg = null;
   var refs = null;
   var state = null;
+  /** 查询缓存：state 每次打开重建，缓存跨弹窗保留，直到 TTL 过期或上传后失效。 */
+  var libraryCache = new Map();
+  /** 整库快照：首页已覆盖全部文件时用它把分类 / 搜索改成本地筛选，不再请求后端。 */
+  var completeSet = null;
 
   /* ---------------- 弹窗骨架（静态结构，数据一律走 DOM API） ---------------- */
   function buildDialog() {
@@ -156,8 +170,8 @@
     refs.existingPane.hidden = !existing;
     refs.uploadPane.hidden = existing;
     if (existing) {
-      // 懒加载：首次切到「现有图片」才请求媒体库，打开选择器不再预拉列表。
-      if (state && !state.libraryLoaded && !state.loading) loadMedia(true);
+      // 懒加载：首次切到「现有图片」才查询；重复打开选择器直接命中缓存，不再请求。
+      if (state && !state.libraryLoaded && !state.loading) runQuery();
       refs.search.focus();
     } else if (state) {
       refs.pickFile.focus();
@@ -282,7 +296,7 @@
           state.category = target.id;
           paintCats();
           updateUploadHint();
-          loadMedia(true);
+          runQuery();
         };
       })(entry));
       frag.appendChild(btn);
@@ -408,81 +422,269 @@
     return "请求失败（HTTP " + status + "）";
   }
 
-  /* ---------------- 读取现有图片 ---------------- */
-  function loadMedia(reset) {
+  /* ---------------- 读取现有图片：本地筛选 → 缓存 → 服务端 ---------------- */
+
+  /** 查询键与 listMedia 的筛选参数一一对应；state 每次打开重建，缓存跨弹窗保留。 */
+  function queryKey(category, q) {
+    return JSON.stringify([category || "all", String(q || "").trim()]);
+  }
+
+  function cacheGet(key) {
+    var entry = libraryCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) {
+      libraryCache.delete(key);
+      return null;
+    }
+    return entry;
+  }
+
+  function cacheSet(key, entry) {
+    if (!libraryCache.has(key) && libraryCache.size >= CACHE_MAX_ENTRIES) {
+      var oldestKey = null;
+      var oldestAt = Infinity;
+      libraryCache.forEach(function (value, name) {
+        if (value.fetchedAt < oldestAt) {
+          oldestAt = value.fetchedAt;
+          oldestKey = name;
+        }
+      });
+      if (oldestKey !== null) libraryCache.delete(oldestKey);
+    }
+    libraryCache.set(key, entry);
+  }
+
+  /** 上传成功 / 令牌失效后清空缓存，下一次查询回到服务端。 */
+  function invalidateLibrary() {
+    libraryCache.clear();
+    completeSet = null;
+  }
+
+  /** 与 listMedia 的 itemCondition 一致：文件名、R2 key、别名任一命中。 */
+  function keywordMatches(item, keyword) {
+    var needle = keyword.toLowerCase();
+    if (String(item.filename || "").toLowerCase().indexOf(needle) >= 0) return true;
+    if (String(item.key || "").toLowerCase().indexOf(needle) >= 0) return true;
+    var aliases = Array.isArray(item.aliases) ? item.aliases : [];
+    for (var i = 0; i < aliases.length; i += 1) {
+      if (String(aliases[i]).toLowerCase().indexOf(needle) >= 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 本地筛选：整库快照可用时成立（服务端同样是全库筛选，结果与再请求一次相同）。
+   * 分类计数只应用关键词、不应用分类，与 listMedia 的 countWhere 保持一致。
+   */
+  function localQuery(category, q) {
+    if (!completeSet || !Array.isArray(completeSet.categories)) return null;
+    if (Date.now() - completeSet.fetchedAt > CACHE_TTL_MS) {
+      completeSet = null;
+      return null;
+    }
+    var keyword = String(q || "").trim();
+    var matched = keyword
+      ? completeSet.items.filter(function (item) {
+          return keywordMatches(item, keyword);
+        })
+      : completeSet.items.slice();
+    var counts = {};
+    var uncategorizedCount = 0;
+    matched.forEach(function (item) {
+      if (item.categoryId) counts[item.categoryId] = (counts[item.categoryId] || 0) + 1;
+      else uncategorizedCount += 1;
+    });
+    var categories = completeSet.categories.map(function (cat) {
+      return {
+        id: cat.id,
+        name: cat.name,
+        position: cat.position,
+        count: counts[cat.id] || 0
+      };
+    });
+    var items =
+      !category || category === "all"
+        ? matched
+        : matched.filter(function (item) {
+            return category === UNCATEGORIZED
+              ? !item.categoryId
+              : item.categoryId === category;
+          });
+    return {
+      allItems: items,
+      items: items.slice(0, PAGE_SIZE),
+      total: items.length,
+      categories: categories,
+      uncategorizedCount: uncategorizedCount
+    };
+  }
+
+  /** 把一次查询结果装进 state 并绘制；append=true 时接在现有列表后面。 */
+  function applyResult(result, append) {
+    if (Array.isArray(result.categories)) {
+      state.categories = result.categories.toSorted(function (a, b) {
+        return (a.position || 0) - (b.position || 0);
+      });
+      state.uncategorizedCount =
+        typeof result.uncategorizedCount === "number" ? result.uncategorizedCount : 0;
+      var allCount = state.uncategorizedCount;
+      state.categories.forEach(function (cat) {
+        allCount += typeof cat.count === "number" ? cat.count : 0;
+      });
+      state.allCount = allCount;
+      state.catCountsReady = true;
+      paintCats();
+      updateUploadHint();
+    }
+    var items = Array.isArray(result.items) ? result.items : [];
+    state.items = append ? state.items.concat(items) : items;
+    state.total = Number(result.total) || state.items.length;
+    state.libraryLoaded = true;
+    state.loading = false;
+    refs.grid.removeAttribute("aria-busy");
+    refs.state.textContent = "已连接 · " + state.items.length + " / " + state.total;
+    renderGrid();
+  }
+
+  /** 服务端查询一页；seq 丢弃过期响应，AbortController 取消被替换的请求。 */
+  function fetchPage(offset, seq, append) {
+    if (state.controller) state.controller.abort();
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    state.controller = controller;
+    state.loading = true;
+    if (!append) {
+      // 有旧内容时只标记 refreshing，不清空列表；没有内容才显示读取中。
+      refs.grid.setAttribute("aria-busy", "true");
+      refs.state.textContent = state.items.length ? "刷新中…" : "读取中…";
+    }
+    var category = state.category;
+    var q = state.q;
+    var url = state.api + "?limit=" + PAGE_SIZE + "&offset=" + offset;
+    if (category && category !== "all") {
+      url += "&category=" + encodeURIComponent(category);
+    }
+    if (q) url += "&q=" + encodeURIComponent(q);
+    fetch(url, {
+      headers: { accept: "application/json", "x-admin-token": state.token },
+      cache: "no-store",
+      signal: controller ? controller.signal : undefined
+    })
+      .then(function (response) {
+        return response
+          .json()
+          .catch(function () {
+            return {};
+          })
+          .then(function (body) {
+            return { response: response, body: body };
+          });
+      })
+      .then(function (result) {
+        // 用户已经换了查询：旧响应直接丢弃，不覆盖新的查询上下文。
+        if (!state || state.seq !== seq) return;
+        if (result.response.status === 401) {
+          invalidateLibrary();
+          state.token = "";
+          state.loading = false;
+          refs.grid.removeAttribute("aria-busy");
+          paintNotice();
+          refs.state.textContent = "管理令牌无效，请在顶栏更新";
+          return;
+        }
+        if (!result.response.ok) {
+          state.loading = false;
+          refs.grid.removeAttribute("aria-busy");
+          refs.state.textContent = describeError(result.response.status, result.body);
+          return;
+        }
+        var page = {
+          category: category,
+          q: q,
+          items: Array.isArray(result.body.items) ? result.body.items : [],
+          total: Number(result.body.total) || 0,
+          categories: Array.isArray(result.body.categories) ? result.body.categories : null,
+          uncategorizedCount:
+            typeof result.body.uncategorizedCount === "number"
+              ? result.body.uncategorizedCount
+              : 0,
+          fetchedAt: Date.now()
+        };
+        if (offset === 0) {
+          cacheSet(queryKey(category, q), page);
+          // 首页已覆盖整库：之后分类 / 搜索都在本地完成，不再请求后端。
+          if (
+            Array.isArray(page.categories) &&
+            (!category || category === "all") &&
+            !String(q || "").trim() &&
+            page.items.length >= page.total
+          ) {
+            completeSet = page;
+          }
+        } else {
+          var cached = cacheGet(queryKey(category, q));
+          if (cached) {
+            cached.items = state.items.concat(page.items);
+            cached.total = page.total;
+            cached.fetchedAt = page.fetchedAt;
+          }
+        }
+        state.localItems = null;
+        applyResult(page, append);
+      })
+      .catch(function (error) {
+        if (!state || state.seq !== seq) return;
+        if (error && error.name === "AbortError") return;
+        state.loading = false;
+        refs.grid.removeAttribute("aria-busy");
+        refs.state.textContent = (error && error.message) || "读取失败";
+      });
+  }
+
+  /** 应用当前「分类 + 关键词」：本地筛选 → 查询缓存 → 服务端请求，逐级回退。 */
+  function runQuery() {
     if (!state) return;
-    if (state.loading) return;
+    var seq = ++state.seq;
+    if (state.controller) {
+      state.controller.abort();
+      state.controller = null;
+    }
     if (!state.token) {
       state.items = [];
       state.total = 0;
+      state.localItems = null;
+      state.loading = false;
       renderGrid();
       refs.state.textContent = "未连接";
       return;
     }
-    if (reset) {
-      state.items = [];
-      state.total = 0;
-      state.offset = 0;
+    var local = localQuery(state.category, state.q);
+    if (local) {
+      state.localItems = local.allItems;
+      applyResult(local, false);
+      return;
     }
-    state.loading = true;
-    refs.grid.setAttribute("aria-busy", "true");
-    refs.state.textContent = "读取中…";
-    var url = state.api + "?limit=" + PAGE_SIZE + "&offset=" + state.offset;
-    if (state.category && state.category !== "all") {
-      url += "&category=" + encodeURIComponent(state.category);
+    var cached = cacheGet(queryKey(state.category, state.q));
+    if (cached) {
+      state.localItems = null;
+      applyResult(cached, false);
+      return;
     }
-    if (state.q) url += "&q=" + encodeURIComponent(state.q);
-    fetch(url, {
-      headers: { accept: "application/json", "x-admin-token": state.token },
-      cache: "no-store"
-    })
-      .then(function (response) {
-        return response.json().catch(function () { return {}; }).then(function (body) {
-          return { response: response, body: body };
-        });
-      })
-      .then(function (result) {
-        if (result.response.status === 401) {
-          state.token = "";
-          paintNotice();
-          throw new Error("管理令牌无效，请在顶栏更新");
-        }
-        if (!result.response.ok) {
-          throw new Error(describeError(result.response.status, result.body));
-        }
-        var items = Array.isArray(result.body.items) ? result.body.items : [];
-        // 分类列表随列表接口一起返回（含计数），首屏用它渲染 chips
-        if (Array.isArray(result.body.categories)) {
-          state.categories = result.body.categories.toSorted(function (a, b) {
-            return (a.position || 0) - (b.position || 0);
-          });
-          state.uncategorizedCount =
-            typeof result.body.uncategorizedCount === "number"
-              ? result.body.uncategorizedCount
-              : 0;
-          var allCount = state.uncategorizedCount;
-          state.categories.forEach(function (cat) {
-            allCount += typeof cat.count === "number" ? cat.count : 0;
-          });
-          state.allCount = allCount;
-          state.catCountsReady = true;
-          paintCats();
-          updateUploadHint();
-        }
-        state.items = state.items.concat(items);
-        state.total = Number(result.body.total) || state.items.length;
-        state.offset += items.length;
-        state.libraryLoaded = true;
-        refs.state.textContent = "已连接 · " + state.items.length + " / " + state.total;
-      })
-      .catch(function (error) {
-        refs.state.textContent = (error && error.message) || "读取失败";
-      })
-      .then(function () {
-        state.loading = false;
-        refs.grid.removeAttribute("aria-busy");
-        renderGrid();
-      });
+    state.localItems = null;
+    fetchPage(0, seq, false);
+  }
+
+  /** 「加载更多」：本地筛选结果直接切片，其余走服务端下一页。 */
+  function loadMore() {
+    if (!state || state.loading) return;
+    if (state.localItems) {
+      var next = state.localItems.slice(state.items.length, state.items.length + PAGE_SIZE);
+      if (!next.length) return;
+      state.items = state.items.concat(next);
+      refs.state.textContent = "已连接 · " + state.items.length + " / " + state.total;
+      renderGrid();
+      return;
+    }
+    fetchPage(state.items.length, ++state.seq, true);
   }
 
   /* ---------------- 选择 / 上传 ---------------- */
@@ -633,6 +835,9 @@
           uploaded.push(item);
           state.items.unshift(item);
           state.total += 1;
+          // 库里多了一张图：缓存与整库快照都失效，下一次查询回到服务端。
+          state.localItems = null;
+          invalidateLibrary();
           renderGrid();
           setUploadRow(row, "完成", false, 100);
         })
@@ -687,7 +892,11 @@
       token: readToken(),
       items: [],
       total: 0,
-      offset: 0,
+      // 本地筛选结果：整库已载时由 localQuery() 给出，「加载更多」从它切片
+      localItems: null,
+      // 请求序号与控制器：并发查询只应用最后一次的结果
+      seq: 0,
+      controller: null,
       q: "",
       loading: false,
       busy: false
@@ -728,10 +937,10 @@
         var next = refs.search.value.trim();
         if (next === state.q) return;
         state.q = next;
-        loadMedia(true);
+        runQuery();
       }, 300);
     });
-    refs.more.addEventListener("click", function () { loadMedia(false); });
+    refs.more.addEventListener("click", loadMore);
     refs.cancel.addEventListener("click", closeDialog);
     refs.confirm.addEventListener("click", confirmPick);
     refs.pickFile.addEventListener("click", function () { refs.file.click(); });
@@ -740,6 +949,8 @@
       refs.file.value = "";
     });
     dlg.addEventListener("close", function () {
+      // 中止未完成的请求，缓存保留给下一次打开。
+      if (state && state.controller) state.controller.abort();
       state = null;
     });
   }

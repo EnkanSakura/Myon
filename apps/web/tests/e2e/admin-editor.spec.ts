@@ -1011,3 +1011,144 @@ test.describe('后台展柜 · 分类组合框', () => {
     });
   });
 });
+
+// 媒体选择器「现有图片」的加载策略：
+// 首次请求整库后，分类 / 搜索都在本地完成；关闭再打开命中缓存，不再请求后端。
+test.describe('后台媒体选择器 · 现有图片加载', () => {
+  const LIBRARY_CATEGORIES = [
+    { id: 'cat_a', name: '栏目 A', position: 0, count: 2 },
+    { id: 'cat_b', name: '栏目 B', position: 1, count: 1 },
+  ];
+  const LIBRARY_ITEMS = [
+    {
+      id: 'lib-a',
+      key: 'uploads/202601/lib-a.webp',
+      filename: 'lib-a.webp',
+      mime: 'image/webp',
+      size: 1024,
+      width: 640,
+      height: 480,
+      createdAt: '2026-01-04T00:00:00.000Z',
+      categoryId: 'cat_a',
+      categoryName: '栏目 A',
+      aliases: ['封面图'],
+    },
+    {
+      id: 'lib-b',
+      key: 'uploads/202601/lib-b.webp',
+      filename: 'lib-b.webp',
+      mime: 'image/webp',
+      size: 2048,
+      width: 640,
+      height: 480,
+      createdAt: '2026-01-03T00:00:00.000Z',
+      categoryId: 'cat_a',
+      categoryName: '栏目 A',
+      aliases: [],
+    },
+    {
+      id: 'lib-c',
+      key: 'uploads/202601/lib-c.webp',
+      filename: 'lib-c.webp',
+      mime: 'image/webp',
+      size: 3072,
+      width: 640,
+      height: 480,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      categoryId: 'cat_b',
+      categoryName: '栏目 B',
+      aliases: [],
+    },
+    {
+      id: 'lib-d',
+      key: 'uploads/202601/lib-d.webp',
+      filename: 'lib-d.webp',
+      mime: 'image/webp',
+      size: 4096,
+      width: 640,
+      height: 480,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      categoryId: null,
+      categoryName: null,
+      aliases: [],
+    },
+  ];
+
+  test('整库只请求一次：分类与搜索走本地，重复打开命中缓存', async ({
+    page,
+  }) => {
+    await initToken(page);
+    await page.route('**/api/v1/admin/settings*', async (route) => {
+      await route.fulfill({ json: { settings: {} } });
+    });
+    await page.route('**/api/v1/about', async (route) => {
+      await route.fulfill({
+        json: {
+          key: 'about',
+          markdown: '关于 Myon',
+          html: '',
+          updatedAt: null,
+        },
+      });
+    });
+    let listRequests = 0;
+    await page.route('**/api/v1/admin/media?*', async (route) => {
+      listRequests += 1;
+      await route.fulfill({
+        json: {
+          items: LIBRARY_ITEMS,
+          total: LIBRARY_ITEMS.length,
+          categories: LIBRARY_CATEGORIES,
+          uncategorizedCount: 1,
+        },
+      });
+    });
+
+    await page.goto('/admin/about');
+    await expect(page.locator('#mdInput')).toBeEnabled();
+    await page.locator('.md-tool[data-md-act="image"]').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    // 打开选择器不预拉列表，切到「现有图片」才发起第一次请求
+    await expect(page.locator('#mpTabExisting')).not.toHaveClass(/is-on/);
+    expect(listRequests).toBe(0);
+    await page.locator('#mpTabExisting').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(4);
+    expect(listRequests).toBe(1);
+
+    // 整库已载：分类 chips 直接本地筛选，不再请求后端
+    await page.locator('#mpCats .mp-cat[data-category="cat_a"]').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(2);
+    await page.locator('#mpCats .mp-cat[data-category="cat_b"]').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
+    await page
+      .locator('#mpCats .mp-cat[data-category="uncategorized"]')
+      .click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
+    expect(listRequests).toBe(1);
+
+    // 搜索同样本地完成，别名也能命中
+    await page.locator('#mpCats .mp-cat[data-category="all"]').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(4);
+    await page.locator('#mpSearch').fill('封面');
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(1);
+    await expect(page.locator('#mpGrid .mp-item').first()).toHaveAttribute(
+      'data-key',
+      'uploads/202601/lib-a.webp',
+    );
+    expect(listRequests).toBe(1);
+
+    // 关掉再打开：命中缓存，仍然只有第一次请求
+    await page.locator('#mpSearch').fill('');
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(4);
+    await page.locator('#mpCancel').click();
+    await expect(page.locator('#mediaPickerDlg')).not.toHaveAttribute(
+      'open',
+      '',
+    );
+    await page.locator('.md-tool[data-md-act="image"]').click();
+    await expect(page.locator('#mediaPickerDlg')).toHaveAttribute('open', '');
+    await page.locator('#mpTabExisting').click();
+    await expect(page.locator('#mpGrid .mp-item')).toHaveCount(4);
+    expect(listRequests).toBe(1);
+  });
+});
